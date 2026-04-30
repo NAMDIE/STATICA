@@ -1,7 +1,7 @@
 export function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
-  const headers = new Headers(init.headers)
-  headers.set('content-type', 'application/json')
-  return new Response(JSON.stringify(body), { ...init, headers })
+  const res = new Response(JSON.stringify(body), init)
+  res.headers.set('content-type', 'application/json')
+  return res
 }
 
 export async function readJsonObject(req: Request): Promise<Record<string, unknown>> {
