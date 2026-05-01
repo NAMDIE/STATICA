@@ -1,73 +1,69 @@
-# React + TypeScript + Vite
+# Page Builder CMS
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Self-hosted CMS with an integrated visual page builder. The app serves the public website, admin editor, CMS API, published pages, and uploaded media from one Bun server backed by Postgres.
 
-Currently, two official plugins are available:
+## Local Development
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Install dependencies:
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```sh
+bun install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Start the local CMS stack with Postgres:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+```sh
+docker compose up --build
+```
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+Open:
+
+```txt
+http://localhost:3001/admin
+```
+
+The first visit creates the site and admin account.
+
+## Production Deployment
+
+The production artifact is a Docker image built from `Dockerfile`.
+
+For a VPS/self-host install with bundled Postgres:
+
+```sh
+cp .env.production.example .env
+docker compose -f compose.prod.yml up -d --build
+```
+
+Then open:
+
+```txt
+http://server-ip:3001/admin
+```
+
+For managed hosts, deploy the Dockerfile and connect it to managed Postgres with `DATABASE_URL`.
+
+Deployment docs:
+
+- [Production Docker image](docs/deployment/docker-image.md)
+- [VPS Docker Compose](docs/deployment/vps-compose.md)
+- [Managed hosts](docs/deployment/managed-hosts.md)
+- [Backup and restore](docs/deployment/backup-restore.md)
+
+## Required Production Data
+
+Back up both:
+
+- Postgres database
+- uploads directory or uploads volume
+
+Do not run `docker compose -f compose.prod.yml down -v` unless you intentionally want to delete CMS data.
+
+## Useful Commands
+
+```sh
+bun run build
+bun test
+docker build -t page-builder-cms:local .
+curl http://localhost:3001/health
 ```
