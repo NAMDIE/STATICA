@@ -43,3 +43,9 @@ export interface CreateContentEntryInput {
   seoTitle?: string
   seoDescription?: string
 }
+
+export type ContentBlock =
+  | { id: string; type: 'paragraph'; text: string }
+  | { id: string; type: 'heading'; level: 1 | 2 | 3 | 4 | 5 | 6; text: string }
+  | { id: string; type: 'image'; src: string; alt: string }
+  | { id: string; type: 'video'; src: string }

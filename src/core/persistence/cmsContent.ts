@@ -8,8 +8,6 @@ import { responseErrorMessage } from './httpErrors'
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 
-const defaultFetch: FetchLike = globalThis.fetch.bind(globalThis)
-
 async function readJson<T>(res: Response, fallback: string): Promise<T> {
   if (!res.ok) {
     throw new Error(await responseErrorMessage(res, fallback))
@@ -18,7 +16,7 @@ async function readJson<T>(res: Response, fallback: string): Promise<T> {
 }
 
 export async function listCmsContentCollections(
-  fetchImpl: FetchLike = defaultFetch,
+  fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
   basePath = '/api/cms',
 ): Promise<ContentCollection[]> {
   const res = await fetchImpl(`${basePath}/content/collections`, {
@@ -34,7 +32,7 @@ export async function listCmsContentCollections(
 
 export async function listCmsContentEntries(
   collectionId: string,
-  fetchImpl: FetchLike = defaultFetch,
+  fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
   basePath = '/api/cms',
 ): Promise<ContentEntry[]> {
   const res = await fetchImpl(`${basePath}/content/collections/${encodeURIComponent(collectionId)}/entries`, {
@@ -51,7 +49,7 @@ export async function listCmsContentEntries(
 export async function createCmsContentEntry(
   collectionId: string,
   input: CreateContentEntryInput,
-  fetchImpl: FetchLike = defaultFetch,
+  fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
   basePath = '/api/cms',
 ): Promise<ContentEntry> {
   const res = await fetchImpl(`${basePath}/content/collections/${encodeURIComponent(collectionId)}/entries`, {
@@ -70,7 +68,7 @@ export async function createCmsContentEntry(
 export async function saveCmsContentEntryDraft(
   entryId: string,
   input: ContentEntryDraftInput,
-  fetchImpl: FetchLike = defaultFetch,
+  fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
   basePath = '/api/cms',
 ): Promise<ContentEntry> {
   const res = await fetchImpl(`${basePath}/content/entries/${encodeURIComponent(entryId)}`, {
@@ -88,7 +86,7 @@ export async function saveCmsContentEntryDraft(
 
 export async function publishCmsContentEntry(
   entryId: string,
-  fetchImpl: FetchLike = defaultFetch,
+  fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
   basePath = '/api/cms',
 ): Promise<ContentEntry> {
   const res = await fetchImpl(`${basePath}/content/entries/${encodeURIComponent(entryId)}/publish`, {

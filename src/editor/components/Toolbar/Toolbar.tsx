@@ -52,6 +52,7 @@ export function Toolbar({ onSave, saveStatus, publishEnabled = true }: ToolbarPr
         >
           {siteName}
         </span>
+        <a className={styles.adminLink} href="/admin/content">Content</a>
 
         <Divider />
         <UndoRedoButtons />
