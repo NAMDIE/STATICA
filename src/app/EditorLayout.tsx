@@ -34,13 +34,31 @@ import { usePersistence } from '@editor/hooks/usePersistence'
 import { useEditorLayoutPersistence } from '@editor/hooks/useEditorLayoutPersistence'
 import { selectRightSidebarExpanded, useEditorStore } from '@core/editor-store/store'
 import { cmsAdapter } from '@core/persistence'
+import { cn } from '@ui/cn'
 import { AppLoadingScreen } from './AppLoadingScreen'
 import styles from './EditorLayout.module.css'
+import type { ReactNode } from 'react'
 
-export default function EditorLayout() {
+interface EditorLayoutProps {
+  workspace?: 'site' | 'content'
+  contentLeftPanel?: ReactNode
+  contentCanvas?: ReactNode
+  contentRightPanel?: ReactNode
+  toolbarRightSlot?: ReactNode
+}
+
+export default function EditorLayout({
+  workspace = 'site',
+  contentLeftPanel,
+  contentCanvas,
+  contentRightPanel,
+  toolbarRightSlot,
+}: EditorLayoutProps) {
   const site = useEditorStore((s) => s.site)
   const propertiesPanelMode = useEditorStore((s) => s.propertiesPanelMode)
   const rightSidebarExpanded = useEditorStore(selectRightSidebarExpanded)
+  const contentRightSidebarExpanded = workspace === 'content' && Boolean(contentRightPanel)
+  const hasRightSidebar = contentRightSidebarExpanded || rightSidebarExpanded
 
   // J12 — wire persistence: load, auto-save, toolbar Save, Cmd+S.
   const persistence = usePersistence('default', cmsAdapter, { markNewSiteUnsaved: true })
@@ -65,7 +83,9 @@ export default function EditorLayout() {
       <Toolbar
         onSave={persistence.saveSite}
         saveStatus={persistence.saveStatus}
-        publishEnabled
+        publishEnabled={workspace === 'site'}
+        section={workspace}
+        rightSlot={toolbarRightSlot}
       />
 
       {/* ── Canvas + floating overlay panels ──────────────────────────────── */}
@@ -75,17 +95,23 @@ export default function EditorLayout() {
         flex is kept so CanvasRoot's flex:1 fills the full width.
       */}
       <div className={styles.editorBody}>
-        <LeftSidebar />
+        <LeftSidebar workspace={workspace} contentPanel={contentLeftPanel} />
         <div
-          className={'relative ' + styles.canvasStage + (rightSidebarExpanded ? ` ${styles.canvasStageRightSidebarOpen}` : '')}
-          data-right-sidebar-expanded={rightSidebarExpanded ? 'true' : 'false'}
+          className={cn(styles.canvasStage, hasRightSidebar && styles.canvasStageRightSidebarOpen)}
+          data-right-sidebar-expanded={hasRightSidebar ? 'true' : 'false'}
         >
-          {/* Canvas — fills the remaining space between sidebars */}
-          <CanvasRoot />
-          {/* Properties can be unpinned into the floating draggable overlay. */}
-          {propertiesPanelMode === 'floating' && <PropertiesPanel variant="floating" />}
+          {workspace === 'content' ? (
+            contentCanvas
+          ) : (
+            <>
+              {/* Canvas — fills the remaining space between sidebars */}
+              <CanvasRoot />
+              {/* Properties can be unpinned into the floating draggable overlay. */}
+              {propertiesPanelMode === 'floating' && <PropertiesPanel variant="floating" />}
+            </>
+          )}
         </div>
-        <RightSidebar />
+        <RightSidebar contentPanel={workspace === 'content' ? contentRightPanel : undefined} />
       </div>
 
       {/* Code editor/media preview: viewport overlay, not constrained by the canvas stage. */}

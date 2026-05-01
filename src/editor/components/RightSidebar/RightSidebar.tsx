@@ -1,17 +1,23 @@
-import { useRef, type CSSProperties } from 'react'
+import { useRef, type CSSProperties, type ReactNode } from 'react'
 import { selectRightSidebarExpanded, useEditorStore } from '@core/editor-store/store'
 import { PropertiesPanel } from '../PropertiesPanel'
 import { SidebarResizeHandle } from '../shared/SidebarResizeHandle'
 import styles from './RightSidebar.module.css'
 
-export function RightSidebar() {
+interface RightSidebarProps {
+  contentPanel?: ReactNode
+}
+
+export function RightSidebar({ contentPanel }: RightSidebarProps) {
   const sidebarRef = useRef<HTMLElement | null>(null)
   const propertiesPanel = useEditorStore((s) => s.propertiesPanel)
   const propertiesPanelMode = useEditorStore((s) => s.propertiesPanelMode)
   const setPropertiesPanel = useEditorStore((s) => s.setPropertiesPanel)
+  const propertiesCollapsed = useEditorStore((s) => s.propertiesPanel.collapsed)
 
   const isDocked = propertiesPanelMode === 'docked'
-  const isExpanded = useEditorStore(selectRightSidebarExpanded)
+  const sitePropertiesExpanded = useEditorStore(selectRightSidebarExpanded)
+  const isExpanded = contentPanel ? !propertiesCollapsed : sitePropertiesExpanded
   const panelWidth = isExpanded ? propertiesPanel.width : 0
 
   const style = {
@@ -38,7 +44,14 @@ export function RightSidebar() {
         />
       )}
 
-      {isDocked && (
+      {contentPanel ? (
+        <div
+          className={styles.panelSlot}
+          data-testid="right-sidebar-panel-slot"
+        >
+          {contentPanel}
+        </div>
+      ) : isDocked && (
         <div
           className={styles.panelSlot}
           data-testid="right-sidebar-panel-slot"

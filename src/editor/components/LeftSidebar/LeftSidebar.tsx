@@ -1,4 +1,4 @@
-import { useRef, type CSSProperties } from 'react'
+import { useRef, type CSSProperties, type ReactNode } from 'react'
 import { useEditorStore } from '@core/editor-store/store'
 import type { LeftSidebarPanelId } from '@core/editor-store/slices/uiSlice'
 import { AgentPanel } from '../AgentPanel'
@@ -19,7 +19,12 @@ function selectActiveLeftSidebarPanel(state: ReturnType<typeof useEditorStore.ge
   return null
 }
 
-export function LeftSidebar() {
+interface LeftSidebarProps {
+  workspace?: 'site' | 'content'
+  contentPanel?: ReactNode
+}
+
+export function LeftSidebar({ workspace = 'site', contentPanel }: LeftSidebarProps) {
   const sidebarRef = useRef<HTMLElement | null>(null)
   const activePanel = useEditorStore(selectActiveLeftSidebarPanel)
   const leftSidebarWidth = useEditorStore((s) => s.leftSidebarWidth)
@@ -39,7 +44,7 @@ export function LeftSidebar() {
       data-active-panel={activePanel ?? 'none'}
       style={style}
     >
-      <PanelRail />
+      <PanelRail workspace={workspace} />
 
       <div
         className={styles.panelSlot}
@@ -50,7 +55,7 @@ export function LeftSidebar() {
           <DomPanel variant="docked" />
         </div>
         <div className={styles.panelMount} hidden={activePanel !== 'site'}>
-          <SiteExplorerPanel variant="docked" />
+          {workspace === 'content' ? contentPanel : <SiteExplorerPanel variant="docked" />}
         </div>
         <div className={styles.panelMount} hidden={activePanel !== 'media'}>
           <MediaExplorerPanel variant="docked" />

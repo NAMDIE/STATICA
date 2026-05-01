@@ -78,7 +78,11 @@ const PRIMARY_RAIL_ITEMS: PrimaryRailItem[] = [
   },
 ]
 
-export function PanelRail() {
+interface PanelRailProps {
+  workspace?: 'site' | 'content'
+}
+
+export function PanelRail({ workspace = 'site' }: PanelRailProps) {
   const domOpen = useEditorStore((s) => !s.domTreePanel.collapsed)
   const siteOpen = useEditorStore((s) => s.siteExplorerPanelOpen)
   const mediaOpen = useEditorStore((s) => s.mediaExplorerPanelOpen)
@@ -127,11 +131,15 @@ export function PanelRail() {
     dependencies: dependenciesOpen,
   } satisfies Record<LeftSidebarPanelId, boolean>
 
-  const primaryItems: RailItem[] = PRIMARY_RAIL_ITEMS.map((item) => ({
-    ...item,
-    open: panelOpenById[item.id],
-    onToggle: () => toggleLeftSidebarPanel(item.id),
-  }))
+  const primaryItems: RailItem[] = PRIMARY_RAIL_ITEMS.map((item) => {
+    const label = workspace === 'content' && item.id === 'site' ? 'Content' : item.label
+    return {
+      ...item,
+      label,
+      open: panelOpenById[item.id],
+      onToggle: () => toggleLeftSidebarPanel(item.id),
+    }
+  })
 
   return (
     <nav

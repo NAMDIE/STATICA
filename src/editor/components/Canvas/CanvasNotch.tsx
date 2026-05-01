@@ -1,7 +1,8 @@
-import { useCallback, type SyntheticEvent } from 'react'
+import { useCallback, type ReactNode, type SyntheticEvent } from 'react'
 import { registry } from '@core/module-engine/registry'
 import { useInsertModule } from '../../hooks/useInsertModule'
 import { ModulePickerDropdown } from '../Toolbar/ModulePickerDropdown'
+import type { IconComponent } from '@ui/icons/types'
 import { CheckboxSharpIcon } from '@ui/icons/icons/checkbox-sharp'
 import { TypeIcon } from '@ui/icons/icons/type'
 import { ImageIcon } from '@ui/icons/icons/image'
@@ -18,7 +19,19 @@ const QUICK_ACTIONS = [
 
 const ADD_TRIGGER_TEST_ID = 'canvas-notch-add-btn'
 
-export function CanvasNotch() {
+export interface CanvasNotchAction {
+  id: string
+  label: string
+  icon: IconComponent
+  onClick: () => void
+}
+
+interface CanvasNotchProps {
+  actions?: CanvasNotchAction[]
+  addControl?: ReactNode
+}
+
+export function CanvasNotch({ actions, addControl }: CanvasNotchProps = {}) {
   const insertModule = useInsertModule()
 
   const stopCanvasInteraction = useCallback((event: SyntheticEvent) => {
@@ -42,16 +55,20 @@ export function CanvasNotch() {
       onClick={stopCanvasInteraction}
     >
       <div className={styles.notch}>
-        {QUICK_ACTIONS.map((action) => {
+        {(actions ?? QUICK_ACTIONS.map((action) => ({
+          ...action,
+          id: action.moduleId,
+          onClick: () => handleQuickInsert(action.moduleId),
+        }))).map((action) => {
           const ActionIcon = action.icon
           return (
             <Button
-              key={action.moduleId}
+              key={action.id}
               variant="ghost"
               size="sm"
               iconOnly
               className={styles.quickButton}
-              onClick={() => handleQuickInsert(action.moduleId)}
+              onClick={action.onClick}
               aria-label={`Add ${action.label}`}
               title={`Add ${action.label}`}
               data-testid={`canvas-notch-${action.label.toLowerCase()}-btn`}
@@ -63,10 +80,12 @@ export function CanvasNotch() {
 
         <span className={styles.divider} aria-hidden="true" />
 
-        <ModulePickerDropdown
-          triggerClassName={styles.addButton}
-          triggerTestId={ADD_TRIGGER_TEST_ID}
-        />
+        {addControl ?? (
+          <ModulePickerDropdown
+            triggerClassName={styles.addButton}
+            triggerTestId={ADD_TRIGGER_TEST_ID}
+          />
+        )}
       </div>
     </div>
   )

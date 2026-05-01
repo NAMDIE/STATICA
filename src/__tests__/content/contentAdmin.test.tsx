@@ -3,6 +3,8 @@ import React from 'react'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { ContentAdmin } from '../../content/ContentAdmin'
+import { useEditorStore } from '../../core/editor-store/store'
+import { makeSite } from '../fixtures'
 
 const originalFetch = globalThis.fetch
 
@@ -19,6 +21,36 @@ function json(body: unknown, status = 200) {
 }
 
 beforeEach(() => {
+  const site = makeSite({ name: 'Content Shell Site' })
+  localStorage.clear()
+  useEditorStore.setState({
+    site,
+    activePageId: site.pages[0].id,
+    selectedNodeId: null,
+    hoveredNodeId: null,
+    activeBreakpointId: 'desktop',
+    domTreePanel: { collapsed: false, x: 0, y: 0, width: 280 },
+    propertiesPanel: { collapsed: false, x: 0, y: 0, width: 360 },
+    propertiesPanelMode: 'docked',
+    leftSidebarWidth: 320,
+    focusedPanel: 'canvas',
+    siteExplorerPanelOpen: false,
+    mediaExplorerPanelOpen: false,
+    codeEditorPanelOpen: false,
+    activeEditorFileId: null,
+    activeMediaAssetPreview: null,
+    dependenciesPanelOpen: false,
+    isAgentOpen: false,
+    isAgentStreaming: false,
+    agentMessages: [],
+    agentError: null,
+    _historyPast: [],
+    _historyFuture: [],
+    canUndo: false,
+    canRedo: false,
+    hasUnsavedChanges: false,
+  } as Parameters<typeof useEditorStore.setState>[0])
+
   const calls: FetchCall[] = []
   ;(globalThis as typeof globalThis & { __contentFetchCalls?: FetchCall[] }).__contentFetchCalls = calls
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -113,6 +145,23 @@ afterEach(() => {
 })
 
 describe('ContentAdmin', () => {
+  it('mounts content inside the existing editor shell chrome', async () => {
+    render(
+      <MemoryRouter>
+        <ContentAdmin />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByTestId('toolbar')).toBeDefined()
+    expect(screen.getByTestId('left-sidebar')).toBeDefined()
+    expect(screen.getByTestId('right-sidebar')).toBeDefined()
+    expect(screen.getByTestId('content-explorer-panel')).toBeDefined()
+    expect(screen.getByTestId('content-canvas-root')).toBeDefined()
+    expect(screen.getByTestId('content-settings-panel')).toBeDefined()
+    expect(screen.getByTestId('canvas-notch')).toBeDefined()
+    expect(screen.getByText('Content Shell Site')).toBeDefined()
+  })
+
   it('creates, edits, saves, and publishes a rich Markdown-backed post', async () => {
     render(
       <MemoryRouter>

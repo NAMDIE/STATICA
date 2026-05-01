@@ -12,6 +12,7 @@
  * - Keyboard shortcuts for Undo/Redo are registered by UndoRedoButtons
  */
 
+import type { ReactNode } from 'react'
 import { useEditorStore } from '@core/editor-store/store'
 import { UndoRedoButtons } from './UndoRedoButtons'
 import { ZoomControls } from './ZoomControls'
@@ -27,9 +28,17 @@ interface ToolbarProps {
   onSave?: () => void | Promise<void>
   saveStatus?: PersistenceSaveStatus
   publishEnabled?: boolean
+  section?: 'site' | 'content'
+  rightSlot?: ReactNode
 }
 
-export function Toolbar({ onSave, saveStatus, publishEnabled = true }: ToolbarProps) {
+export function Toolbar({
+  onSave,
+  saveStatus,
+  publishEnabled = true,
+  section = 'site',
+  rightSlot,
+}: ToolbarProps) {
   const siteName = useEditorStore((s) => s.site?.name ?? 'Untitled Site')
 
   return (
@@ -52,7 +61,14 @@ export function Toolbar({ onSave, saveStatus, publishEnabled = true }: ToolbarPr
         >
           {siteName}
         </span>
-        <a className={styles.adminLink} href="/admin/content">Content</a>
+        {section === 'content' ? (
+          <>
+            <a className={styles.adminLink} href="/admin/site">Site</a>
+            <span className={styles.activeSection}>Content</span>
+          </>
+        ) : (
+          <a className={styles.adminLink} href="/admin/content">Content</a>
+        )}
 
         <Divider />
         <UndoRedoButtons />
@@ -61,13 +77,17 @@ export function Toolbar({ onSave, saveStatus, publishEnabled = true }: ToolbarPr
         <div className={styles.spacer} aria-hidden="true" />
 
         {/* ── Right section ───────────────────────────────────────────────── */}
-        <ZoomControls />
-        <Divider />
-        <SaveIndicator onSave={onSave} saveStatus={saveStatus} />
-        <Divider />
-        <PreviewButton />
-        <PublishButton enabled={publishEnabled} onSave={onSave} />
-        <SettingsButton />
+        {rightSlot ?? (
+          <>
+            <ZoomControls />
+            <Divider />
+            <SaveIndicator onSave={onSave} saveStatus={saveStatus} />
+            <Divider />
+            <PreviewButton />
+            <PublishButton enabled={publishEnabled} onSave={onSave} />
+            <SettingsButton />
+          </>
+        )}
       </header>
     </>
   )
