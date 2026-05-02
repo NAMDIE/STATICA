@@ -16,6 +16,7 @@ import {
   clonePackageJson,
   DEFAULT_SITE_PACKAGE_JSON,
 } from '../../../src/core/site-dependencies/manifest'
+import type { RuntimeDependencyCache } from './dependencyCache'
 import { materializeSiteScriptWorkspace } from './virtualSiteWorkspace'
 
 export interface BuiltRuntimeAssetFile {
@@ -37,6 +38,8 @@ export interface BuildSiteRuntimeScriptsInput {
   page: Page
   target: SiteRuntimeTarget
   assetBasePath: string
+  dependencyCache?: Pick<RuntimeDependencyCache, 'nodeModulesDir'>
+  dependencyNodeModulesDir?: string
 }
 
 function toPosixPath(path: string): string {
@@ -142,6 +145,14 @@ export async function buildSiteRuntimeScripts(
       format: 'esm',
       logLevel: 'silent',
       metafile: true,
+      nodePaths: [
+        ...(
+          input.dependencyCache?.nodeModulesDir
+            ? [input.dependencyCache.nodeModulesDir]
+            : []
+        ),
+        ...(input.dependencyNodeModulesDir ? [input.dependencyNodeModulesDir] : []),
+      ],
       outdir: outputRoot,
       platform: 'browser',
       sourcemap: false,

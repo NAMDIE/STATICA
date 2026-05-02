@@ -5,6 +5,7 @@ import { publishPage } from '../../../src/core/publisher/render'
 import {
   buildSiteRuntimeScripts,
   type BuiltRuntimeAssetFile,
+  type BuildSiteRuntimeScriptsInput,
   type SiteRuntimeBuildResult,
 } from './bundleScripts'
 
@@ -13,6 +14,8 @@ export interface RuntimePreviewDocumentInput {
   page: Page
   registry: IModuleRegistry
   assetBasePath: string
+  dependencyCache?: BuildSiteRuntimeScriptsInput['dependencyCache']
+  dependencyNodeModulesDir?: string
   breakpointId?: string
   templateContext?: TemplateRenderDataContext
 }
@@ -30,6 +33,8 @@ export async function buildRuntimePreviewDocument(
     page: input.page,
     target: 'canvas',
     assetBasePath: input.assetBasePath,
+    dependencyCache: input.dependencyCache,
+    dependencyNodeModulesDir: input.dependencyNodeModulesDir,
   })
   const html = publishPage(input.page, input.site, input.registry, {
     breakpointId: input.breakpointId,

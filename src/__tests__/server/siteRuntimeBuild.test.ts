@@ -1,3 +1,6 @@
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'bun:test'
 import type { SiteDocument } from '../../core/page-tree/types'
 import { normalizeSiteRuntimeConfig } from '../../core/site-runtime'
@@ -122,5 +125,56 @@ describe('site runtime build', () => {
     expect(result.html).toContain("script-src 'self'")
     expect(result.html).toContain('data-pb-runtime-script="entry"')
     expect(result.html).toContain('/_pb/preview/runtime/')
+  })
+
+  it('resolves declared package imports from a dependency cache node_modules directory', async () => {
+    const cacheRoot = await mkdtemp(join(tmpdir(), 'pb-runtime-node-modules-'))
+    const nodeModulesDir = join(cacheRoot, 'node_modules')
+    await mkdir(join(nodeModulesDir, 'fake-runtime-package'), { recursive: true })
+    await writeFile(
+      join(nodeModulesDir, 'fake-runtime-package', 'package.json'),
+      JSON.stringify({ name: 'fake-runtime-package', version: '1.0.0', type: 'module', main: './index.js' }),
+      'utf8',
+    )
+    await writeFile(
+      join(nodeModulesDir, 'fake-runtime-package', 'index.js'),
+      `export const packageMessage = 'from-cache-package'`,
+      'utf8',
+    )
+
+    try {
+      const site = runtimeSite({
+        files: [
+          {
+            id: 'entry',
+            path: 'src/scripts/entry.ts',
+            type: 'script',
+            content: `
+              import { packageMessage } from 'fake-runtime-package'
+              window.__pbRuntimeMessage = packageMessage
+            `,
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ],
+        packageJson: {
+          dependencies: { 'fake-runtime-package': '1.0.0' },
+          devDependencies: {},
+        },
+      })
+
+      const result = await buildSiteRuntimeScripts({
+        site,
+        page,
+        target: 'publish',
+        assetBasePath: '/_pb/assets/runtime/',
+        dependencyNodeModulesDir: nodeModulesDir,
+      })
+
+      expect(result.diagnostics).toEqual([])
+      expect(result.files.some((file) => file.content.includes('from-cache-package'))).toBe(true)
+    } finally {
+      await rm(cacheRoot, { recursive: true, force: true })
+    }
   })
 })
