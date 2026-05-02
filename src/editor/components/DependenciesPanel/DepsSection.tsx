@@ -16,7 +16,7 @@
  * @see Contribution #512 — Phase E+ Site Panel UX Spec §4
  * @see Task #434 — Migration & SitePanel Cleanup
  */
-import { useState, useRef, useCallback, useMemo } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useEditorStore } from '../../../core/editor-store/store'
 import { Button } from '@ui/components/Button'
 import { Input } from '@ui/components/Input'
@@ -34,9 +34,11 @@ import {
 } from '../../../core/module-engine/dependencies'
 import {
   analyzeRuntimeScriptImports,
+  type LockedSiteDependency,
   type RuntimePackageDependencyUsage,
   type SiteRuntimeDiagnostic,
 } from '../../../core/site-runtime'
+import type { SitePackageJson } from '../../../core/site-dependencies/manifest'
 import { resolveCmsRuntimeDependencies } from '../../../core/persistence/cmsRuntime'
 import { registry } from '../../../core/module-engine/registry'
 import styles from './DepsSection.module.css'
@@ -78,6 +80,7 @@ export function DepsSection({
 }: DepsSectionProps) {
   const site = useEditorStore((s) => s.site)
   const packageJson = useEditorStore((s) => s.packageJson)
+  const siteRuntime = useEditorStore((s) => s.siteRuntime)
   const setDependency = useEditorStore((s) => s.setDependency)
   const removeDependency = useEditorStore((s) => s.removeDependency)
   const setSiteDependencyLock = useEditorStore((s) => s.setSiteDependencyLock)
@@ -132,6 +135,22 @@ export function DepsSection({
   const totalAll =
     Object.keys(packageJson.dependencies).length +
     Object.keys(packageJson.devDependencies).length
+
+  const lockedPackages = siteRuntime.dependencyLock.packages
+  const lockStatus = useMemo(
+    () => evaluateDependencyLockStatus(packageJson, lockedPackages),
+    [packageJson, lockedPackages],
+  )
+
+  // Reset the manual resolve status whenever the lock status falls out of sync
+  // (e.g. user added another package after a successful resolve). The "N
+  // locked" toast would otherwise stay visible while the banner contradicts it.
+  useEffect(() => {
+    if (lockStatus.kind !== 'in-sync' && resolveStatus === 'resolved') {
+      setResolveStatus('idle')
+      setResolveMessage(null)
+    }
+  }, [lockStatus, resolveStatus])
 
   // ── Add package handler ──────────────────────────────────────────────────
   const handleAddPackage = useCallback(() => {
@@ -294,6 +313,7 @@ export function DepsSection({
                 key={name}
                 name={name}
                 version={version}
+                lockedVersion={lockedPackages[name]?.version}
                 dev={false}
                 usage={dependencyUsage.get(name)}
                 onRemove={requestRemove}
@@ -339,15 +359,30 @@ export function DepsSection({
 
       {/* ─── Add package form ──────────────────────────────────────── */}
       <div className={styles.addForm}>
+        {runtimeDependencyCount > 0 && lockStatus.kind !== 'in-sync' && (
+          <div
+            className={styles.lockStaleBanner}
+            data-testid="deps-lock-stale"
+            role="status"
+          >
+            {describeLockStatus(lockStatus)}
+          </div>
+        )}
         {runtimeDependencyCount > 0 && (
           <div className={styles.resolveRow}>
             <Button
-              variant="secondary"
+              variant={lockStatus.kind === 'in-sync' ? 'secondary' : 'primary'}
               size="xs"
               onClick={handleResolveDependencies}
               disabled={resolveStatus === 'resolving'}
             >
-              {resolveStatus === 'resolving' ? 'Resolving' : 'Resolve runtime'}
+              {resolveStatus === 'resolving'
+                ? 'Resolving'
+                : lockStatus.kind === 'unresolved'
+                  ? 'Resolve runtime'
+                  : lockStatus.kind === 'stale'
+                    ? 'Re-resolve'
+                    : 'Resolve runtime'}
             </Button>
             {resolveMessage && (
               <span
@@ -463,6 +498,7 @@ export function DepsSection({
 interface DepRowProps {
   name: string
   version: string
+  lockedVersion?: string
   dev: boolean
   usage?: DependencyUsageSummary
   onRemove: (name: string, dev: boolean) => void
@@ -476,6 +512,7 @@ interface DepRowProps {
 function DepRow({
   name,
   version,
+  lockedVersion,
   dev,
   usage,
   onRemove,
@@ -540,6 +577,14 @@ function DepRow({
       </span>
       <span className={styles.depVersion}>
         {version}
+        {lockedVersion && lockedVersion !== version && (
+          <>
+            {' '}
+            <span className={styles.depLockedVersion} title={`Locked at ${lockedVersion}`}>
+              → {lockedVersion}
+            </span>
+          </>
+        )}
       </span>
       {usage && (
         <span
@@ -646,4 +691,76 @@ function summarizeRuntimeDependencyIssues(
   }
 
   return [...issues.values()]
+}
+
+// ---------------------------------------------------------------------------
+// Lock status — compares packageJson against siteRuntime.dependencyLock so the
+// UI can warn when a re-resolve is needed. Pure function; the resolve flow is
+// the only thing that writes the lock.
+// ---------------------------------------------------------------------------
+
+export type DependencyLockStatus =
+  | { kind: 'in-sync' }
+  | { kind: 'unresolved'; missing: string[] }
+  | { kind: 'stale'; missing: string[]; mismatched: string[]; orphan: string[] }
+
+export function evaluateDependencyLockStatus(
+  packageJson: SitePackageJson,
+  lockedPackages: Record<string, LockedSiteDependency>,
+): DependencyLockStatus {
+  const requested = packageJson.dependencies
+  const requestedNames = Object.keys(requested)
+
+  if (requestedNames.length === 0) return { kind: 'in-sync' }
+
+  const missing: string[] = []
+  const mismatched: string[] = []
+  for (const name of requestedNames) {
+    const locked = lockedPackages[name]
+    if (!locked) {
+      missing.push(name)
+      continue
+    }
+    if (locked.requested !== requested[name]) {
+      mismatched.push(name)
+    }
+  }
+
+  const orphan = Object.keys(lockedPackages).filter((name) => !(name in requested))
+
+  if (missing.length > 0 && mismatched.length === 0 && orphan.length === 0) {
+    // No lock entries at all yet, or only newly-added packages — call this
+    // "unresolved" so the prompt is "Resolve runtime" rather than "Re-resolve",
+    // which would imply prior state.
+    if (Object.keys(lockedPackages).length === 0) {
+      return { kind: 'unresolved', missing }
+    }
+  }
+
+  if (missing.length === 0 && mismatched.length === 0 && orphan.length === 0) {
+    return { kind: 'in-sync' }
+  }
+
+  return { kind: 'stale', missing, mismatched, orphan }
+}
+
+export function describeLockStatus(status: DependencyLockStatus): string {
+  if (status.kind === 'in-sync') return ''
+  if (status.kind === 'unresolved') {
+    return status.missing.length === 1
+      ? `1 package needs to be resolved before it will run.`
+      : `${status.missing.length} packages need to be resolved before they will run.`
+  }
+
+  const parts: string[] = []
+  if (status.missing.length > 0) {
+    parts.push(`${status.missing.length} new`)
+  }
+  if (status.mismatched.length > 0) {
+    parts.push(`${status.mismatched.length} changed`)
+  }
+  if (status.orphan.length > 0) {
+    parts.push(`${status.orphan.length} removed`)
+  }
+  return `Lock is out of sync (${parts.join(', ')}). Re-resolve to update.`
 }

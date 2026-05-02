@@ -5,18 +5,18 @@ export interface SitePackageJson {
   devDependencies: Record<string, string>
 }
 
+/**
+ * Empty default. The dependencies feature is opt-in: a fresh site has no
+ * runtime packages until the user adds them through the Dependencies panel.
+ *
+ * Builder-only packages (TypeScript, Vite, type packages) used to live here as
+ * devDependency defaults but they are not site runtime packages and should
+ * never have leaked into a user's manifest. See the runtime dependencies
+ * design doc, "Dependency Semantics".
+ */
 export const DEFAULT_SITE_PACKAGE_JSON: SitePackageJson = {
-  dependencies: {
-    react: '^18.2.0',
-    'react-dom': '^18.2.0',
-  },
-  devDependencies: {
-    '@types/react': '^18.2.0',
-    '@types/react-dom': '^18.2.0',
-    '@vitejs/plugin-react': '^4.3.0',
-    typescript: '^5.3.0',
-    vite: '^5.1.0',
-  },
+  dependencies: {},
+  devDependencies: {},
 }
 
 export function clonePackageJson(
@@ -46,15 +46,13 @@ export function normalizeSitePackageJson(raw: unknown): SitePackageJson {
     return clonePackageJson()
   }
 
+  // The user manifest is authoritative — we used to spread defaults *over* it,
+  // which meant a user could never actually remove a default-listed package
+  // (it would silently reappear on every load). Defaults only fill in the
+  // entirely-missing case handled above.
   const manifest = raw as Record<string, unknown>
   return {
-    dependencies: {
-      ...DEFAULT_SITE_PACKAGE_JSON.dependencies,
-      ...normalizeDependencyMap(manifest.dependencies),
-    },
-    devDependencies: {
-      ...DEFAULT_SITE_PACKAGE_JSON.devDependencies,
-      ...normalizeDependencyMap(manifest.devDependencies),
-    },
+    dependencies: normalizeDependencyMap(manifest.dependencies),
+    devDependencies: normalizeDependencyMap(manifest.devDependencies),
   }
 }

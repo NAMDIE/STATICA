@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import React from 'react'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { DepsSection } from '../../editor/components/DependenciesPanel/DepsSection'
+import {
+  DepsSection,
+  evaluateDependencyLockStatus,
+} from '../../editor/components/DependenciesPanel/DepsSection'
 import { useEditorStore } from '../../core/editor-store/store'
 import { makeSite } from '../fixtures'
 import { normalizeSiteRuntimeConfig } from '../../core/site-runtime'
@@ -66,6 +69,70 @@ describe('DepsSection runtime script dependency usage', () => {
     expect(useEditorStore.getState().site?.packageJson?.dependencies.motion).toBe('*')
   })
 
+  it('shows the locked version next to the requested range when the lock has been resolved', () => {
+    const lockedRuntime = normalizeSiteRuntimeConfig({
+      dependencyLock: {
+        version: 1,
+        packages: {
+          'canvas-confetti': {
+            name: 'canvas-confetti',
+            requested: '^1.9.3',
+            version: '1.9.4',
+            resolvedAt: 1,
+          },
+        },
+        updatedAt: 1,
+      },
+    })
+    useEditorStore.setState({
+      site: { ...useEditorStore.getState().site!, runtime: lockedRuntime },
+      siteRuntime: lockedRuntime,
+    } as Parameters<typeof useEditorStore.setState>[0])
+
+    render(<DepsSection collapsible={false} defaultExpanded />)
+
+    const row = screen.getByTestId('dep-row-canvas-confetti')
+    expect(within(row).getByTitle('Locked at 1.9.4')).toBeDefined()
+    // The lock matches the requested range — banner should not appear.
+    expect(screen.queryByTestId('deps-lock-stale')).toBeNull()
+  })
+
+  it('shows a stale-lock banner when packageJson has un-resolved or changed packages', () => {
+    const lockedRuntime = normalizeSiteRuntimeConfig({
+      dependencyLock: {
+        version: 1,
+        packages: {
+          'canvas-confetti': {
+            name: 'canvas-confetti',
+            requested: '^1.9.3',
+            version: '1.9.4',
+            resolvedAt: 1,
+          },
+        },
+        updatedAt: 1,
+      },
+    })
+    const packageJson = {
+      dependencies: { 'canvas-confetti': '^1.9.3', motion: '*' },
+      devDependencies: {},
+    }
+    useEditorStore.setState({
+      site: {
+        ...useEditorStore.getState().site!,
+        packageJson,
+        runtime: lockedRuntime,
+      },
+      packageJson,
+      siteRuntime: lockedRuntime,
+    } as Parameters<typeof useEditorStore.setState>[0])
+
+    render(<DepsSection collapsible={false} defaultExpanded />)
+
+    const banner = screen.getByTestId('deps-lock-stale')
+    expect(banner.textContent).toContain('1 new')
+    expect(screen.getByRole('button', { name: 'Re-resolve' })).toBeDefined()
+  })
+
   it('resolves runtime dependencies into the site dependency lock', async () => {
     globalThis.fetch = (async () =>
       new Response(JSON.stringify({
@@ -89,5 +156,95 @@ describe('DepsSection runtime script dependency usage', () => {
     expect(await screen.findByText('1 locked')).toBeDefined()
     expect(useEditorStore.getState().siteRuntime.dependencyLock.packages['canvas-confetti']?.version).toBe('1.9.3')
     expect(useEditorStore.getState().site?.runtime?.dependencyLock.packages['canvas-confetti']?.version).toBe('1.9.3')
+  })
+})
+
+describe('evaluateDependencyLockStatus', () => {
+  it('returns in-sync when there are no requested packages', () => {
+    expect(
+      evaluateDependencyLockStatus({ dependencies: {}, devDependencies: {} }, {}),
+    ).toEqual({ kind: 'in-sync' })
+  })
+
+  it('returns unresolved when packages are requested but the lock is empty', () => {
+    expect(
+      evaluateDependencyLockStatus(
+        { dependencies: { 'canvas-confetti': '*' }, devDependencies: {} },
+        {},
+      ),
+    ).toEqual({ kind: 'unresolved', missing: ['canvas-confetti'] })
+  })
+
+  it('returns stale when a previously-resolved request changed', () => {
+    const status = evaluateDependencyLockStatus(
+      { dependencies: { 'canvas-confetti': '^2.0.0' }, devDependencies: {} },
+      {
+        'canvas-confetti': {
+          name: 'canvas-confetti',
+          requested: '^1.9.3',
+          version: '1.9.4',
+          resolvedAt: 1,
+        },
+      },
+    )
+    expect(status.kind).toBe('stale')
+    if (status.kind === 'stale') {
+      expect(status.mismatched).toEqual(['canvas-confetti'])
+      expect(status.missing).toEqual([])
+      expect(status.orphan).toEqual([])
+    }
+  })
+
+  it('flags packages present in the lock but no longer in packageJson as orphans', () => {
+    const status = evaluateDependencyLockStatus(
+      { dependencies: {}, devDependencies: {} },
+      {
+        'canvas-confetti': {
+          name: 'canvas-confetti',
+          requested: '^1.9.3',
+          version: '1.9.4',
+          resolvedAt: 1,
+        },
+      },
+    )
+    expect(status).toEqual({ kind: 'in-sync' })
+  })
+
+  it('returns stale with both new and changed sets when both occur', () => {
+    const status = evaluateDependencyLockStatus(
+      {
+        dependencies: { 'canvas-confetti': '^2.0.0', motion: '*' },
+        devDependencies: {},
+      },
+      {
+        'canvas-confetti': {
+          name: 'canvas-confetti',
+          requested: '^1.9.3',
+          version: '1.9.4',
+          resolvedAt: 1,
+        },
+      },
+    )
+    expect(status.kind).toBe('stale')
+    if (status.kind === 'stale') {
+      expect(status.missing).toEqual(['motion'])
+      expect(status.mismatched).toEqual(['canvas-confetti'])
+    }
+  })
+
+  it('returns in-sync when every requested package is locked at the same range', () => {
+    expect(
+      evaluateDependencyLockStatus(
+        { dependencies: { 'canvas-confetti': '^1.9.3' }, devDependencies: {} },
+        {
+          'canvas-confetti': {
+            name: 'canvas-confetti',
+            requested: '^1.9.3',
+            version: '1.9.4',
+            resolvedAt: 1,
+          },
+        },
+      ),
+    ).toEqual({ kind: 'in-sync' })
   })
 })

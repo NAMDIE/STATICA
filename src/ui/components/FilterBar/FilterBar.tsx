@@ -82,7 +82,7 @@ export function FilterBar<TValue = string>({
             return (
               <Button
                 key={typeof item.value === "string" ? item.value : index}
-                variant="ghost"
+                variant={pressed ? "secondary" : "ghost"}
                 size="xs"
                 pressed={pressed}
                 disabled={item.disabled}
