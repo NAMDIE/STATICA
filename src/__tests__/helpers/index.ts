@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from 'bun:test'
-import type { AnyModuleDefinition, PropertyControl } from '../../core/module-engine/types'
+import type { AnyModuleDefinition, PropertyControl } from '@core/module-engine/types'
 
 // ---------------------------------------------------------------------------
 // renderModule

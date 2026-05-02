@@ -10,8 +10,8 @@
  */
 
 import { describe, it, expect, beforeEach } from 'bun:test'
-import { registry } from '../../core/module-engine/registry'
-import type { AnyModuleDefinition } from '../../core/module-engine/types'
+import { registry } from '@core/module-engine/registry'
+import type { AnyModuleDefinition } from '@core/module-engine/types'
 
 // ---------------------------------------------------------------------------
 // Helpers

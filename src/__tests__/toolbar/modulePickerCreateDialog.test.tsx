@@ -3,7 +3,7 @@ import React from 'react'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { readFileSync } from 'fs'
 import { ModulePickerDropdown } from '../../editor/components/Toolbar/ModulePickerDropdown'
-import { useEditorStore } from '../../core/editor-store/store'
+import { useEditorStore } from '@core/editor-store/store'
 import { makeNode, makePage, makeSite } from '../fixtures'
 import '../../modules/base/index'
 

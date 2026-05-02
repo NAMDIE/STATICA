@@ -22,9 +22,9 @@
 
 import { useRef, useCallback, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useEditorStore, selectActiveCanvasPage, selectRightSidebarExpanded } from '../../../core/editor-store/store'
-import type { Breakpoint } from '../../../core/page-tree/types'
-import { registry } from '../../../core/module-engine/registry'
+import { useEditorStore, selectActiveCanvasPage, selectRightSidebarExpanded } from '@core/editor-store/store'
+import type { Breakpoint } from '@core/page-tree/types'
+import { registry } from '@core/module-engine/registry'
 import { useCanvas } from '../../hooks/useCanvas'
 import { CanvasTransformLayer } from './CanvasTransformLayer'
 import { CanvasNotch } from './CanvasNotch'

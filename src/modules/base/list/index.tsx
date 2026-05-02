@@ -3,10 +3,10 @@
  * base.list — ordered or unordered list.
  */
 import React from 'react'
-import { type ModuleDefinition, type ModuleComponentProps } from '../../../core/module-engine/types'
-import { registry } from '../../../core/module-engine/registry'
+import { type ModuleDefinition, type ModuleComponentProps } from '@core/module-engine/types'
+import { registry } from '@core/module-engine/registry'
 import styles from './list.module.css'
-import { cn } from '../../../ui/cn'
+import { cn } from '@ui/cn'
 
 interface ListProps extends Record<string, unknown> {
   items: string

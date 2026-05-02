@@ -1,7 +1,7 @@
-import { bagToCSS } from '../../../core/publisher/classCss'
-import { generateFrameworkColorRootCss } from '../../../core/framework/colors'
-import { cssClassSelector } from '../../../core/page-tree/classNames'
-import type { CSSClass, FrameworkColorSettings } from '../../../core/page-tree/types'
+import { bagToCSS } from '@core/publisher/classCss'
+import { generateFrameworkColorRootCss } from '@core/framework/colors'
+import { cssClassSelector } from '@core/page-tree/classNames'
+import type { CSSClass, FrameworkColorSettings } from '@core/page-tree/types'
 
 export function generateCanvasClassCSS(
   classes: Record<string, CSSClass>,

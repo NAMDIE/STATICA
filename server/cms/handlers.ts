@@ -35,7 +35,7 @@ import {
   updateContentEntryCollection,
   updateContentEntryStatus,
 } from './contentRepository'
-import { normalizeContentCollectionFields } from '../../src/core/content/fields'
+import { normalizeContentCollectionFields } from '@core/content/fields'
 import {
   createMediaAsset,
   deleteMediaAsset,
@@ -61,7 +61,7 @@ import {
   missingPluginPermissionGrants,
   parsePluginManifest,
   validatePluginRecordData,
-} from '../../src/core/extensions/manifest'
+} from '@core/extensions/manifest'
 import type {
   InstalledPlugin,
   PluginLifecycleStatus,
@@ -69,7 +69,7 @@ import type {
   PluginPermission,
   PluginResource,
   ServerPluginLifecycleHook,
-} from '../../src/core/plugin-sdk'
+} from '@core/plugin-sdk'
 import { readPluginPackage } from './pluginPackage'
 import {
   activateInstalledServerPlugins,
@@ -78,13 +78,13 @@ import {
   runServerPluginLifecycleHook,
   serverPluginRuntime,
 } from './serverPluginRuntime'
-import { validateSite, SiteValidationError } from '../../src/core/persistence/validate'
-import type { SitePackageJson } from '../../src/core/site-dependencies/manifest'
-import { isSafePackageName } from '../../src/core/site-dependencies/packageNames'
-import { normalizeSiteRuntimeConfig } from '../../src/core/site-runtime'
-import type { TemplateRenderDataContext } from '../../src/core/templates/dynamicBindings'
+import { validateSite, SiteValidationError } from '@core/persistence/validate'
+import type { SitePackageJson } from '@core/site-dependencies/manifest'
+import { isSafePackageName } from '@core/site-dependencies/packageNames'
+import { normalizeSiteRuntimeConfig } from '@core/site-runtime'
+import type { TemplateRenderDataContext } from '@core/templates/dynamicBindings'
 import '../../src/modules/base'
-import { registry } from '../../src/core/module-engine/registry'
+import { registry } from '@core/module-engine/registry'
 import { resolveSiteDependencyLock } from './runtime/dependencyResolver'
 import { ensureRuntimeDependencyCache } from './runtime/dependencyCache'
 import { buildRuntimePreviewDocument } from './runtime/previewRuntime'

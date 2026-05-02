@@ -11,7 +11,7 @@ import {
   updateCmsContentEntryCollection,
   updateCmsContentCollection,
   updateCmsContentEntryStatus,
-} from '../../core/persistence/cmsContent'
+} from '@core/persistence/cmsContent'
 
 describe('CMS content client', () => {
   it('lists content collections with session credentials', async () => {

@@ -1,8 +1,8 @@
 import { mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import type { SiteDocument } from '../../../src/core/page-tree/types'
-import { isSafePath, normalizePath } from '../../../src/core/files/pathValidation'
+import type { SiteDocument } from '@core/page-tree/types'
+import { isSafePath, normalizePath } from '@core/files/pathValidation'
 
 export interface SiteScriptWorkspace {
   rootDir: string

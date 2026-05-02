@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect } from 'bun:test'
-import { sanitizeRichtext, isRichtextPropKey, PLAIN_TEXT_CONFIG } from '../../core/sanitize'
+import { sanitizeRichtext, isRichtextPropKey, PLAIN_TEXT_CONFIG } from '@core/sanitize'
 
 // ---------------------------------------------------------------------------
 // XSS prevention — the core contract

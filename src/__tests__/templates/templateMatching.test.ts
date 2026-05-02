@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import { makeSite } from '../fixtures'
-import { normalizeRouteBase, selectEntryTemplate } from '../../core/templates/templateMatching'
+import { normalizeRouteBase, selectEntryTemplate } from '@core/templates/templateMatching'
 
 describe('template matching', () => {
   it('normalizes collection route bases', () => {

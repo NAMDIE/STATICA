@@ -22,7 +22,7 @@
  */
 
 import { useCallback } from 'react'
-import { useEditorStore } from '../../../core/editor-store/store'
+import { useEditorStore } from '@core/editor-store/store'
 import { WarningDiamondIcon } from '@ui/icons/icons/warning-diamond'
 import { BracesIcon } from '@ui/icons/icons/braces'
 import { ExternalLinkIcon } from '@ui/icons/icons/external-link'
@@ -165,7 +165,7 @@ export function ComponentRefView({ nodeId, componentId, propOverrides }: Compone
 // ParamInput — type-appropriate value editor for a single VCParam
 // ---------------------------------------------------------------------------
 
-import type { VCParam } from '../../../core/visualComponents/types'
+import type { VCParam } from '@core/visualComponents/types'
 
 interface ParamInputProps {
   param: VCParam

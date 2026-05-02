@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import { act, cleanup, renderHook } from '@testing-library/react'
-import { useEditorStore } from '../../core/editor-store/store'
-import { registry } from '../../core/module-engine/registry'
+import { useEditorStore } from '@core/editor-store/store'
+import { registry } from '@core/module-engine/registry'
 import { useInsertModule } from '../../editor/hooks/useInsertModule'
 import '../../modules/base/index'
 

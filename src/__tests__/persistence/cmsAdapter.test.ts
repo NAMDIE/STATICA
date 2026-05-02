@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
-import type { SiteDocument } from '../../core/page-tree/types'
-import { CmsAdapter } from '../../core/persistence/cms'
+import type { SiteDocument } from '@core/page-tree/types'
+import { CmsAdapter } from '@core/persistence/cms'
 
 function site(): SiteDocument {
   return {

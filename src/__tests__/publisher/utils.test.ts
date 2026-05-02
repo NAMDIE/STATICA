@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect } from 'bun:test'
-import { escapeHtml, isSafeUrl, safeUrl, sanitiseCssValue } from '../../core/publisher/utils'
+import { escapeHtml, isSafeUrl, safeUrl, sanitiseCssValue } from '@core/publisher/utils'
 
 // ===========================================================================
 // escapeHtml
@@ -329,7 +329,7 @@ describe('sanitiseCssValue', () => {
 describe('canonical sanitiseCssValue — import verification', () => {
   // Verify escape.ts re-exports the SAME function (not a local reimplementation)
   it('escape.ts re-exports the same sanitiseCssValue as utils.ts', async () => {
-    const utils = await import('../../core/publisher/utils')
+    const utils = await import('@core/publisher/utils')
     const escape = await import('../../modules/base/utils/escape')
     // Same function reference means escape.ts doesn't have its own copy
     expect(escape.sanitiseCssValue).toBe(utils.sanitiseCssValue)

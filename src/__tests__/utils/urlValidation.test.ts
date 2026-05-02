@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test'
-import { isValidUrl, isValidImageUrl } from '../../core/utils/urlValidation'
+import { isValidUrl, isValidImageUrl } from '@core/utils/urlValidation'
 
 // ---------------------------------------------------------------------------
 // isValidUrl

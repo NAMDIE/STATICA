@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import React from 'react'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
-import { useEditorStore } from '../../core/editor-store/store'
+import { useEditorStore } from '@core/editor-store/store'
 import { CanvasRoot } from '../../editor/components/Canvas/CanvasRoot'
 import { makeNode, makePage, makeSite } from '../fixtures'
 import '../../modules/base'

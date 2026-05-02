@@ -18,9 +18,9 @@ import { produce } from 'immer'
 import { nanoid } from 'nanoid'
 import type { StateCreator } from 'zustand'
 import type { EditorStore } from '../store'
-import type { CSSClass, CSSPropertyBag } from '../../page-tree/types'
-import { isGeneratedClassLocked, isUserVisibleClass } from '../../page-tree/classUtils'
-import { assertValidCssClassName } from '../../page-tree/classNames'
+import type { CSSClass, CSSPropertyBag } from '@core/page-tree/types'
+import { isGeneratedClassLocked, isUserVisibleClass } from '@core/page-tree/classUtils'
+import { assertValidCssClassName } from '@core/page-tree/classNames'
 
 export interface ClassPreviewAssignment {
   nodeId: string

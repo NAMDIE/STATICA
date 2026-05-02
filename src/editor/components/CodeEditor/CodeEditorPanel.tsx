@@ -27,7 +27,7 @@
  */
 
 import { Suspense, lazy, memo, useEffect, useRef } from 'react'
-import { useEditorStore } from '../../../core/editor-store/store'
+import { useEditorStore } from '@core/editor-store/store'
 import { PanelHeader } from '../shared/PanelHeader'
 import { useDraggablePanel } from '../../hooks/useDraggablePanel'
 import { ImagePreview, RemoteAssetPreview } from './ImagePreview'

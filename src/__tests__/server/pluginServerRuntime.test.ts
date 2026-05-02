@@ -6,7 +6,7 @@ import {
   serverPluginRuntime,
 } from '../../../server/cms/serverPluginRuntime'
 import type { DbClient, DbResult } from '../../../server/cms/db'
-import type { PluginManifest } from '../../core/plugin-sdk'
+import type { PluginManifest } from '@core/plugin-sdk'
 
 class RuntimeFakeDb implements DbClient {
   async query<Row extends Record<string, unknown> = Record<string, unknown>>(): Promise<DbResult<Row>> {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 import { generateCanvasClassCSS } from '../../editor/components/Canvas/canvasClassCss'
-import { generateFrameworkColorUtilityClasses } from '../../core/framework/colors'
-import type { CSSClass } from '../../core/page-tree/types'
+import { generateFrameworkColorUtilityClasses } from '@core/framework/colors'
+import type { CSSClass } from '@core/page-tree/types'
 
 function makeClass(
   id: string,

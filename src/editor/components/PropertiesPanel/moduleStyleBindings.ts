@@ -1,5 +1,5 @@
-import type { AnyModuleDefinition, ModuleStyleBinding, PropertyControl } from '../../../core/module-engine/types'
-import type { CSSPropertyBag } from '../../../core/page-tree/types'
+import type { AnyModuleDefinition, ModuleStyleBinding, PropertyControl } from '@core/module-engine/types'
+import type { CSSPropertyBag } from '@core/page-tree/types'
 
 export interface ResolvedModuleStyleBinding {
   key: string

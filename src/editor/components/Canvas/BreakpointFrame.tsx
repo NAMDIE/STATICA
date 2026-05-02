@@ -10,8 +10,8 @@
  */
 
 import type { CSSProperties } from 'react'
-import type { Page, Breakpoint } from '../../../core/page-tree/types'
-import type { TemplateRenderDataContext } from '../../../core/templates/dynamicBindings'
+import type { Page, Breakpoint } from '@core/page-tree/types'
+import type { TemplateRenderDataContext } from '@core/templates/dynamicBindings'
 import { NodeRenderer } from './NodeRenderer'
 import { CanvasBreakpointContext, CanvasTemplateContext } from './CanvasContexts'
 import { CanvasRuntimePreview } from './CanvasRuntimePreview'

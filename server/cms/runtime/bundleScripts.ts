@@ -1,21 +1,21 @@
 import { relative, sep } from 'node:path'
 import * as esbuild from 'esbuild'
-import type { Page, SiteDocument } from '../../../src/core/page-tree/types'
+import type { Page, SiteDocument } from '@core/page-tree/types'
 import {
   analyzeRuntimeScriptImports,
   collectRuntimeScripts,
   normalizeSiteRuntimeConfig,
-} from '../../../src/core/site-runtime'
+} from '@core/site-runtime'
 import type {
   PublishedPageRuntimeAssets,
   RuntimeScriptEntry,
   SiteRuntimeDiagnostic,
   SiteRuntimeTarget,
-} from '../../../src/core/site-runtime/types'
+} from '@core/site-runtime/types'
 import {
   clonePackageJson,
   DEFAULT_SITE_PACKAGE_JSON,
-} from '../../../src/core/site-dependencies/manifest'
+} from '@core/site-dependencies/manifest'
 import type { RuntimeDependencyCache } from './dependencyCache'
 import { materializeSiteScriptWorkspace } from './virtualSiteWorkspace'
 
@@ -40,7 +40,16 @@ export interface BuildSiteRuntimeScriptsInput {
   assetBasePath: string
   dependencyCache?: Pick<RuntimeDependencyCache, 'nodeModulesDir'>
   dependencyNodeModulesDir?: string
+  /** Override the bundle timeout (ms). Mainly for tests. */
+  bundleTimeoutMs?: number
 }
+
+/**
+ * Hard upper bound on the time a single esbuild invocation may run.
+ * Pathological imports or very large script trees should fail fast rather
+ * than tying up server capacity indefinitely.
+ */
+export const DEFAULT_BUNDLE_TIMEOUT_MS = 30_000
 
 function toPosixPath(path: string): string {
   return path.split(sep).join('/')
@@ -136,7 +145,7 @@ export async function buildSiteRuntimeScripts(
 
     const outputRoot = 'out'
     const splitRuntimeChunks = input.target === 'publish'
-    const build = await esbuild.build({
+    const buildPromise = esbuild.build({
       absWorkingDir: workspace.rootDir,
       assetNames: 'assets/[name]-[hash]',
       bundle: true,
@@ -156,11 +165,35 @@ export async function buildSiteRuntimeScripts(
       ],
       outdir: outputRoot,
       platform: 'browser',
-      sourcemap: false,
+      // Inline source maps for canvas preview keep runtime errors mappable
+      // back to user code without serving separate .map assets. Publish
+      // output stays minimal — the published surface is read-only and we
+      // would otherwise emit map files that no one consumes.
+      sourcemap: input.target === 'canvas' ? 'inline' : false,
       splitting: splitRuntimeChunks,
       target: ['es2020'],
       write: false,
     })
+
+    // Race esbuild against a timeout so a pathological build cannot stall the
+    // request indefinitely. esbuild has no public abort API for one-shot
+    // builds; if the timeout fires first the build promise still settles
+    // later but we have already abandoned its result and torn down the
+    // workspace via the outer finally.
+    const bundleTimeoutMs = input.bundleTimeoutMs ?? DEFAULT_BUNDLE_TIMEOUT_MS
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(
+        () => reject(new Error(`runtime bundle timed out after ${bundleTimeoutMs}ms`)),
+        bundleTimeoutMs,
+      )
+    })
+    let build: Awaited<typeof buildPromise>
+    try {
+      build = await Promise.race([buildPromise, timeoutPromise])
+    } finally {
+      if (timeoutHandle) clearTimeout(timeoutHandle)
+    }
 
     const files = build.outputFiles.map((file) => {
       const path = toPosixPath(relative(`${workspace.rootDir}/${outputRoot}`, file.path))

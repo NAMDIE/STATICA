@@ -20,9 +20,9 @@ import { produce } from 'immer'
 import { nanoid } from 'nanoid'
 import type { StateCreator } from 'zustand'
 import type { EditorStore } from '../store'
-import type { VisualComponent, VCParam } from '../../visualComponents/types'
-import { validateComponentName, validateParamName } from '../../visualComponents/nameValidation'
-import { wouldCreateCycle } from '../../visualComponents/recursionGuard'
+import type { VisualComponent, VCParam } from '@core/visualComponents/types'
+import { validateComponentName, validateParamName } from '@core/visualComponents/nameValidation'
+import { wouldCreateCycle } from '@core/visualComponents/recursionGuard'
 
 // ---------------------------------------------------------------------------
 // Custom error types

@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
-import type { Page } from '../../core/page-tree'
-import type { TemplateRenderDataContext } from '../../core/templates/dynamicBindings'
+import type { Page } from '@core/page-tree'
+import type { TemplateRenderDataContext } from '@core/templates/dynamicBindings'
 import {
   contentEntryToTemplateEntryData,
   selectLatestTemplatePreviewEntry,
-} from '../../core/templates/templatePreviewData'
-import { listCmsContentEntries } from '../../core/persistence/cmsContent'
-import { listCmsMediaAssets } from '../../core/persistence/cmsMedia'
+} from '@core/templates/templatePreviewData'
+import { listCmsContentEntries } from '@core/persistence/cmsContent'
+import { listCmsMediaAssets } from '@core/persistence/cmsMedia'
 
 export function useTemplatePreviewContext(page: Page | null): TemplateRenderDataContext | undefined {
   const template = page?.template

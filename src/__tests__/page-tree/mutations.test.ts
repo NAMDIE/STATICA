@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test'
 import { produce } from 'immer'
-import type { Page } from '../../core/page-tree/types'
+import type { Page } from '@core/page-tree/types'
 import {
   createNode,
   insertNode,
@@ -12,8 +12,8 @@ import {
   renameNode,
   toggleNodeLocked,
   toggleNodeHidden,
-} from '../../core/page-tree/mutations'
-import { getParent, flattenSubtree } from '../../core/page-tree/selectors'
+} from '@core/page-tree/mutations'
+import { getParent, flattenSubtree } from '@core/page-tree/selectors'
 
 // ---------------------------------------------------------------------------
 // Helpers

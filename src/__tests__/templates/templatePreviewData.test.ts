@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'bun:test'
-import type { ContentEntry } from '../../core/content/types'
-import type { CmsMediaAsset } from '../../core/persistence/cmsMedia'
+import type { ContentEntry } from '@core/content/types'
+import type { CmsMediaAsset } from '@core/persistence/cmsMedia'
 import {
   contentEntryToTemplateEntryData,
   selectLatestTemplatePreviewEntry,
-} from '../../core/templates/templatePreviewData'
+} from '@core/templates/templatePreviewData'
 
 function entry(overrides: Partial<ContentEntry>): ContentEntry {
   return {

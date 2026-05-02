@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'bun:test'
-import { CssCollector, sanitizeModuleCSS } from '../../core/publisher/cssCollector'
+import { CssCollector, sanitizeModuleCSS } from '@core/publisher/cssCollector'
 
 // ---------------------------------------------------------------------------
 // sanitizeModuleCSS — Constraint #228

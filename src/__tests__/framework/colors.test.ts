@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'bun:test'
-import type { FrameworkColorSettings } from '../../core/framework/colors'
+import type { FrameworkColorSettings } from '@core/framework/colors'
 import {
   generateFrameworkColorRootCss,
   generateFrameworkColorUtilityClasses,
   generateFrameworkColorVariableSets,
   normalizeFrameworkColorSlug,
-} from '../../core/framework/colors'
+} from '@core/framework/colors'
 
 function makeColorSettings(overrides: Partial<FrameworkColorSettings> = {}): FrameworkColorSettings {
   return {

@@ -45,9 +45,9 @@
 import { describe, it, expect, beforeEach } from 'bun:test'
 import { readFileSync, existsSync } from 'fs'
 import { join } from 'path'
-import { useEditorStore } from '../../core/editor-store/store'
-import { validateSite } from '../../core/persistence/validate'
-import type { SiteDocument } from '../../core/page-tree/types'
+import { useEditorStore } from '@core/editor-store/store'
+import { validateSite } from '@core/persistence/validate'
+import type { SiteDocument } from '@core/page-tree/types'
 
 // ---------------------------------------------------------------------------
 // Canonical paths
@@ -80,7 +80,7 @@ let wouldCreateCycle: (
 
 try {
    
-  const nvMod = require('../../core/visualComponents/nameValidation')
+  const nvMod = require('@core/visualComponents/nameValidation')
   validateComponentName = nvMod.validateComponentName
 } catch {
   validateComponentName = undefined as unknown as typeof validateComponentName
@@ -88,7 +88,7 @@ try {
 
 try {
    
-  const rgMod = require('../../core/visualComponents/recursionGuard')
+  const rgMod = require('@core/visualComponents/recursionGuard')
   getReferencedComponentIds = rgMod.getReferencedComponentIds
   wouldCreateCycle          = rgMod.wouldCreateCycle
 } catch {

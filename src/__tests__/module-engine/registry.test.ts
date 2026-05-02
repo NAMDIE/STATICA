@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from 'bun:test'
-import { ModuleDefinition } from '../../core/module-engine/types'
+import { ModuleDefinition } from '@core/module-engine/types'
 
 // We import the class directly for test isolation (not the global singleton)
-import { registry as globalRegistry } from '../../core/module-engine/registry'
+import { registry as globalRegistry } from '@core/module-engine/registry'
 
 // Minimal valid module fixture
 function makeModule(id: string): ModuleDefinition {
@@ -22,7 +22,7 @@ function makeModule(id: string): ModuleDefinition {
 
 // We need a fresh registry per test — import the class directly
  
-const { registry: _unusedRegistry, ...registryModule } = await import('../../core/module-engine/registry')
+const { registry: _unusedRegistry, ...registryModule } = await import('@core/module-engine/registry')
 
 // Dynamically re-construct registry for isolation
 class TestRegistry {

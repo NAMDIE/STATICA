@@ -1,4 +1,4 @@
-import type { createModuleImportMap } from '../../../core/module-engine/runtimeResolver'
+import type { createModuleImportMap } from '@core/module-engine/runtimeResolver'
 
 export const SANDBOX_MESSAGE_SOURCE = 'page-builder-module-sandbox'
 export const HOST_MESSAGE_SOURCE = 'page-builder-module-host'

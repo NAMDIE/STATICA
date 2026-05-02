@@ -3,11 +3,11 @@
  * base.button — content/behavior module.
  */
 import React from 'react'
-import { type ModuleDefinition, type ModuleComponentProps } from '../../../core/module-engine/types'
-import { registry } from '../../../core/module-engine/registry'
+import { type ModuleDefinition, type ModuleComponentProps } from '@core/module-engine/types'
+import { registry } from '@core/module-engine/registry'
 import { safeUrl } from '../utils/escape'
 import styles from './button.module.css'
-import { cn } from '../../../ui/cn'
+import { cn } from '@ui/cn'
 
 interface ButtonProps extends Record<string, unknown> {
   label: string

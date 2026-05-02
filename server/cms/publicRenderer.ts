@@ -1,7 +1,7 @@
 import '../../src/modules/base'
-import { registry } from '../../src/core/module-engine/registry'
-import { publishPage } from '../../src/core/publisher/render'
-import { selectEntryTemplate } from '../../src/core/templates/templateMatching'
+import { registry } from '@core/module-engine/registry'
+import { publishPage } from '@core/publisher/render'
+import { selectEntryTemplate } from '@core/templates/templateMatching'
 import type { PublishedContentEntry } from './contentRepository'
 import type { PublishedPageSnapshot } from './publishRepository'
 

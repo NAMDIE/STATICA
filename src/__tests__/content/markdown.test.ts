@@ -3,7 +3,7 @@ import {
   autoformatMarkdownShortcut,
   parseMarkdownBlocks,
   serializeMarkdownBlocks,
-} from '../../core/content/markdown'
+} from '@core/content/markdown'
 
 describe('content Markdown model', () => {
   it('serializes rich blocks to Markdown source', () => {

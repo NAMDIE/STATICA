@@ -1,7 +1,7 @@
 /**
  * PublishingSection — self-hosted CMS publishing details.
  */
-import { useEditorStore } from '../../../../core/editor-store/store'
+import { useEditorStore } from '@core/editor-store/store'
 import s from '../Settings.module.css'
 
 export function PublishingSection() {

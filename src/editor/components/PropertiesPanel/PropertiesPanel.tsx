@@ -26,15 +26,15 @@ import { useEffect, useCallback, useRef, useState } from 'react'
 import {
   useEditorStore,
   selectSelectedNode,
-} from '../../../core/editor-store/store'
+} from '@core/editor-store/store'
 
 import { usePropertiesPanelAutoOpen } from './usePropertiesPanelAutoOpen'
-import { registry } from '../../../core/module-engine/registry'
-import { evaluateCondition, resolveProps } from '../../../core/page-tree/selectors'
-import { isGeneratedClassLocked } from '../../../core/page-tree/classUtils'
+import { registry } from '@core/module-engine/registry'
+import { evaluateCondition, resolveProps } from '@core/page-tree/selectors'
+import { isGeneratedClassLocked } from '@core/page-tree/classUtils'
 import { PropertyControlRenderer } from '../PropertyControls/PropertyControlRenderer'
-import type { AnyModuleDefinition, PropertyControl } from '../../../core/module-engine/types'
-import type { CSSClass, PageNode, SiteDocument } from '../../../core/page-tree/types'
+import type { AnyModuleDefinition, PropertyControl } from '@core/module-engine/types'
+import type { CSSClass, PageNode, SiteDocument } from '@core/page-tree/types'
 import { ClassPicker } from './ClassPicker'
 import { ClassComposer } from './ClassComposer'
 import { Section } from './Section'

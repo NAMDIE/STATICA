@@ -4,8 +4,8 @@ import {
   listCmsPlugins,
   removeCmsPlugin,
   setCmsPluginEnabled,
-} from '../../core/persistence/cmsPlugins'
-import type { PluginManifest } from '../../core/plugin-sdk'
+} from '@core/persistence/cmsPlugins'
+import type { PluginManifest } from '@core/plugin-sdk'
 
 const mapManifest: PluginManifest = {
   id: 'local.map',

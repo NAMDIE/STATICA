@@ -29,7 +29,7 @@ import {
   type MouseEvent,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { useEditorStore } from '../../../core/editor-store/store'
+import { useEditorStore } from '@core/editor-store/store'
 import {
   readClassHoverPreviewPreference,
   subscribeToEditorPrefsChanged,
@@ -50,8 +50,8 @@ import {
   generatedClassKindLabel,
   isGeneratedClassLocked,
   isUserVisibleClass,
-} from '../../../core/page-tree/classUtils'
-import type { CSSClass } from '../../../core/page-tree/types'
+} from '@core/page-tree/classUtils'
+import type { CSSClass } from '@core/page-tree/types'
 import dialogStyles from '../SiteCreateDialog/SiteCreateDialog.module.css'
 import styles from './ClassPicker.module.css'
 

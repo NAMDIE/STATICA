@@ -7,7 +7,7 @@ import {
   ensureRuntimeDependencyCache,
   runtimeDependencyLockHash,
 } from '../../../server/cms/runtime/dependencyCache'
-import type { SiteDependencyLock } from '../../core/site-runtime'
+import type { SiteDependencyLock } from '@core/site-runtime'
 
 function registryResponse(name: string) {
   return new Response(JSON.stringify({
@@ -126,12 +126,215 @@ describe('runtime dependency resolution', () => {
 
       expect(cache.nodeModulesDir).toBe(join(cache.workspaceDir, 'node_modules'))
       expect(generatedPackage.dependencies).toEqual({ 'canvas-confetti': '1.9.3' })
-      expect(calls).toEqual([
-        {
-          command: [process.execPath, 'install', '--ignore-scripts'],
-          cwd: cache.workspaceDir,
+      expect(calls).toHaveLength(1)
+      expect(calls[0].command).toEqual([process.execPath, 'install', '--ignore-scripts'])
+      // Install runs in a temp sibling dir, then the dir is atomically renamed
+      // into its final hash slot. The cwd passed to runInstall must therefore
+      // NOT be the final workspaceDir.
+      expect(calls[0].cwd).not.toBe(cache.workspaceDir)
+      expect(calls[0].cwd.startsWith(join(cacheRoot, 'deps', `.tmp-${cache.hash}-`))).toBe(true)
+      // Sentinel marker proves the install completed; it must be present at
+      // the final cache path.
+      const sentinel = JSON.parse(
+        await readFile(join(cache.workspaceDir, '.pb-install-complete'), 'utf8'),
+      ) as { hash: string; packageCount: number }
+      expect(sentinel.hash).toBe(cache.hash)
+      expect(sentinel.packageCount).toBe(1)
+    } finally {
+      await rm(cacheRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('skips reinstall when a sentinel-marked cache already exists', async () => {
+    const cacheRoot = await mkdtemp(join(tmpdir(), 'pb-runtime-cache-test-'))
+    const lock: SiteDependencyLock = {
+      version: 1,
+      updatedAt: 100,
+      packages: {
+        'canvas-confetti': {
+          name: 'canvas-confetti',
+          requested: '^1.9.3',
+          version: '1.9.3',
+          resolvedAt: 100,
         },
+      },
+    }
+
+    try {
+      let installCount = 0
+      const runInstall = async (_command: string[], options: { cwd: string }) => {
+        installCount += 1
+        await mkdir(join(options.cwd, 'node_modules'), { recursive: true })
+      }
+
+      const first = await ensureRuntimeDependencyCache(lock, { cacheRoot, runInstall })
+      const second = await ensureRuntimeDependencyCache(lock, { cacheRoot, runInstall })
+
+      expect(installCount).toBe(1)
+      expect(second.workspaceDir).toBe(first.workspaceDir)
+    } finally {
+      await rm(cacheRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('self-heals when a stale cache is missing the sentinel (partial install)', async () => {
+    const cacheRoot = await mkdtemp(join(tmpdir(), 'pb-runtime-cache-test-'))
+    const lock: SiteDependencyLock = {
+      version: 1,
+      updatedAt: 100,
+      packages: {
+        'canvas-confetti': {
+          name: 'canvas-confetti',
+          requested: '^1.9.3',
+          version: '1.9.3',
+          resolvedAt: 100,
+        },
+      },
+    }
+
+    try {
+      // Simulate a previous interrupted install: a workspaceDir exists at the
+      // hash slot but is missing the sentinel and only has a partial
+      // node_modules tree. ensureRuntimeDependencyCache must NOT trust the
+      // bare directory and must re-install.
+      const hash = (await ensureRuntimeDependencyCache(lock, {
+        cacheRoot,
+        runInstall: async (_command, options) => {
+          await mkdir(join(options.cwd, 'node_modules'), { recursive: true })
+        },
+      })).hash
+      const workspaceDir = join(cacheRoot, 'deps', hash)
+      await rm(join(workspaceDir, '.pb-install-complete'), { force: true })
+      await rm(join(workspaceDir, 'node_modules'), { recursive: true, force: true })
+      await mkdir(join(workspaceDir, 'node_modules', 'canvas-confetti'), { recursive: true })
+
+      let installCount = 0
+      const cache = await ensureRuntimeDependencyCache(lock, {
+        cacheRoot,
+        runInstall: async (_command, options) => {
+          installCount += 1
+          await mkdir(join(options.cwd, 'node_modules', 'canvas-confetti'), { recursive: true })
+          await writeFile(join(options.cwd, 'node_modules', 'canvas-confetti', 'package.json'), '{}', 'utf8')
+        },
+      })
+
+      expect(installCount).toBe(1)
+      expect(cache.workspaceDir).toBe(workspaceDir)
+      // After self-heal, the sentinel exists and the package files written by
+      // the new install are visible at the final path.
+      expect(
+        JSON.parse(await readFile(join(workspaceDir, '.pb-install-complete'), 'utf8')),
+      ).toMatchObject({ hash })
+      expect(
+        await readFile(join(workspaceDir, 'node_modules', 'canvas-confetti', 'package.json'), 'utf8'),
+      ).toBe('{}')
+    } finally {
+      await rm(cacheRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects locks that exceed the package-count cap', async () => {
+    const cacheRoot = await mkdtemp(join(tmpdir(), 'pb-runtime-cache-test-'))
+    try {
+      const packages: SiteDependencyLock['packages'] = {}
+      for (let i = 0; i < 10; i += 1) {
+        const name = `pkg-${i}`
+        packages[name] = { name, requested: '*', version: '1.0.0', resolvedAt: 1 }
+      }
+      const lock: SiteDependencyLock = { version: 1, updatedAt: 1, packages }
+
+      let installs = 0
+      await expect(
+        ensureRuntimeDependencyCache(lock, {
+          cacheRoot,
+          maxPackages: 5,
+          runInstall: async () => {
+            installs += 1
+          },
+        }),
+      ).rejects.toThrow(/too many runtime packages/i)
+      // The cap must be enforced BEFORE the install is invoked — no install
+      // command should ever fire for an oversized lock.
+      expect(installs).toBe(0)
+    } finally {
+      await rm(cacheRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('aborts the install when the timeout elapses before exit', async () => {
+    const cacheRoot = await mkdtemp(join(tmpdir(), 'pb-runtime-cache-test-'))
+    const lock: SiteDependencyLock = {
+      version: 1,
+      updatedAt: 1,
+      packages: {
+        'canvas-confetti': {
+          name: 'canvas-confetti',
+          requested: '^1.9.3',
+          version: '1.9.3',
+          resolvedAt: 1,
+        },
+      },
+    }
+
+    try {
+      await expect(
+        ensureRuntimeDependencyCache(lock, {
+          cacheRoot,
+          installTimeoutMs: 30,
+          runInstall: async (_command, options) => {
+            // Imitate a stuck install that never returns until aborted.
+            await new Promise<void>((resolve, reject) => {
+              const settle = () => {
+                clearTimeout(stallTimer)
+                reject(new Error('aborted'))
+              }
+              const stallTimer = setTimeout(resolve, 5_000)
+              if (options.signal?.aborted) {
+                settle()
+                return
+              }
+              options.signal?.addEventListener('abort', settle, { once: true })
+            })
+          },
+        }),
+      ).rejects.toThrow()
+    } finally {
+      await rm(cacheRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('deduplicates concurrent installs of the same lock hash', async () => {
+    const cacheRoot = await mkdtemp(join(tmpdir(), 'pb-runtime-cache-test-'))
+    const lock: SiteDependencyLock = {
+      version: 1,
+      updatedAt: 1,
+      packages: {
+        'canvas-confetti': {
+          name: 'canvas-confetti',
+          requested: '^1.9.3',
+          version: '1.9.3',
+          resolvedAt: 1,
+        },
+      },
+    }
+
+    try {
+      let installCount = 0
+      const runInstall = async (_command: string[], options: { cwd: string }) => {
+        installCount += 1
+        // A small delay ensures both calls are in flight at the same time so
+        // the dedupe map actually has something to share.
+        await new Promise((resolve) => setTimeout(resolve, 25))
+        await mkdir(join(options.cwd, 'node_modules'), { recursive: true })
+      }
+
+      const [a, b] = await Promise.all([
+        ensureRuntimeDependencyCache(lock, { cacheRoot, runInstall }),
+        ensureRuntimeDependencyCache(lock, { cacheRoot, runInstall }),
       ])
+
+      expect(installCount).toBe(1)
+      expect(a.workspaceDir).toBe(b.workspaceDir)
     } finally {
       await rm(cacheRoot, { recursive: true, force: true })
     }

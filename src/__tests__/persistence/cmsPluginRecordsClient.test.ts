@@ -4,7 +4,7 @@ import {
   deleteCmsPluginResourceRecord,
   listCmsPluginResourceRecords,
   updateCmsPluginResourceRecord,
-} from '../../core/persistence/cmsPluginRecords'
+} from '@core/persistence/cmsPluginRecords'
 
 describe('CMS plugin records client', () => {
   it('lists and creates plugin resource records with session credentials', async () => {

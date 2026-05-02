@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test'
-import type { Page, PageNode } from '../../core/page-tree/types'
+import type { Page, PageNode } from '@core/page-tree/types'
 import {
   getNode,
   getNodeOrThrow,
@@ -10,7 +10,7 @@ import {
   isAncestor,
   resolveProps,
   evaluateCondition,
-} from '../../core/page-tree/selectors'
+} from '@core/page-tree/selectors'
 
 // ---------------------------------------------------------------------------
 // Fixtures

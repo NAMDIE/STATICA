@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach } from 'bun:test'
 import { act, fireEvent, render, screen, cleanup } from '@testing-library/react'
 import { readFileSync } from 'fs'
-import { useEditorStore } from '../../core/editor-store/store'
+import { useEditorStore } from '@core/editor-store/store'
 import { BreakpointFrame } from '../../editor/components/Canvas/BreakpointFrame'
 import { CanvasRoot } from '../../editor/components/Canvas/CanvasRoot'
 import '../../modules/base'

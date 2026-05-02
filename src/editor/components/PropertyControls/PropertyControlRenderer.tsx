@@ -6,9 +6,9 @@
  * control component owns its own row layout via controls.module.css.
  */
 import { useState } from 'react'
-import type { PropertyControl, PropertySchema } from '../../../core/module-engine/types'
-import type { DynamicPropBinding } from '../../../core/page-tree'
-import { sanitizeRichtext } from '../../../core/sanitize'
+import type { PropertyControl, PropertySchema } from '@core/module-engine/types'
+import type { DynamicPropBinding } from '@core/page-tree'
+import { sanitizeRichtext } from '@core/sanitize'
 import { ChevronRightIcon } from '@ui/icons/icons/chevron-right'
 import { TextControl } from './TextControl'
 import { TextareaControl } from './TextareaControl'

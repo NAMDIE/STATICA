@@ -24,7 +24,7 @@ import { readFileSync } from 'fs'
 import { PagesSection } from '../../editor/components/Settings/sections/PagesSection'
 import { BreakpointsSection } from '../../editor/components/Settings/sections/BreakpointsSection'
 import { PreferencesSection } from '../../editor/components/Settings/sections/PreferencesSection'
-import { useEditorStore } from '../../core/editor-store/store'
+import { useEditorStore } from '@core/editor-store/store'
 import { makeSite, makePage } from '../fixtures'
 
 // ---------------------------------------------------------------------------

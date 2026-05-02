@@ -4,9 +4,9 @@ import {
   getSiteDependencyVersion,
   getSiteModuleDependencyUsage,
   normalizeModuleDependencies,
-} from '../../core/module-engine/dependencies'
-import type { PageNode } from '../../core/page-tree/types'
-import type { AnyModuleDefinition, IModuleRegistry } from '../../core/module-engine/types'
+} from '@core/module-engine/dependencies'
+import type { PageNode } from '@core/page-tree/types'
+import type { AnyModuleDefinition, IModuleRegistry } from '@core/module-engine/types'
 
 function makeModule(dependencies: AnyModuleDefinition['dependencies']): AnyModuleDefinition {
   return {

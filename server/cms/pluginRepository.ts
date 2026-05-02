@@ -4,8 +4,8 @@ import type {
   PluginManifest,
   PluginPermission,
   PluginRecord,
-} from '../../src/core/plugin-sdk'
-import { parsePluginManifest } from '../../src/core/extensions/manifest'
+} from '@core/plugin-sdk'
+import { parsePluginManifest } from '@core/extensions/manifest'
 import type { DbClient } from './db'
 
 interface InstalledPluginRow {

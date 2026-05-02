@@ -11,8 +11,8 @@
  */
 
 import { describe, it, expect } from 'bun:test'
-import { buildSystemPrompt } from '../../core/agent/systemPrompt'
-import type { PageContext } from '../../core/agent/types'
+import { buildSystemPrompt } from '@core/agent/systemPrompt'
+import type { PageContext } from '@core/agent/types'
 
 const BASE_CONTAINER_CONTEXT = {
   id: 'base.container',

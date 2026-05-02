@@ -11,8 +11,8 @@ import {
   getSelectorStyleSummary,
   getSelectorUsage,
 } from '../../editor/components/SelectorsPanel/selectorUsage'
-import { useEditorStore } from '../../core/editor-store/store'
-import type { CSSClass, CSSPropertyBag } from '../../core/page-tree/types'
+import { useEditorStore } from '@core/editor-store/store'
+import type { CSSClass, CSSPropertyBag } from '@core/page-tree/types'
 import { makeNode, makePage, makeSite } from '../fixtures'
 import '../../modules/base/index'
 

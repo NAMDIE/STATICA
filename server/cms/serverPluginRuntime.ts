@@ -11,7 +11,7 @@ import {
 import {
   findPluginResource,
   validatePluginRecordData,
-} from '../../src/core/extensions/manifest'
+} from '@core/extensions/manifest'
 import type {
   PluginManifest,
   RouteMethod,
@@ -19,8 +19,8 @@ import type {
   ServerPluginLifecycleHook,
   ServerPluginModule,
   ServerPluginRouteHandler,
-} from '../../src/core/plugin-sdk'
-import { assertPluginPermission } from '../../src/core/plugin-sdk'
+} from '@core/plugin-sdk'
+import { assertPluginPermission } from '@core/plugin-sdk'
 import { jsonResponse } from '../http'
 import { nanoid } from 'nanoid'
 

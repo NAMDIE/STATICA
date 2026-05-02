@@ -6,17 +6,17 @@
  */
 
 import { useState, useCallback } from 'react'
-import { useEditorStore } from '../../../core/editor-store/store'
-import type { CSSClass, CSSPropertyBag } from '../../../core/page-tree/types'
+import { useEditorStore } from '@core/editor-store/store'
+import type { CSSClass, CSSPropertyBag } from '@core/page-tree/types'
 import { Button } from '@ui/components/Button'
 import { SearchBar } from '@ui/components/SearchBar'
-import { CloseIcon } from '../../../ui/icons/icons/close'
+import { CloseIcon } from '@ui/icons/icons/close'
 import { Settings2Icon } from '@ui/icons/icons/settings-2'
 import { BoxStackIcon } from '@ui/icons/icons/box-stack'
 import { PropertyControlRenderer } from '../PropertyControls/PropertyControlRenderer'
 import { ClassPropertyRow } from './ClassPropertyRow'
 import { Section } from './Section'
-import type { AnyModuleDefinition } from '../../../core/module-engine/types'
+import type { AnyModuleDefinition } from '@core/module-engine/types'
 import {
   clearModuleStylePatch,
   getModuleStyleBindings,

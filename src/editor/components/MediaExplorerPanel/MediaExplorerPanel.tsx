@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -59,6 +60,25 @@ const BUCKET_LABELS: Record<MediaBucket, string> = {
   images: 'Images',
   videos: 'Videos',
   other: 'Other',
+}
+
+const VIEW_MODE_STORAGE_KEY = 'pb-media-explorer-view-mode'
+
+function readStoredViewMode(): MediaViewMode {
+  try {
+    const raw = globalThis.localStorage?.getItem(VIEW_MODE_STORAGE_KEY)
+    return raw === 'grid' || raw === 'list' ? raw : 'list'
+  } catch {
+    return 'list'
+  }
+}
+
+function writeStoredViewMode(mode: MediaViewMode) {
+  try {
+    globalThis.localStorage?.setItem(VIEW_MODE_STORAGE_KEY, mode)
+  } catch {
+    // best-effort UI persistence
+  }
 }
 
 const IMAGE_EXTENSIONS = new Set([
@@ -179,7 +199,11 @@ export function MediaExplorerPanel({
   const [mediaLoading, setMediaLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>('all')
-  const [viewMode, setViewMode] = useState<MediaViewMode>('list')
+  const [viewMode, setViewModeState] = useState<MediaViewMode>(readStoredViewMode)
+  const setViewMode = useCallback((mode: MediaViewMode) => {
+    setViewModeState(mode)
+    writeStoredViewMode(mode)
+  }, [])
   const panelRef = useRef<HTMLElement>(null)
 
   const cmsBuckets = useMemo(() => groupCmsMediaAssets(cmsAssets), [cmsAssets])
@@ -414,7 +438,7 @@ export function MediaExplorerPanel({
               trailing={
                 <div role="group" aria-label="Media view" className={styles.mediaViewGroup}>
                   <Button
-                    variant="ghost"
+                    variant={viewMode === 'list' ? 'secondary' : 'ghost'}
                     size="xs"
                     iconOnly
                     pressed={viewMode === 'list'}
@@ -425,7 +449,7 @@ export function MediaExplorerPanel({
                     <BulletlistIcon size={13} />
                   </Button>
                   <Button
-                    variant="ghost"
+                    variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
                     size="xs"
                     iconOnly
                     pressed={viewMode === 'grid'}

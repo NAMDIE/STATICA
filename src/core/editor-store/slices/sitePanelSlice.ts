@@ -25,19 +25,19 @@ import type {
   SiteDependencyLock,
   SiteRuntimeConfig,
   SiteScriptRuntimeConfig,
-} from '../../site-runtime/types'
+} from '@core/site-runtime/types'
 import {
   clonePackageJson,
   DEFAULT_SITE_PACKAGE_JSON,
   type SitePackageJson,
-} from '../../site-dependencies/manifest'
-import { isSafePackageName } from '../../site-dependencies/packageNames'
+} from '@core/site-dependencies/manifest'
+import { isSafePackageName } from '@core/site-dependencies/packageNames'
 import {
   cloneSiteRuntimeConfig,
   DEFAULT_SITE_RUNTIME,
   normalizeScriptRuntimeConfig,
   normalizeSiteRuntimeConfig,
-} from '../../site-runtime'
+} from '@core/site-runtime'
 
 // ---------------------------------------------------------------------------
 // Types

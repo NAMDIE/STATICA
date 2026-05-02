@@ -16,8 +16,8 @@
  * @see Guideline #376 — achromatic palette
  */
 
-import type { SiteFile } from '../../../core/files/types'
-import type { MediaAssetPreview } from '../../../core/editor-store/slices/uiSlice'
+import type { SiteFile } from '@core/files/types'
+import type { MediaAssetPreview } from '@core/editor-store/slices/uiSlice'
 import styles from './imagePreview.module.css'
 
 // ---------------------------------------------------------------------------

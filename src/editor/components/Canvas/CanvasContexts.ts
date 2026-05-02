@@ -1,5 +1,5 @@
 import { createContext, type MouseEvent } from 'react'
-import type { TemplateRenderDataContext } from '../../../core/templates/dynamicBindings'
+import type { TemplateRenderDataContext } from '@core/templates/dynamicBindings'
 
 export interface CanvasSelectionContextValue {
   onNodeClick: (nodeId: string, e: MouseEvent, breakpointId?: string) => void

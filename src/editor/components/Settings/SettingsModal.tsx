@@ -11,7 +11,7 @@
  * data-testid="settings-modal" for Playwright (Guideline #221)
  */
 import { useEffect, useRef, useCallback } from 'react'
-import { useEditorStore } from '../../../core/editor-store/store'
+import { useEditorStore } from '@core/editor-store/store'
 import { Button } from '@ui/components/Button'
 import { Separator } from '@ui/components/Separator'
 import { CloseIcon } from '@ui/icons/icons/close'

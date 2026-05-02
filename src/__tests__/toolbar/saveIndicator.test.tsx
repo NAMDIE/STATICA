@@ -3,7 +3,7 @@ import React from 'react'
 import { cleanup, fireEvent, render, screen, act } from '@testing-library/react'
 import { SaveIndicator } from '../../editor/components/Toolbar/SaveIndicator'
 import { EDITOR_PREFS_KEY } from '../../editor/preferences/editorPreferences'
-import { useEditorStore } from '../../core/editor-store/store'
+import { useEditorStore } from '@core/editor-store/store'
 import { makeSite } from '../fixtures'
 
 function resetStore() {

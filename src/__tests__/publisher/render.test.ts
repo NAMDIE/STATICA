@@ -6,12 +6,12 @@ import {
   renderNode,
   publishPage,
   type RenderContext,
-} from '../../core/publisher/render'
-import type { ModuleDefinition } from '../../core/module-engine/types'
+} from '@core/publisher/render'
+import type { ModuleDefinition } from '@core/module-engine/types'
 import {
   frameworkColorClassId,
   generateFrameworkColorUtilityClasses,
-} from '../../core/framework/colors'
+} from '@core/framework/colors'
 import { makeModule, makeRegistry, makePage, makeSite } from './helpers'
 
 // ---------------------------------------------------------------------------

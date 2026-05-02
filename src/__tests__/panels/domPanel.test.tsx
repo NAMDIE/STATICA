@@ -25,7 +25,7 @@ import { join } from 'path'
 import React from 'react'
 import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
 import { DomPanel } from '../../editor/components/DomPanel/DomPanel'
-import { useEditorStore } from '../../core/editor-store/store'
+import { useEditorStore } from '@core/editor-store/store'
 import { makeSite, makePage, makeNode } from '../fixtures'
 
 const TREE_ROW_CSS_PATH = join(import.meta.dir, '../../editor/ui/Tree/TreeRow.module.css')

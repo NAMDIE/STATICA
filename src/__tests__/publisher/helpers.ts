@@ -2,13 +2,13 @@
  * Shared test helpers for publisher tests.
  * Re-uses the flat-map PageNode structure from the locked types.
  */
-import type { Page, PageNode, SiteDocument, Breakpoint } from '../../core/page-tree/types'
-import type { ModuleDefinition, IModuleRegistry, AnyModuleDefinition } from '../../core/module-engine/types'
+import type { Page, PageNode, SiteDocument, Breakpoint } from '@core/page-tree/types'
+import type { ModuleDefinition, IModuleRegistry, AnyModuleDefinition } from '@core/module-engine/types'
 import {
   DEFAULT_COLOR_TOKENS,
   DEFAULT_TYPE_SCALE,
   DEFAULT_SITE_SETTINGS,
-} from '../../core/page-tree/types'
+} from '@core/page-tree/types'
 
 // ---------------------------------------------------------------------------
 // Module fixture factory

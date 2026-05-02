@@ -4,7 +4,7 @@ import {
   listCmsMediaAssets,
   renameCmsMediaAsset,
   uploadCmsMediaAsset,
-} from '../../core/persistence/cmsMedia'
+} from '@core/persistence/cmsMedia'
 
 describe('CMS media client', () => {
   it('lists media assets with session credentials', async () => {

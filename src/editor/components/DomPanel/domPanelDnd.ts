@@ -1,5 +1,5 @@
-import type { Page } from '../../../core/page-tree/types'
-import { getParent, isAncestor } from '../../../core/page-tree/selectors'
+import type { Page } from '@core/page-tree/types'
+import { getParent, isAncestor } from '@core/page-tree/selectors'
 
 type DomDropPosition = 'before' | 'after' | 'inside'
 type DomDropZone = DomDropPosition

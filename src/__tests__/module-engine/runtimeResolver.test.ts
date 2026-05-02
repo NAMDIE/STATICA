@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
-import { createModuleImportMap, resolveDependencyUrl } from '../../core/module-engine/runtimeResolver'
-import type { AnyModuleDefinition } from '../../core/module-engine/types'
+import { createModuleImportMap, resolveDependencyUrl } from '@core/module-engine/runtimeResolver'
+import type { AnyModuleDefinition } from '@core/module-engine/types'
 
 function makeModule(dependencies: AnyModuleDefinition['dependencies']): AnyModuleDefinition {
   return {

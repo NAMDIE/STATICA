@@ -1,10 +1,10 @@
 import { maxSatisfying } from 'semver'
-import type { SitePackageJson } from '../../../src/core/site-dependencies/manifest'
-import { isSafePackageName } from '../../../src/core/site-dependencies/packageNames'
+import type { SitePackageJson } from '@core/site-dependencies/manifest'
+import { isSafePackageName } from '@core/site-dependencies/packageNames'
 import type {
   LockedSiteDependency,
   SiteDependencyLock,
-} from '../../../src/core/site-runtime'
+} from '@core/site-runtime'
 
 interface NpmPackageMetadata {
   name?: string

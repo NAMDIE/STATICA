@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import React from 'react'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { ColorsPanel } from '../../editor/components/ColorsPanel'
-import { useEditorStore } from '../../core/editor-store/store'
-import { frameworkColorClassId } from '../../core/framework/colors'
+import { useEditorStore } from '@core/editor-store/store'
+import { frameworkColorClassId } from '@core/framework/colors'
 import { makeSite } from '../fixtures'
 
 function resetStore() {

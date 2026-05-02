@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
-import { publishPage } from '../../core/publisher/render'
-import type { PublishedPageRuntimeAssets } from '../../core/site-runtime'
+import { publishPage } from '@core/publisher/render'
+import type { PublishedPageRuntimeAssets } from '@core/site-runtime'
 import { makeModule, makePage, makeRegistry, makeSite } from './helpers'
 
 const registry = makeRegistry({

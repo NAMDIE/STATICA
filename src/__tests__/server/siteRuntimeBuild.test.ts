@@ -2,8 +2,8 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'bun:test'
-import type { SiteDocument } from '../../core/page-tree/types'
-import { normalizeSiteRuntimeConfig } from '../../core/site-runtime'
+import type { SiteDocument } from '@core/page-tree/types'
+import { normalizeSiteRuntimeConfig } from '@core/site-runtime'
 import { buildRuntimePreviewDocument } from '../../../server/cms/runtime/previewRuntime'
 import { buildSiteRuntimeScripts } from '../../../server/cms/runtime/bundleScripts'
 import { makeModule, makePage, makeRegistry, makeSite } from '../publisher/helpers'
@@ -176,5 +176,28 @@ describe('site runtime build', () => {
     } finally {
       await rm(cacheRoot, { recursive: true, force: true })
     }
+  })
+
+  it('returns a timeout diagnostic instead of stalling when the bundle timeout fires', async () => {
+    const result = await buildSiteRuntimeScripts({
+      site: runtimeSite(),
+      page,
+      target: 'publish',
+      assetBasePath: '/_pb/assets/runtime/',
+      // 0ms forces the timeout race to win on the next tick, regardless of
+      // how fast esbuild is on this host.
+      bundleTimeoutMs: 0,
+    })
+
+    expect(result.runtimeAssets.scripts).toEqual([])
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'runtime-bundle-error',
+          severity: 'error',
+          message: expect.stringMatching(/timed out/i),
+        }),
+      ]),
+    )
   })
 })

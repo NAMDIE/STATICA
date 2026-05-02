@@ -13,10 +13,10 @@
  */
 
 import { memo, useCallback, useContext } from 'react'
-import { useEditorStore, selectActiveCanvasPage } from '../../../core/editor-store/store'
-import { resolveProps } from '../../../core/page-tree/selectors'
-import { registry } from '../../../core/module-engine/registry'
-import { resolveDynamicProps } from '../../../core/templates/dynamicBindings'
+import { useEditorStore, selectActiveCanvasPage } from '@core/editor-store/store'
+import { resolveProps } from '@core/page-tree/selectors'
+import { registry } from '@core/module-engine/registry'
+import { resolveDynamicProps } from '@core/templates/dynamicBindings'
 import { WarningDiamondIcon } from '@ui/icons/icons/warning-diamond'
 import { ModuleSandboxFrame } from './ModuleSandboxFrame'
 import { CanvasBreakpointContext, CanvasSelectionContext, CanvasTemplateContext } from './CanvasContexts'
