@@ -120,6 +120,10 @@ export function normalizeSiteRuntimeConfig(raw: unknown): SiteRuntimeConfig {
   }
 }
 
+export function cloneSiteRuntimeConfig(runtime: SiteRuntimeConfig = DEFAULT_SITE_RUNTIME): SiteRuntimeConfig {
+  return normalizeSiteRuntimeConfig(runtime)
+}
+
 export function scriptAppliesToPage(
   config: Pick<SiteScriptRuntimeConfig, 'scope'>,
   page: { id: string; template?: unknown },

@@ -16,6 +16,7 @@ export {
   DEFAULT_SCRIPT_RUNTIME_CONFIG,
   DEFAULT_SITE_DEPENDENCY_LOCK,
   DEFAULT_SITE_RUNTIME,
+  cloneSiteRuntimeConfig,
   collectRuntimeScripts,
   normalizeScriptRuntimeConfig,
   normalizeSiteRuntimeConfig,
