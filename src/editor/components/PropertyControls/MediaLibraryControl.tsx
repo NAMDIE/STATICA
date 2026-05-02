@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { listCmsMediaAssets, type CmsMediaAsset } from '../../../core/persistence/cmsMedia'
-import { isValidImageUrl } from '../../../core/utils/urlValidation'
+import { listCmsMediaAssets, type CmsMediaAsset } from '@core/persistence/cmsMedia'
+import { isValidImageUrl } from '@core/utils/urlValidation'
 import type { ControlProps } from './shared'
 import { Button } from '@ui/components/Button'
 import { Input } from '@ui/components/Input'

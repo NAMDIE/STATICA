@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import type { PropertyControl } from '../../../core/module-engine/types'
-import type { DynamicPropBinding } from '../../../core/page-tree'
+import type { PropertyControl } from '@core/module-engine/types'
+import type { DynamicPropBinding } from '@core/page-tree'
 import { Button } from '@ui/components/Button'
 import { CloseIcon } from '@ui/icons/icons/close'
 import styles from './controls.module.css'

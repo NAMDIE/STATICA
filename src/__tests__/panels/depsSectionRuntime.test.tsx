@@ -5,9 +5,9 @@ import {
   DepsSection,
   evaluateDependencyLockStatus,
 } from '../../editor/components/DependenciesPanel/DepsSection'
-import { useEditorStore } from '../../core/editor-store/store'
+import { useEditorStore } from '@core/editor-store/store'
 import { makeSite } from '../fixtures'
-import { normalizeSiteRuntimeConfig } from '../../core/site-runtime'
+import { normalizeSiteRuntimeConfig } from '@core/site-runtime'
 
 afterEach(cleanup)
 const originalFetch = globalThis.fetch

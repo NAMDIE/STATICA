@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, type CSSProperties } from 'react'
-import type { AnyModuleDefinition } from '../../../core/module-engine/types'
-import { createModuleImportMap } from '../../../core/module-engine/runtimeResolver'
-import type { SiteDocument } from '../../../core/page-tree/types'
-import { useEditorStore } from '../../../core/editor-store/store'
+import type { AnyModuleDefinition } from '@core/module-engine/types'
+import { createModuleImportMap } from '@core/module-engine/runtimeResolver'
+import type { SiteDocument } from '@core/page-tree/types'
+import { useEditorStore } from '@core/editor-store/store'
 import { cn } from '../../../ui/cn'
-import { generateClassCSS } from '../../../core/publisher/classCss'
+import { generateClassCSS } from '@core/publisher/classCss'
 import {
   createSandboxSrcDoc,
   HOST_MESSAGE_SOURCE,

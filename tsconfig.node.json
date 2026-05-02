@@ -19,7 +19,21 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+
+    /* Path aliases — kept in sync with tsconfig.json + tsconfig.app.json so
+       server/ files resolve project aliases identically to the editor app. */
+    "ignoreDeprecations": "6.0",
+    "baseUrl": ".",
+    "paths": {
+      "@core/*": ["src/core/*"],
+      "@editor/*": ["src/editor/*"],
+      "@modules/*": ["src/modules/*"],
+      "@ui/*": ["src/ui/*"],
+      "@admin/*": ["src/admin/*"],
+      "@motion/icons": ["src/ui/icons/index.ts"],
+      "@motion/icons/*": ["src/ui/icons/*"]
+    }
   },
   "include": ["vite.config.ts", "server/**/*.ts"]
 }

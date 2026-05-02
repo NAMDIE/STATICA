@@ -1,7 +1,7 @@
-import type { Page, SiteDocument } from '../../../src/core/page-tree/types'
-import type { IModuleRegistry } from '../../../src/core/module-engine/types'
-import type { TemplateRenderDataContext } from '../../../src/core/templates/dynamicBindings'
-import { publishPage } from '../../../src/core/publisher/render'
+import type { Page, SiteDocument } from '@core/page-tree/types'
+import type { IModuleRegistry } from '@core/module-engine/types'
+import type { TemplateRenderDataContext } from '@core/templates/dynamicBindings'
+import { publishPage } from '@core/publisher/render'
 import {
   buildSiteRuntimeScripts,
   type BuiltRuntimeAssetFile,

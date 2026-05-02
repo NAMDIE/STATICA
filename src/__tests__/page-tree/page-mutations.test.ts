@@ -8,14 +8,14 @@
 
 import { describe, it, expect } from 'bun:test'
 import { produce } from 'immer'
-import type { SiteDocument } from '../../core/page-tree/types'
+import type { SiteDocument } from '@core/page-tree/types'
 import {
   addPage,
   deletePage,
   renamePage,
   reorderPages,
-} from '../../core/page-tree/mutations'
-import { createUniquePageSlug } from '../../core/page-tree/slugs'
+} from '@core/page-tree/mutations'
+import { createUniquePageSlug } from '@core/page-tree/slugs'
 import { makeSite, makePage } from '../fixtures'
 
 // ---------------------------------------------------------------------------

@@ -17,7 +17,7 @@
  * @see Task #434 — Migration & SitePanel Cleanup
  */
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
-import { useEditorStore } from '../../../core/editor-store/store'
+import { useEditorStore } from '@core/editor-store/store'
 import { Button } from '@ui/components/Button'
 import { Input } from '@ui/components/Input'
 import { SearchBar } from '@ui/components/SearchBar'
@@ -27,20 +27,20 @@ import { PlusIcon } from '@ui/icons/icons/plus'
 import { CloseIcon } from '@ui/icons/icons/close'
 import { ChevronRightIcon } from '@ui/icons/icons/chevron-right'
 import { cn } from '@ui/cn'
-import { isSafePackageName } from '../../../core/site-dependencies/packageNames'
+import { isSafePackageName } from '@core/site-dependencies/packageNames'
 import {
   getSiteModuleDependencyUsage,
   type SiteModuleDependencyUsage,
-} from '../../../core/module-engine/dependencies'
+} from '@core/module-engine/dependencies'
 import {
   analyzeRuntimeScriptImports,
   type LockedSiteDependency,
   type RuntimePackageDependencyUsage,
   type SiteRuntimeDiagnostic,
-} from '../../../core/site-runtime'
-import type { SitePackageJson } from '../../../core/site-dependencies/manifest'
-import { resolveCmsRuntimeDependencies } from '../../../core/persistence/cmsRuntime'
-import { registry } from '../../../core/module-engine/registry'
+} from '@core/site-runtime'
+import type { SitePackageJson } from '@core/site-dependencies/manifest'
+import { resolveCmsRuntimeDependencies } from '@core/persistence/cmsRuntime'
+import { registry } from '@core/module-engine/registry'
 import styles from './DepsSection.module.css'
 
 // ---------------------------------------------------------------------------

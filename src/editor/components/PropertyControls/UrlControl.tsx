@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { ControlProps } from './shared'
-import { isValidUrl } from '../../../core/utils/urlValidation'
+import { isValidUrl } from '@core/utils/urlValidation'
 import { Input } from '@ui/components/Input'
 import { cn } from '@ui/cn'
 import styles from './controls.module.css'

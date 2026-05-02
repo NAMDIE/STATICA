@@ -7,7 +7,7 @@ import {
   ensureRuntimeDependencyCache,
   runtimeDependencyLockHash,
 } from '../../../server/cms/runtime/dependencyCache'
-import type { SiteDependencyLock } from '../../core/site-runtime'
+import type { SiteDependencyLock } from '@core/site-runtime'
 
 function registryResponse(name: string) {
   return new Response(JSON.stringify({

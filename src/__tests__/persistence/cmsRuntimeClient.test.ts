@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { buildCmsRuntimePreview, resolveCmsRuntimeDependencies } from '../../core/persistence/cmsRuntime'
+import { buildCmsRuntimePreview, resolveCmsRuntimeDependencies } from '@core/persistence/cmsRuntime'
 
 describe('CMS runtime client', () => {
   it('posts dependency manifests to the runtime resolve endpoint', async () => {

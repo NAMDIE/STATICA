@@ -2,8 +2,8 @@
  * base.link — anchor element.
  */
 import React from 'react'
-import { type ModuleDefinition, type ModuleComponentProps } from '../../../core/module-engine/types'
-import { registry } from '../../../core/module-engine/registry'
+import { type ModuleDefinition, type ModuleComponentProps } from '@core/module-engine/types'
+import { registry } from '@core/module-engine/registry'
 import { safeUrl } from '../utils/escape'
 import styles from './link.module.css'
 import { cn } from '../../../ui/cn'

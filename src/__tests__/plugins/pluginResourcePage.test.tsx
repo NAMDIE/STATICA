@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test'
 import React from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { PluginPageRenderer } from '../../admin/plugins/components/PluginPageRenderer/PluginPageRenderer'
-import type { PluginAdminAppModule, PluginAdminPageRoute } from '../../core/plugin-sdk'
+import type { PluginAdminAppModule, PluginAdminPageRoute } from '@core/plugin-sdk'
 
 const originalFetch = globalThis.fetch
 

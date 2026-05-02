@@ -30,7 +30,7 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import { PropertiesPanel } from '../../editor/components/PropertiesPanel/PropertiesPanel'
 import { getCSSPropertyDefaultValue } from '../../editor/components/PropertiesPanel/cssControlTypes'
-import { useEditorStore } from '../../core/editor-store/store'
+import { useEditorStore } from '@core/editor-store/store'
 import { makeSite, makePage, makeNode } from '../fixtures'
 import '../../modules/base/index'
 

@@ -8,7 +8,7 @@
  * Co-locates with PropertiesPanel per §6 of Spec #671.
  */
 
-import type { CSSPropertyBag } from '../../../core/page-tree/types'
+import type { CSSPropertyBag } from '@core/page-tree/types'
 import type { IconComponent } from '@ui/icons/types'
 import { LayoutIcon } from '@ui/icons/icons/layout'
 import { ProportionsIcon } from '@ui/icons/icons/proportions'

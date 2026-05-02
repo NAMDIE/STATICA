@@ -1,21 +1,21 @@
 import { relative, sep } from 'node:path'
 import * as esbuild from 'esbuild'
-import type { Page, SiteDocument } from '../../../src/core/page-tree/types'
+import type { Page, SiteDocument } from '@core/page-tree/types'
 import {
   analyzeRuntimeScriptImports,
   collectRuntimeScripts,
   normalizeSiteRuntimeConfig,
-} from '../../../src/core/site-runtime'
+} from '@core/site-runtime'
 import type {
   PublishedPageRuntimeAssets,
   RuntimeScriptEntry,
   SiteRuntimeDiagnostic,
   SiteRuntimeTarget,
-} from '../../../src/core/site-runtime/types'
+} from '@core/site-runtime/types'
 import {
   clonePackageJson,
   DEFAULT_SITE_PACKAGE_JSON,
-} from '../../../src/core/site-dependencies/manifest'
+} from '@core/site-dependencies/manifest'
 import type { RuntimeDependencyCache } from './dependencyCache'
 import { materializeSiteScriptWorkspace } from './virtualSiteWorkspace'
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from 'bun:test'
-import { collectAgentRenderSnapshots } from '../../core/agent/renderEvidence'
+import { collectAgentRenderSnapshots } from '@core/agent/renderEvidence'
 
 beforeEach(() => {
   document.body.innerHTML = ''

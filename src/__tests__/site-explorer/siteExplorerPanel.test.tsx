@@ -5,9 +5,9 @@ import { readFileSync } from 'fs'
 import { SiteExplorerPanel } from '../../editor/components/SiteExplorerPanel'
 import { MediaExplorerPanel } from '../../editor/components/MediaExplorerPanel'
 import { CodeEditorPanel } from '../../editor/components/CodeEditor'
-import { useEditorStore } from '../../core/editor-store/store'
+import { useEditorStore } from '@core/editor-store/store'
 import { makeNode, makePage, makeSite } from '../fixtures'
-import type { VisualComponent } from '../../core/visualComponents/types'
+import type { VisualComponent } from '@core/visualComponents/types'
 import '../../modules/base/index'
 
 afterEach(cleanup)

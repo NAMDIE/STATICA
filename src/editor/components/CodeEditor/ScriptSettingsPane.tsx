@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
-import { useEditorStore } from '../../../core/editor-store/store'
-import type { SiteFile } from '../../../core/files/types'
+import { useEditorStore } from '@core/editor-store/store'
+import type { SiteFile } from '@core/files/types'
 import {
   analyzeRuntimeScriptImports,
   DEFAULT_SCRIPT_RUNTIME_CONFIG,
@@ -8,7 +8,7 @@ import {
   type SiteScriptPlacement,
   type SiteScriptScope,
   type SiteScriptTiming,
-} from '../../../core/site-runtime'
+} from '@core/site-runtime'
 import { Button } from '@ui/components/Button'
 import { Input } from '@ui/components/Input'
 import { Select } from '@ui/components/Select'

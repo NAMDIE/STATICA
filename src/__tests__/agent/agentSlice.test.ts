@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
-import { useEditorStore } from '../../core/editor-store/store'
-import { processStreamEvent } from '../../core/agent/agentSlice'
-import type { AgentMessage } from '../../core/agent/types'
+import { useEditorStore } from '@core/editor-store/store'
+import { processStreamEvent } from '@core/agent/agentSlice'
+import type { AgentMessage } from '@core/agent/types'
 import '../../modules/base'
 
 function freshAgentState() {

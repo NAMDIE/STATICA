@@ -22,7 +22,7 @@
 // sanitiseCssValue is the canonical CSS injection sanitiser (Constraint #228).
 // Using import+re-export (not just `export { } from`) so the symbols are also
 // available as local bindings within this file (e.g. used by buildStyle below).
-import { safeUrl, sanitiseCssValue } from '../../../core/publisher/utils'
+import { safeUrl, sanitiseCssValue } from '@core/publisher/utils'
 export { safeUrl, sanitiseCssValue }
 
 // ---------------------------------------------------------------------------

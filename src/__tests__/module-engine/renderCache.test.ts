@@ -12,8 +12,8 @@
  */
 
 import { describe, it, expect, beforeEach } from 'bun:test'
-import { renderCache } from '../../core/engine/renderCache'
-import type { RenderOutput } from '../../core/module-engine/types'
+import { renderCache } from '@core/engine/renderCache'
+import type { RenderOutput } from '@core/module-engine/types'
 
 // Reset cache between tests
 beforeEach(() => {

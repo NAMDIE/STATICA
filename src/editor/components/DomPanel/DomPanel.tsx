@@ -36,10 +36,10 @@ import {
   type DragEndEvent,
 } from '@dnd-kit/core'
 import { createPortal } from 'react-dom'
-import { useEditorStore, selectActivePage } from '../../../core/editor-store/store'
-import { flattenSubtree } from '../../../core/page-tree/selectors'
+import { useEditorStore, selectActivePage } from '@core/editor-store/store'
+import { flattenSubtree } from '@core/page-tree/selectors'
 import { getAncestorIds } from '../../hooks/useTreeWalkOrder'
-import { registry } from '../../../core/module-engine/registry'
+import { registry } from '@core/module-engine/registry'
 import { TreeNode } from './TreeNode'
 import { useDomTree } from './DomTreeContext'
 import { DomTreeProvider } from './DomTreeProvider'

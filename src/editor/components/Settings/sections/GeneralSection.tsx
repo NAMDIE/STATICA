@@ -8,7 +8,7 @@
  * Inputs use onBlur + onKeyDown(Enter) so intermediate keystrokes don't
  * push undo-history entries on every keystroke (performance pattern).
  */
-import { useEditorStore } from '../../../../core/editor-store/store'
+import { useEditorStore } from '@core/editor-store/store'
 import { Input, Textarea } from '@ui/components/Input'
 import s from '../Settings.module.css'
 

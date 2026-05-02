@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import React from 'react'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Toolbar } from '../../editor/components/Toolbar'
-import { pluginRuntime } from '../../core/extensions/runtime'
-import { useEditorStore } from '../../core/editor-store/store'
+import { pluginRuntime } from '@core/extensions/runtime'
+import { useEditorStore } from '@core/editor-store/store'
 import { makeSite } from '../fixtures'
 
 beforeEach(() => {

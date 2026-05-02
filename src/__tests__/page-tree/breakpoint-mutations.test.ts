@@ -13,8 +13,8 @@ import {
   clearBreakpointOverride,
   createNode,
   insertNode,
-} from '../../core/page-tree/mutations'
-import { resolveProps } from '../../core/page-tree/selectors'
+} from '@core/page-tree/mutations'
+import { resolveProps } from '@core/page-tree/selectors'
 import { makePage } from '../fixtures'
 
 // ---------------------------------------------------------------------------

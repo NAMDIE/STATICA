@@ -6,7 +6,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { ContentPage } from '../../admin/content/ContentPage'
-import { useEditorStore } from '../../core/editor-store/store'
+import { useEditorStore } from '@core/editor-store/store'
 import { makeSite } from '../fixtures'
 import { Toolbar } from '../../editor/components/Toolbar'
 import { AdminSectionNavigation } from '../../admin/AdminLayout'

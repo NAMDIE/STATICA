@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
-import type { SiteDocument } from '../../core/page-tree/types'
-import { normalizeSiteRuntimeConfig } from '../../core/site-runtime'
+import type { SiteDocument } from '@core/page-tree/types'
+import { normalizeSiteRuntimeConfig } from '@core/site-runtime'
 import type { DbClient, DbResult } from '../../../server/cms/db'
 import {
   loadDraftSite,

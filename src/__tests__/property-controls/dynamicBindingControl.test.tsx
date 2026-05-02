@@ -3,9 +3,9 @@ import React from 'react'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { PropertiesPanel } from '../../editor/components/PropertiesPanel/PropertiesPanel'
 import { DynamicBindingControl } from '../../editor/components/PropertyControls/DynamicBindingControl'
-import { useEditorStore } from '../../core/editor-store/store'
+import { useEditorStore } from '@core/editor-store/store'
 import { makeNode, makePage, makeSite } from '../fixtures'
-import type { DynamicPropBinding } from '../../core/page-tree'
+import type { DynamicPropBinding } from '@core/page-tree'
 import '../../modules/base/index'
 
 afterEach(cleanup)

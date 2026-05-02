@@ -2,8 +2,8 @@
 /**
  * base.root - invisible page root container.
  */
-import type { ModuleDefinition, ModuleComponentProps } from '../../core/module-engine/types'
-import { registry } from '../../core/module-engine/registry'
+import type { ModuleDefinition, ModuleComponentProps } from '@core/module-engine/types'
+import { registry } from '@core/module-engine/registry'
 import { cn } from '../../ui/cn'
 import styles from './root.module.css'
 

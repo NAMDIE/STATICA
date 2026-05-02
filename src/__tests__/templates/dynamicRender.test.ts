@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 import { makeModule, makePage, makeRegistry, makeSite } from '../publisher/helpers'
-import { publishPage } from '../../core/publisher/render'
-import { resolveDynamicProps } from '../../core/templates/dynamicBindings'
+import { publishPage } from '@core/publisher/render'
+import { resolveDynamicProps } from '@core/templates/dynamicBindings'
 import { ContentModule } from '../../modules/base/content'
 
 const currentEntry = {

@@ -23,9 +23,9 @@
  */
 
 import { useRef, useEffect, useCallback, memo } from 'react'
-import { useEditorStore } from '../../../core/editor-store/store'
-import { stripAgentActionBlocks } from '../../../core/agent/actionBlocks'
-import type { AgentMessage, AgentToolCall } from '../../../core/agent/types'
+import { useEditorStore } from '@core/editor-store/store'
+import { stripAgentActionBlocks } from '@core/agent/actionBlocks'
+import type { AgentMessage, AgentToolCall } from '@core/agent/types'
 import { DeleteIcon } from '@ui/icons/icons/delete'
 import { SquareIcon } from '@ui/icons/icons/square'
 import { LoaderIcon } from '@ui/icons/icons/loader'

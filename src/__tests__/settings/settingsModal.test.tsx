@@ -34,7 +34,7 @@ import React from 'react'
 import { render, screen, cleanup, fireEvent, act, within } from '@testing-library/react'
 import { readFileSync } from 'fs'
 import { SettingsModal } from '../../editor/components/Settings/SettingsModal'
-import { useEditorStore } from '../../core/editor-store/store'
+import { useEditorStore } from '@core/editor-store/store'
 import { makeSite, makePage } from '../fixtures'
 
 // ---------------------------------------------------------------------------

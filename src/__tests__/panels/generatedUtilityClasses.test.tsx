@@ -4,8 +4,8 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { ClassPicker } from '../../editor/components/PropertiesPanel/ClassPicker'
 import { PropertiesPanel } from '../../editor/components/PropertiesPanel/PropertiesPanel'
 import { SelectorsPanel } from '../../editor/components/SelectorsPanel'
-import { useEditorStore } from '../../core/editor-store/store'
-import type { CSSClass } from '../../core/page-tree/types'
+import { useEditorStore } from '@core/editor-store/store'
+import type { CSSClass } from '@core/page-tree/types'
 import { makeNode, makePage, makeSite } from '../fixtures'
 import '../../modules/base/index'
 

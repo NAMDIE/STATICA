@@ -6,8 +6,8 @@
  * settings; visual typography belongs to class styles.
  */
 import React from 'react'
-import { type ModuleDefinition, type ModuleComponentProps } from '../../../core/module-engine/types'
-import { registry } from '../../../core/module-engine/registry'
+import { type ModuleDefinition, type ModuleComponentProps } from '@core/module-engine/types'
+import { registry } from '@core/module-engine/registry'
 import styles from './text.module.css'
 import { cn } from '../../../ui/cn'
 

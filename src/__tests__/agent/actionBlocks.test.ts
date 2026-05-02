@@ -4,7 +4,7 @@ import {
   createAgentResponseStreamParser,
   parseAgentActionBlocks,
   stripAgentActionBlocks,
-} from '../../core/agent/actionBlocks'
+} from '@core/agent/actionBlocks'
 
 describe('agent action block parsing', () => {
   it('removes pb:actions markup from visible assistant text while preserving actions', () => {

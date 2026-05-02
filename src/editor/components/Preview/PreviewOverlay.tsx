@@ -17,9 +17,9 @@
  */
 
 import { useEffect, useRef, useCallback } from 'react'
-import { useEditorStore, selectActivePage } from '../../../core/editor-store/store'
-import { publishPage } from '../../../core/publisher/render'
-import { registry } from '../../../core/module-engine/registry'
+import { useEditorStore, selectActivePage } from '@core/editor-store/store'
+import { publishPage } from '@core/publisher/render'
+import { registry } from '@core/module-engine/registry'
 import { useTemplatePreviewContext } from '../../hooks/useTemplatePreviewContext'
 import { EyeIcon } from '@ui/icons/icons/eye'
 import { CloseIcon } from '@ui/icons/icons/close'

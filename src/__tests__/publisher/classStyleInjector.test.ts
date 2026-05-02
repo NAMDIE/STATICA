@@ -13,8 +13,8 @@
  */
 
 import { describe, it, expect } from 'bun:test'
-import { bagToCSS, generateClassCSS } from '../../core/publisher/classCss'
-import type { CSSClass } from '../../core/page-tree/types'
+import { bagToCSS, generateClassCSS } from '@core/publisher/classCss'
+import type { CSSClass } from '@core/page-tree/types'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -244,8 +244,8 @@ describe('generateClassCSS', () => {
 // collectClassCSS — publisher integration (tree-shaking)
 // ---------------------------------------------------------------------------
 
-import { collectClassCSS } from '../../core/publisher/cssCollector'
-import type { SiteDocument, Page, PageNode } from '../../core/page-tree/types'
+import { collectClassCSS } from '@core/publisher/cssCollector'
+import type { SiteDocument, Page, PageNode } from '@core/page-tree/types'
 
 function makeSite(
   classes: SiteDocument['classes'],

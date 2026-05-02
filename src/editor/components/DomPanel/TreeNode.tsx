@@ -22,8 +22,8 @@
  */
 import { memo, useCallback, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useEditorStore, selectActivePage } from '../../../core/editor-store/store'
-import { registry } from '../../../core/module-engine/registry'
+import { useEditorStore, selectActivePage } from '@core/editor-store/store'
+import { registry } from '@core/module-engine/registry'
 import { useDraggable } from '@dnd-kit/core'
 import { useDomTree } from './DomTreeContext'
 import { useDomPanelDndContext } from './DomPanelDndContext'
@@ -335,7 +335,7 @@ export const TreeNode = memo(function TreeNode({ nodeId, depth }: TreeNodeProps)
 
 // ─── ChildrenGroup — recursive child rendering ───────────────────────────────
 
-import { useEditorStore as useStore } from '../../../core/editor-store/store'
+import { useEditorStore as useStore } from '@core/editor-store/store'
 
 function ChildrenGroup({ nodeId, depth }: { nodeId: string; depth: number }) {
   const children = useStore(

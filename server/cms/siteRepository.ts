@@ -1,8 +1,8 @@
-import type { SiteDocument, Page } from '../../src/core/page-tree/types'
+import type { SiteDocument, Page } from '@core/page-tree/types'
 import {
   DEFAULT_BREAKPOINTS,
   DEFAULT_SITE_SETTINGS,
-} from '../../src/core/page-tree/types'
+} from '@core/page-tree/types'
 import type { DbClient } from './db'
 import type { SiteRow } from './types'
 

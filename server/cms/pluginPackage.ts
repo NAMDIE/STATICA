@@ -1,8 +1,8 @@
 import { strFromU8, unzipSync } from 'fflate'
 import {
   parsePluginManifest,
-} from '../../src/core/extensions/manifest'
-import type { PluginManifest } from '../../src/core/plugin-sdk'
+} from '@core/extensions/manifest'
+import type { PluginManifest } from '@core/plugin-sdk'
 
 const SAFE_PACKAGE_PATH = /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[a-zA-Z0-9._/-]+$/
 

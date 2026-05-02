@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'bun:test'
-import type { SiteFile } from '../../core/files/types'
-import type { Page } from '../../core/page-tree/types'
+import type { SiteFile } from '@core/files/types'
+import type { Page } from '@core/page-tree/types'
 import {
   DEFAULT_SCRIPT_RUNTIME_CONFIG,
   collectRuntimeScripts,
   normalizeSiteRuntimeConfig,
   scriptAppliesToPage,
-} from '../../core/site-runtime'
+} from '@core/site-runtime'
 
 function scriptFile(id: string, path: string): SiteFile {
   return {

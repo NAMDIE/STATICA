@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect } from 'bun:test'
-import { publishPage, renderNode, type RenderContext } from '../../core/publisher/render'
+import { publishPage, renderNode, type RenderContext } from '@core/publisher/render'
 import { makePage, makeSite, makeModule, makeRegistry } from './helpers'
 
 // Import REAL base modules — they self-register on import
@@ -23,7 +23,7 @@ import { LinkModule } from '../../modules/base/link'
 import { ImageModule } from '../../modules/base/image'
 import { ContainerModule } from '../../modules/base/container'
 import { ListModule } from '../../modules/base/list'
-import { registry } from '../../core/module-engine/registry'
+import { registry } from '@core/module-engine/registry'
 
 // Confirm real modules are registered
 const REAL_REGISTRY = registry

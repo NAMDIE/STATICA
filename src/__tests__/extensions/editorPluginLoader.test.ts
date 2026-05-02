@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test'
-import { activateInstalledEditorPlugins } from '../../core/extensions/editorPluginLoader'
-import { pluginRuntime } from '../../core/extensions/runtime'
-import type { CmsPluginsPayload, PluginManifest } from '../../core/plugin-sdk'
+import { activateInstalledEditorPlugins } from '@core/extensions/editorPluginLoader'
+import { pluginRuntime } from '@core/extensions/runtime'
+import type { CmsPluginsPayload, PluginManifest } from '@core/plugin-sdk'
 
 const workflowManifest: PluginManifest = {
   id: 'acme.workflow',

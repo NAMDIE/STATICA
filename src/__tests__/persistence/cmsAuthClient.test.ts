@@ -5,7 +5,7 @@ import {
   logoutCms,
   probeCmsSession,
   setupCms,
-} from '../../core/persistence/cmsAuth'
+} from '@core/persistence/cmsAuth'
 
 describe('CMS auth client', () => {
   it('loads setup status from the CMS API', async () => {

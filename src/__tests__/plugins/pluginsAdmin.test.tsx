@@ -3,7 +3,7 @@ import React from 'react'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { PluginsPage } from '../../admin/plugins/PluginsPage'
-import { useEditorStore } from '../../core/editor-store/store'
+import { useEditorStore } from '@core/editor-store/store'
 import { makeSite } from '../fixtures'
 
 const originalFetch = globalThis.fetch

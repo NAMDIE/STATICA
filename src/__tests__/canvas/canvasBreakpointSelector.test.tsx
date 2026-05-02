@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach } from 'bun:test'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { readFileSync } from 'fs'
 import { CanvasRoot } from '../../editor/components/Canvas/CanvasRoot'
-import { useEditorStore } from '../../core/editor-store/store'
+import { useEditorStore } from '@core/editor-store/store'
 import { makeNode, makePage, makeSite } from '../fixtures'
 import '../../modules/base'
 

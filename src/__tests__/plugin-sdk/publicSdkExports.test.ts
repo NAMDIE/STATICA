@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs'
 import { readdir, readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { join, relative } from 'node:path'
-import * as sdk from '../../core/plugin-sdk'
+import * as sdk from '@core/plugin-sdk'
 
 const repoRoot = fileURLToPath(new URL('../../..', import.meta.url))
 const scannedRoots = ['src', 'server', 'docs']

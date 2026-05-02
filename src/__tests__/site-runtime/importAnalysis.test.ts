@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'bun:test'
-import type { SiteFile } from '../../core/files/types'
+import type { SiteFile } from '@core/files/types'
 import {
   analyzeRuntimeScriptImports,
   extractRuntimeImportSpecifiers,
   packageNameFromImportSpecifier,
-} from '../../core/site-runtime'
+} from '@core/site-runtime'
 
 function scriptFile(id: string, path: string, content: string): SiteFile {
   return {

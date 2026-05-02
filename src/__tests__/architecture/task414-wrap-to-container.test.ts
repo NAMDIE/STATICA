@@ -16,9 +16,9 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
-import { useEditorStore } from '../../core/editor-store/store'
-import { registry } from '../../core/module-engine/registry'
-import type { AnyModuleDefinition } from '../../core/module-engine/types'
+import { useEditorStore } from '@core/editor-store/store'
+import { registry } from '@core/module-engine/registry'
+import type { AnyModuleDefinition } from '@core/module-engine/types'
 
 // ---------------------------------------------------------------------------
 // Test helpers

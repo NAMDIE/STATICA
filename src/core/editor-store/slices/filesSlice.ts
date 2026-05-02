@@ -20,8 +20,8 @@ import { produce } from 'immer'
 import { nanoid } from 'nanoid'
 import type { StateCreator } from 'zustand'
 import type { EditorStore } from '../store'
-import type { SiteFile, SiteFileType } from '../../files/types'
-import { isSafePath, normalizePath } from '../../files/pathValidation'
+import type { SiteFile, SiteFileType } from '@core/files/types'
+import { isSafePath, normalizePath } from '@core/files/pathValidation'
 
 // ---------------------------------------------------------------------------
 // Slice interface

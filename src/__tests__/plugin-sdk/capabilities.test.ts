@@ -5,7 +5,7 @@ import {
   permissionDescription,
   permissionLabel,
   permissionsForSurface,
-} from '../../core/plugin-sdk'
+} from '@core/plugin-sdk'
 
 describe('plugin capability registry', () => {
   it('contains author-facing metadata for every permission', () => {

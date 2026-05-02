@@ -20,9 +20,9 @@ import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import { PropertyControlRenderer } from '../../editor/components/PropertyControls/PropertyControlRenderer'
-import type { PropertyControl } from '../../core/module-engine/types'
-import type { CmsMediaAsset } from '../../core/persistence/cmsMedia'
-import { useEditorStore } from '../../core/editor-store/store'
+import type { PropertyControl } from '@core/module-engine/types'
+import type { CmsMediaAsset } from '@core/persistence/cmsMedia'
+import { useEditorStore } from '@core/editor-store/store'
 
 afterEach(() => {
   cleanup()

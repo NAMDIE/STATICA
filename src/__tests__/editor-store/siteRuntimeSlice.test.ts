@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test'
-import { useEditorStore } from '../../core/editor-store/store'
-import { DEFAULT_SCRIPT_RUNTIME_CONFIG, normalizeSiteRuntimeConfig } from '../../core/site-runtime'
+import { useEditorStore } from '@core/editor-store/store'
+import { DEFAULT_SCRIPT_RUNTIME_CONFIG, normalizeSiteRuntimeConfig } from '@core/site-runtime'
 import { makeSite } from '../fixtures'
 
 function resetStore() {

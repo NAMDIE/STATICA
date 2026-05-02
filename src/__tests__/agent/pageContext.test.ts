@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
-import { useEditorStore } from '../../core/editor-store/store'
-import { buildPageContext } from '../../core/agent/agentSlice'
-import { registry } from '../../core/module-engine/registry'
-import type { AnyModuleDefinition } from '../../core/module-engine/types'
+import { useEditorStore } from '@core/editor-store/store'
+import { buildPageContext } from '@core/agent/agentSlice'
+import { registry } from '@core/module-engine/registry'
+import type { AnyModuleDefinition } from '@core/module-engine/types'
 import '../../modules/base'
 
 const DYNAMIC_MODULE_ID = 'custom.dynamicHero'

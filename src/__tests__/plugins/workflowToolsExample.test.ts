@@ -3,8 +3,8 @@ import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import {
   activateEditorPlugin,
   pluginRuntime,
-} from '../../core/extensions/runtime'
-import { useEditorStore } from '../../core/editor-store/store'
+} from '@core/extensions/runtime'
+import { useEditorStore } from '@core/editor-store/store'
 import type {
   EditorPluginModule,
   PluginAdminAppModule,
@@ -12,7 +12,7 @@ import type {
   PluginRecord,
   ServerPluginApi,
   ServerPluginModule,
-} from '../../core/plugin-sdk'
+} from '@core/plugin-sdk'
 import { makeSite } from '../fixtures'
 
 const workflowManifest: PluginManifest = {

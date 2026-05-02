@@ -2,8 +2,8 @@ import { produce } from 'immer'
 import { nanoid } from 'nanoid'
 import type { StateCreator } from 'zustand'
 import type { EditorStore } from '../store'
-import { renderCache } from '../../engine/renderCache'
-import { registry } from '../../module-engine/registry'
+import { renderCache } from '@core/engine/renderCache'
+import { registry } from '@core/module-engine/registry'
 import {
   type SiteDocument,
   type Page,
@@ -33,20 +33,20 @@ import {
   moveNode,
   duplicateNode,
   wrapNode,
-} from '../../page-tree'
+} from '@core/page-tree'
 import {
   clonePackageJson,
   DEFAULT_SITE_PACKAGE_JSON,
-} from '../../site-dependencies/manifest'
+} from '@core/site-dependencies/manifest'
 import {
   cloneSiteRuntimeConfig,
   DEFAULT_SITE_RUNTIME,
-} from '../../site-runtime'
+} from '@core/site-runtime'
 import {
   generateDefaultDarkColor,
   generateFrameworkColorUtilityClasses,
   normalizeFrameworkColorSlug,
-} from '../../framework/colors'
+} from '@core/framework/colors'
 
 /** Maximum undo history depth — prevents unbounded memory growth */
 const MAX_HISTORY = 50

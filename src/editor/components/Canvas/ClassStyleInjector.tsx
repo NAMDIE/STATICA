@@ -23,7 +23,7 @@
  */
 
 import { useEffect } from 'react'
-import { useEditorStore } from '../../../core/editor-store/store'
+import { useEditorStore } from '@core/editor-store/store'
 import { generateCanvasClassCSS } from './canvasClassCss'
 
 // ---------------------------------------------------------------------------

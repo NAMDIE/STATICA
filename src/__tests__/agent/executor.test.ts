@@ -11,8 +11,8 @@
  */
 
 import { describe, it, expect, beforeEach } from 'bun:test'
-import { useEditorStore } from '../../core/editor-store/store'
-import { executeAgentAction, executeAgentActions } from '../../core/agent/executor'
+import { useEditorStore } from '@core/editor-store/store'
+import { executeAgentAction, executeAgentActions } from '@core/agent/executor'
 import '../../modules/base'
 
 // ---------------------------------------------------------------------------

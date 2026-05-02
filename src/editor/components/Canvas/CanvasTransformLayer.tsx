@@ -10,8 +10,8 @@
  */
 
 import { forwardRef } from 'react'
-import type { Page, Breakpoint } from '../../../core/page-tree/types'
-import type { TemplateRenderDataContext } from '../../../core/templates/dynamicBindings'
+import type { Page, Breakpoint } from '@core/page-tree/types'
+import type { TemplateRenderDataContext } from '@core/templates/dynamicBindings'
 import { BreakpointFrame } from './BreakpointFrame'
 import { cn } from '@ui/cn'
 import styles from './CanvasTransformLayer.module.css'

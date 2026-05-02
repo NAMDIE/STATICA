@@ -1,4 +1,4 @@
-import type { CmsRuntimePreviewAsset, CmsRuntimePreviewResult } from '../../../core/persistence/cmsRuntime'
+import type { CmsRuntimePreviewAsset, CmsRuntimePreviewResult } from '@core/persistence/cmsRuntime'
 
 export interface MaterializedRuntimePreviewDocument {
   html: string

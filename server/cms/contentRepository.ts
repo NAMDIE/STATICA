@@ -1,8 +1,8 @@
 import { nanoid } from 'nanoid'
 import type { DbClient } from './db'
-import { normalizeRouteBase } from '../../src/core/templates/templateMatching'
-import { normalizeContentCollectionFields } from '../../src/core/content/fields'
-import type { ContentCollectionFieldSchema } from '../../src/core/content/types'
+import { normalizeRouteBase } from '@core/templates/templateMatching'
+import { normalizeContentCollectionFields } from '@core/content/fields'
+import type { ContentCollectionFieldSchema } from '@core/content/types'
 
 type ContentEntryStatus = 'draft' | 'published' | 'unpublished'
 

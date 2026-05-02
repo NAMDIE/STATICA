@@ -11,10 +11,10 @@
  */
 
 import { nanoid } from 'nanoid'
-import type { Page, PageNode, SiteDocument } from '../../core/page-tree/types'
-import { DEFAULT_BREAKPOINTS, DEFAULT_SITE_SETTINGS } from '../../core/page-tree/types'
-import type { AnyModuleDefinition } from '../../core/module-engine/types'
-import { isSafeUrl } from '../../core/publisher/utils'
+import type { Page, PageNode, SiteDocument } from '@core/page-tree/types'
+import { DEFAULT_BREAKPOINTS, DEFAULT_SITE_SETTINGS } from '@core/page-tree/types'
+import type { AnyModuleDefinition } from '@core/module-engine/types'
+import { isSafeUrl } from '@core/publisher/utils'
 
 // ---------------------------------------------------------------------------
 // ModuleDefinition factories

@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs'
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { SiteDependencyLock } from '../../../src/core/site-runtime'
+import type { SiteDependencyLock } from '@core/site-runtime'
 
 export interface RuntimeDependencyCache {
   hash: string

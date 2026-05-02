@@ -5,7 +5,7 @@
  * `site.breakpoints` from the store.
  */
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { useEditorStore } from '../../../../core/editor-store/store'
+import { useEditorStore } from '@core/editor-store/store'
 import { SmartphoneIcon } from '@ui/icons/icons/smartphone'
 import { TabletIcon } from '@ui/icons/icons/tablet'
 import { MonitorIcon } from '@ui/icons/icons/monitor'
@@ -15,7 +15,7 @@ import { PlusIcon } from '@ui/icons/icons/plus'
 import { Button } from '@ui/components/Button'
 import { Input } from '@ui/components/Input'
 import { Select } from '@ui/components/Select'
-import type { Breakpoint } from '../../../../core/page-tree/types'
+import type { Breakpoint } from '@core/page-tree/types'
 import s from '../Settings.module.css'
 
 const ICON_OPTIONS = [
