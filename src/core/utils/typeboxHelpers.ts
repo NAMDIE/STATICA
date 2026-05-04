@@ -1,0 +1,171 @@
+/**
+ * TypeBox helpers — the layer that maps Zod's chained ergonomics
+ * (`.catch()`, `.transform()`, `.refine()`) onto TypeBox's data-first
+ * schema model.
+ *
+ * Why these exist
+ * ---------------
+ * TypeBox schemas are JSON Schema documents — pure data, no methods. That
+ * makes them fast and serializable, but it means there is no native
+ * `.catch(default)` for soft-fallback parsing of corrupted persisted data,
+ * no `.transform()` for in-line shape massaging, and no `.refine()` for
+ * cross-field invariants. We add those concerns as *helpers* that wrap
+ * TypeBox's `Value.Check` / `Value.Parse` APIs.
+ *
+ * Public API
+ * ----------
+ * - `withFallback(schema, fallback)` — annotate a schema with a default value
+ *   used when validation fails. Equivalent to Zod's `.catch()`.
+ * - `parseValue(schema, value)` — strict parse; throws on invalid input.
+ * - `parseValueOrFallback(schema, value, fallback)` — soft parse; returns
+ *   fallback on invalid input.
+ * - `safeParseValue(schema, value)` — discriminated-union result type.
+ * - `parseWithFallbackAnnotation(schema, value)` — soft parse using the
+ *   fallback annotation attached by `withFallback`.
+ * - `Static<T>` — re-exported from TypeBox for type inference (mirror of
+ *   `z.infer<T>`).
+ */
+
+import { Type } from '@sinclair/typebox'
+import type { TSchema, Static as TBStatic } from '@sinclair/typebox'
+import { Value } from '@sinclair/typebox/value'
+
+export { Type, Value }
+export type Static<T extends TSchema> = TBStatic<T>
+
+// Sentinel used to attach a fallback to any schema. Picked up by
+// `parseWithFallbackAnnotation`. We use a Symbol so it never clashes with
+// JSON Schema's own keywords.
+const FALLBACK = Symbol('typebox-fallback')
+
+interface SchemaWithFallback<T extends TSchema> {
+  [FALLBACK]?: TBStatic<T>
+}
+
+export type SchemaResult<T extends TSchema> =
+  | { ok: true; value: TBStatic<T> }
+  | { ok: false; errors: ReadonlyArray<{ path: string; message: string }> }
+
+/**
+ * Attach a fallback value to a schema. The schema itself is unchanged for
+ * validation purposes; the fallback is consulted only by helpers that
+ * explicitly read the annotation.
+ *
+ * Equivalent semantics to Zod's `Schema.catch(value)`.
+ */
+export function withFallback<T extends TSchema>(schema: T, fallback: TBStatic<T>): T {
+  const annotated = schema as T & SchemaWithFallback<T>
+  annotated[FALLBACK] = fallback
+  return annotated
+}
+
+/**
+ * Read the fallback attached by `withFallback`, if any.
+ */
+function getFallback<T extends TSchema>(schema: T): TBStatic<T> | undefined {
+  return (schema as T & SchemaWithFallback<T>)[FALLBACK]
+}
+
+/**
+ * Strict parse. Throws if the value does not match the schema. Use at HTTP
+ * boundaries where invalid input is genuinely an error.
+ *
+ * Returns a value that has been *coerced* through the schema (defaults
+ * applied, transforms run if any). For pure validation without coercion use
+ * `Value.Check` directly.
+ */
+export function parseValue<T extends TSchema>(schema: T, value: unknown): TBStatic<T> {
+  // Value.Parse runs Default + Convert + Clean + Decode + Check. That's the
+  // closest match to Zod's `.parse()` semantics — it both validates and
+  // produces the canonical output shape.
+  return Value.Parse(schema, value) as TBStatic<T>
+}
+
+/**
+ * Soft parse. Returns the fallback if the value does not match the schema.
+ * Use for best-effort reads of persisted data where corruption should not
+ * brick the UI (localStorage, JSONB columns).
+ */
+export function parseValueOrFallback<T extends TSchema>(
+  schema: T,
+  value: unknown,
+  fallback: TBStatic<T>,
+): TBStatic<T> {
+  if (Value.Check(schema, value)) {
+    return Value.Decode(schema, value) as TBStatic<T>
+  }
+  return fallback
+}
+
+/**
+ * Soft parse using the fallback annotation attached by `withFallback`.
+ * Returns the annotated fallback (or `undefined` if none was attached).
+ */
+export function parseWithFallbackAnnotation<T extends TSchema>(
+  schema: T,
+  value: unknown,
+): TBStatic<T> | undefined {
+  if (Value.Check(schema, value)) {
+    return Value.Decode(schema, value) as TBStatic<T>
+  }
+  return getFallback(schema)
+}
+
+/**
+ * Discriminated-union result, equivalent to Zod's `safeParse()` shape.
+ */
+export function safeParseValue<T extends TSchema>(
+  schema: T,
+  value: unknown,
+): SchemaResult<T> {
+  if (!Value.Check(schema, value)) {
+    const errors: { path: string; message: string }[] = []
+    for (const err of Value.Errors(schema, value)) {
+      errors.push({ path: err.path, message: err.message })
+    }
+    return { ok: false, errors }
+  }
+  return { ok: true, value: Value.Decode(schema, value) as TBStatic<T> }
+}
+
+/**
+ * Filter an array of `unknown` values, keeping only those that match the
+ * given schema. Mirrors the previous Zod pattern:
+ *
+ *     z.array(z.unknown()).transform((items) =>
+ *       items.flatMap((item) => {
+ *         const r = ItemSchema.safeParse(item)
+ *         return r.success ? [r.data] : []
+ *       }),
+ *     )
+ *
+ * Used for tolerant parsing of stored arrays (font files, page-tree items)
+ * where one bad entry should not invalidate the whole site document.
+ */
+export function filterArray<T extends TSchema>(
+  itemSchema: T,
+  values: unknown,
+): TBStatic<T>[] {
+  if (!Array.isArray(values)) return []
+  const out: TBStatic<T>[] = []
+  for (const item of values) {
+    if (Value.Check(itemSchema, item)) {
+      out.push(Value.Decode(itemSchema, item) as TBStatic<T>)
+    }
+  }
+  return out
+}
+
+/**
+ * Format Value.Errors into a single human-readable message. Used by
+ * `parseValue` and at HTTP boundaries to produce useful error responses.
+ */
+export function formatValueErrors(schema: TSchema, value: unknown): string {
+  const issues: string[] = []
+  for (const err of Value.Errors(schema, value)) {
+    issues.push(`${err.path || '<root>'}: ${err.message}`)
+    if (issues.length >= 5) break
+  }
+  return issues.join('; ') || 'Validation failed'
+}
+

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "../lib/router";
 import { Button } from "@ui/components/Button";
 import { PowerIcon } from "pixel-art-icons/icons/power";
 import { PowerOffIcon } from "pixel-art-icons/icons/power-off";

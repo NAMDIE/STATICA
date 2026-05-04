@@ -1,20 +1,21 @@
 /**
  * Architecture Source-Scan — Constraint #275
  *
- * No file in `src/editor/` or `src/core/` may import from `react-router-dom`.
+ * No file in `src/editor/` or `src/core/` may import from a router — neither
+ * `react-router-dom` (legacy) nor the in-house `src/admin/lib/router`.
  *
  * WHY THIS MATTERS
  * ----------------
  * The editor is being prepared for Phase F (embeddable npm package).
  * When `<PageBuilder />` is embedded in a host React app, the host app owns the
- * router. The editor MUST NOT import or depend on react-router-dom internally —
- * it would conflict with the host app's router and break nested routing.
+ * router. The editor MUST NOT import or depend on routing internally — it would
+ * conflict with the host app's router and break nested routing.
  *
  * In the current standalone app, routing lives in `src/admin/` (the shell).
  * The editor itself (`src/editor/`) and core logic (`src/core/`) must be
  * completely router-agnostic.
  *
- * @see Constraint #275 — Editor components must not import React Router
+ * @see Constraint #275 — Editor components must not import a router
  * @see Task #274 — Phase F: Embeddable Editor npm Package
  * @see Contribution #386 — Phase F architecture spec
  */
@@ -48,10 +49,13 @@ function collectFiles(dir: string, exts = ['.ts', '.tsx']): string[] {
 // Constraint #275 — no react-router-dom in editor/ or core/
 // ---------------------------------------------------------------------------
 
-describe('Constraint #275 — react-router-dom must not be imported in editor/ or core/', () => {
-  const ROUTER_IMPORT_RE = /from\s+['"]react-router-dom['"]/
+describe('Constraint #275 — routers must not be imported in editor/, core/, or modules/', () => {
+  // Catches both the legacy `react-router-dom` import and any path-based or
+  // alias-based import of the in-house admin router (`src/admin/lib/router`,
+  // `@admin/lib/router`).
+  const ROUTER_IMPORT_RE = /from\s+['"](?:react-router-dom|(?:[./]+|@admin\/)admin\/lib\/router|[./]+lib\/router)['"]/
 
-  it('no file in src/editor/ imports from react-router-dom', () => {
+  it('no file in src/editor/ imports a router', () => {
     const editorFiles = collectFiles(join(SRC_ROOT, 'editor'))
     const violations = editorFiles.filter((f) =>
       ROUTER_IMPORT_RE.test(readFileSync(f, 'utf8'))
@@ -59,14 +63,14 @@ describe('Constraint #275 — react-router-dom must not be imported in editor/ o
     if (violations.length > 0) {
       const rel = violations.map((f) => f.replace(SRC_ROOT, 'src/'))
       throw new Error(
-        `[Constraint #275] react-router-dom found in editor/ — move routing to src/admin/:\n` +
+        `[Constraint #275] router import found in editor/ — move routing to src/admin/:\n` +
         rel.map((f) => `  ${f}`).join('\n')
       )
     }
     expect(violations).toHaveLength(0)
   })
 
-  it('no file in src/core/ imports from react-router-dom', () => {
+  it('no file in src/core/ imports a router', () => {
     const coreFiles = collectFiles(join(SRC_ROOT, 'core'))
     const violations = coreFiles.filter((f) =>
       ROUTER_IMPORT_RE.test(readFileSync(f, 'utf8'))
@@ -74,14 +78,14 @@ describe('Constraint #275 — react-router-dom must not be imported in editor/ o
     if (violations.length > 0) {
       const rel = violations.map((f) => f.replace(SRC_ROOT, 'src/'))
       throw new Error(
-        `[Constraint #275] react-router-dom found in core/ — routing must not leak into core logic:\n` +
+        `[Constraint #275] router import found in core/ — routing must not leak into core logic:\n` +
         rel.map((f) => `  ${f}`).join('\n')
       )
     }
     expect(violations).toHaveLength(0)
   })
 
-  it('no file in src/modules/ imports from react-router-dom', () => {
+  it('no file in src/modules/ imports a router', () => {
     const modulesFiles = collectFiles(join(SRC_ROOT, 'modules'))
     const violations = modulesFiles.filter((f) =>
       ROUTER_IMPORT_RE.test(readFileSync(f, 'utf8'))

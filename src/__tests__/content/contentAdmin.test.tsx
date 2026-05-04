@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import React from 'react'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from '../../admin/lib/router'
 import { ContentPage } from '../../admin/content/ContentPage'
 import { useEditorStore } from '@core/editor-store/store'
 import { makeSite } from '../fixtures'
@@ -373,7 +373,10 @@ describe('ContentPage', () => {
     expect(await screen.findByRole('region', { name: 'Posts' })).toBeDefined()
     expect(screen.getByTestId('content-entries-loading')).toBeDefined()
     expect(screen.getByTestId('content-canvas-loading')).toBeDefined()
-    expect(screen.getByTestId('content-settings-loading')).toBeDefined()
+    // Settings panel is entry-specific — it stays hidden until an entry is selected,
+    // so no settings skeleton is shown during the initial entries load.
+    expect(screen.queryByTestId('content-settings-panel')).toBeNull()
+    expect(screen.queryByTestId('content-settings-loading')).toBeNull()
     expect(screen.queryByText('No entries yet.')).toBeNull()
     expect(screen.queryByText(/Create the first post/i)).toBeNull()
 
@@ -395,9 +398,32 @@ describe('ContentPage', () => {
     expect(screen.getByTestId('right-sidebar')).toBeDefined()
     expect(screen.getByTestId('content-explorer-panel')).toBeDefined()
     expect(screen.getByTestId('content-canvas-root')).toBeDefined()
-    expect(screen.getByTestId('content-settings-panel')).toBeDefined()
+    // Settings panel is entry-specific — when no entry is selected, the panel is hidden.
+    expect(screen.queryByTestId('content-settings-panel')).toBeNull()
     expect(screen.getByTestId('canvas-notch')).toBeDefined()
     expect(screen.getByText('Content Shell Site')).toBeDefined()
+  })
+
+  it('hides the right settings panel until an entry is selected, then shows it', async () => {
+    render(
+      <MemoryRouter>
+        <ContentPage />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('region', { name: 'Posts' })).toBeDefined()
+    await screen.findByText('No entries yet.')
+
+    // No entry selected → settings panel must not be in the DOM.
+    expect(screen.queryByTestId('content-settings-panel')).toBeNull()
+
+    fireEvent.click(
+      within(screen.getByRole('region', { name: 'Posts' }))
+        .getByRole('button', { name: /new post/i }),
+    )
+
+    // After creating (and auto-selecting) an entry, the settings panel appears.
+    expect(await screen.findByTestId('content-settings-panel')).toBeDefined()
   })
 
   it('uses content-specific rail panels instead of editor-only panels', async () => {

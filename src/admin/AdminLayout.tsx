@@ -50,7 +50,7 @@ import { AppLoadingScreen } from './AppLoadingScreen'
 import styles from './AdminLayout.module.css'
 import { useCallback, useEffect, useState, type MouseEvent, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
-import { Link, useInRouterContext, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useInRouterContext, useLocation, useNavigate } from './lib/router'
 import toolbarStyles from '@editor/components/Toolbar/Toolbar.module.css'
 import type { AdminWorkspace } from './workspace'
 

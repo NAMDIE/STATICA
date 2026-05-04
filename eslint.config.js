@@ -5,6 +5,10 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
+// React Compiler ESLint rule is NOT enabled — see vite.config.ts for why
+// the compiler itself was rolled back. The eslint plugin is meaningless
+// without the compiler running.
+
 export default defineConfig([
   globalIgnores(['dist', '.worktrees']),
   {

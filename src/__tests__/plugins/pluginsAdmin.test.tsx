@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import React from 'react'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter } from '../../admin/lib/router'
 import { PluginsPage } from '../../admin/plugins/PluginsPage'
 import { useEditorStore } from '@core/editor-store/store'
 import { makeSite } from '../fixtures'

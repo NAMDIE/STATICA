@@ -1,7 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { RouterProvider } from 'react-router-dom'
-import { router } from './router'
+import { Router } from './lib/router'
+import { AdminRoutes } from './router'
 import '../styles/globals.css'
 
 // Base module registration is deferred to AdminEntry (the lazy admin chunk)
@@ -13,6 +13,8 @@ if (!rootElement) throw new Error('Root element #root not found')
 
 createRoot(rootElement).render(
   <StrictMode>
-    <RouterProvider router={router} />
+    <Router>
+      <AdminRoutes />
+    </Router>
   </StrictMode>
 )

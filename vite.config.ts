@@ -240,16 +240,32 @@ function vendorChunkName(moduleId: string): string | null {
   if (moduleId.includes('node_modules/react-dom') || /node_modules\/react(\/|\\)/.test(moduleId)) {
     return 'react-vendor'
   }
-  if (moduleId.includes('node_modules/react-router')) return 'router-vendor'
   if (moduleId.includes('node_modules/@dnd-kit') || moduleId.includes('node_modules/@use-gesture')) {
     return 'dnd-vendor'
   }
-  if (moduleId.includes('node_modules/zod')) return 'validation-vendor'
+  if (moduleId.includes('node_modules/@sinclair/typebox')) return 'validation-vendor'
   if (moduleId.includes('node_modules/dompurify') || moduleId.includes('node_modules/immer')) {
     return 'state-vendor'
   }
   return null
 }
+
+// React Compiler is intentionally NOT enabled for now.
+//
+// We trialled it in this session and hit two issues with this codebase:
+//  1) `compilationMode: 'all'` compiled the router's utility functions and
+//     inserted `useMemoCache` hook calls into non-component code, breaking
+//     Rules-of-Hooks at module-level helpers passed to `useSyncExternalStore`.
+//  2) Even with `compilationMode: 'infer'`, the compiler's memo cache
+//     occasionally retained references to immer draft sub-objects across
+//     renders. After the next `produce()` call revoked those proxies,
+//     selectors like `selectLayoutState` (useEditorLayoutPersistence) and
+//     `selectRightSidebarExpanded` (store.ts) hit
+//     `Cannot perform 'get' on a proxy that has been revoked`.
+//
+// The codebase is heavy on Zustand+Immer drafts, so the second issue is the
+// blocker. Re-evaluate once the React Compiler has a documented strategy
+// for handling immer drafts (or once we move state away from immer drafts).
 
 // https://vite.dev/config/
 export default defineConfig({
