@@ -271,11 +271,20 @@ export interface AgentToolCall {
   status: 'pending' | 'success' | 'error'
 }
 
+/**
+ * Chronological message blocks. Claude's response naturally interleaves text
+ * and tool calls — the UI renders them in arrival order so a "text → tool →
+ * text" sequence is visually three blocks, not "all text grouped above all
+ * tools" (which mis-orders late text in front of earlier tool calls).
+ */
+export type AgentMessageBlock =
+  | { kind: 'text'; text: string }
+  | { kind: 'toolCall'; toolCall: AgentToolCall }
+
 export interface AgentMessage {
   id: string
   role: 'user' | 'assistant'
-  content: string
-  toolCalls: AgentToolCall[]
+  blocks: AgentMessageBlock[]
   timestamp: number
 }
 

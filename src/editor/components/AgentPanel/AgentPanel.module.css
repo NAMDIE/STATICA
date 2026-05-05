@@ -150,6 +150,112 @@
   background: rgba(255, 255, 255, 0.04);
 }
 
+/* ── Markdown bubble typography ─────────────────────────────────────────────
+ * Applied alongside .contentBubble when the text is parsed as markdown.
+ * Resets `white-space: pre-wrap` (marked emits proper block elements with
+ * their own whitespace handling — we only want pre-wrap inside <pre>) and
+ * adds the typography rules for the small subset of HTML we accept. */
+.markdownBubble {
+  white-space: normal;
+}
+
+.markdownBubble > :first-child {
+  margin-top: 0;
+}
+
+.markdownBubble > :last-child {
+  margin-bottom: 0;
+}
+
+.markdownBubble p {
+  margin: 0 0 8px;
+}
+
+.markdownBubble h1,
+.markdownBubble h2,
+.markdownBubble h3,
+.markdownBubble h4,
+.markdownBubble h5,
+.markdownBubble h6 {
+  margin: 12px 0 6px;
+  color: var(--editor-text-bright);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.markdownBubble h1 { font-size: 16px; }
+.markdownBubble h2 { font-size: 15px; }
+.markdownBubble h3 { font-size: 14px; }
+.markdownBubble h4,
+.markdownBubble h5,
+.markdownBubble h6 { font-size: 13px; }
+
+.markdownBubble strong,
+.markdownBubble b {
+  font-weight: 600;
+  color: var(--editor-text-bright);
+}
+
+.markdownBubble em,
+.markdownBubble i {
+  font-style: italic;
+}
+
+.markdownBubble ul,
+.markdownBubble ol {
+  margin: 0 0 8px;
+  padding-left: 18px;
+}
+
+.markdownBubble li {
+  margin-bottom: 2px;
+}
+
+.markdownBubble li > p {
+  margin: 0;
+}
+
+.markdownBubble a {
+  color: var(--editor-text-bright);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdownBubble a:hover {
+  color: var(--editor-accent);
+}
+
+.markdownBubble code {
+  padding: 1px 5px;
+  border-radius: var(--editor-radius-sm);
+  background: var(--editor-surface-3);
+  color: var(--editor-text-bright);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+}
+
+.markdownBubble pre {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: var(--editor-radius-sm);
+  background: var(--editor-surface-2);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.markdownBubble pre code {
+  padding: 0;
+  background: transparent;
+  font-size: 11px;
+}
+
+.markdownBubble blockquote {
+  margin: 0 0 8px;
+  padding: 2px 0 2px 10px;
+  border-left: 2px solid var(--panel-border);
+  color: var(--editor-text-secondary);
+}
+
 .toolCallsContainer {
   display: flex;
   flex-direction: column;

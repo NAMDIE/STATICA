@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'bun:test'
 import { useEditorStore } from '@core/editor-store/store'
-import { processStreamEvent, type AgentBridgeRuntime } from '@core/agent/agentSlice'
-import type { AgentMessage } from '@core/agent/types'
+import {
+  processStreamEvent,
+  type AgentBridgeRuntime,
+  type AgentTextStreamSink,
+} from '@core/agent/agentSlice'
+import type { AgentMessage, AgentToolCall } from '@core/agent/types'
 import '../../modules/base'
 
 // ---------------------------------------------------------------------------
@@ -33,8 +37,7 @@ function freshAgentState() {
   const assistantMessage: AgentMessage = {
     id: assistantId,
     role: 'assistant',
-    content: '',
-    toolCalls: [],
+    blocks: [],
     timestamp: Date.now(),
   }
   useEditorStore.setState({ agentMessages: [assistantMessage] })
@@ -43,6 +46,17 @@ function freshAgentState() {
 
 function emptyBridge(): AgentBridgeRuntime {
   return { bridgeId: null }
+}
+
+const noopTextSink: AgentTextStreamSink = {
+  append: () => {},
+  flush: () => {},
+}
+
+function getToolCallBlocks(message: AgentMessage): AgentToolCall[] {
+  return message.blocks
+    .filter((block): block is { kind: 'toolCall'; toolCall: AgentToolCall } => block.kind === 'toolCall')
+    .map((block) => block.toolCall)
 }
 
 interface InterceptedFetch {
@@ -94,7 +108,7 @@ describe('processStreamEvent — bridge handshake', () => {
     await processStreamEvent(
       { type: 'bridgeReady', bridgeId: 'bridge-xyz' },
       assistantId,
-      () => {},
+      noopTextSink,
       useEditorStore.setState,
       useEditorStore.getState,
       bridge,
@@ -204,7 +218,7 @@ describe('processStreamEvent — toolStatus badges', () => {
         input: {},
       },
       assistantId,
-      () => {},
+      noopTextSink,
       useEditorStore.setState,
       useEditorStore.getState,
       bridge,
@@ -219,17 +233,84 @@ describe('processStreamEvent — toolStatus badges', () => {
         status: 'success',
       },
       assistantId,
-      () => {},
+      noopTextSink,
       useEditorStore.setState,
       useEditorStore.getState,
       bridge,
       null,
     )
 
-    const toolCalls = useEditorStore.getState().agentMessages[0].toolCalls
+    const toolCalls = getToolCallBlocks(useEditorStore.getState().agentMessages[0])
     expect(toolCalls).toHaveLength(1)
     expect(toolCalls[0].actionType).toBe('mcp__page_builder__inspect_page')
     expect(toolCalls[0].status).toBe('success')
+  })
+})
+
+describe('processStreamEvent — chronological text/tool ordering', () => {
+  it('renders text → tool → text as three blocks in arrival order', async () => {
+    const { assistantId } = freshAgentState()
+    const bridge = emptyBridge()
+
+    // Simulate a real-world stream: write some text, then run a tool, then
+    // write more text. The buggy old shape would fold all text into one
+    // bubble at the top of the message; the blocks model preserves order.
+    const inlineTextSink: AgentTextStreamSink = {
+      append(id, text) {
+        useEditorStore.setState((state) => {
+          const msg = state.agentMessages.find((m) => m.id === id)
+          if (!msg) return
+          const last = msg.blocks[msg.blocks.length - 1]
+          if (last && last.kind === 'text') {
+            last.text += text
+          } else {
+            msg.blocks.push({ kind: 'text', text })
+          }
+        })
+      },
+      flush() {},
+    }
+
+    await processStreamEvent(
+      { type: 'text', text: 'I will inspect the page first.' },
+      assistantId,
+      inlineTextSink,
+      useEditorStore.setState,
+      useEditorStore.getState,
+      bridge,
+      null,
+    )
+
+    await processStreamEvent(
+      {
+        type: 'toolStatus',
+        toolCallId: 'toolu_1',
+        name: 'mcp__page_builder__inspect_page',
+        status: 'success',
+      },
+      assistantId,
+      inlineTextSink,
+      useEditorStore.setState,
+      useEditorStore.getState,
+      bridge,
+      null,
+    )
+
+    await processStreamEvent(
+      { type: 'text', text: 'All done — root has 3 children.' },
+      assistantId,
+      inlineTextSink,
+      useEditorStore.setState,
+      useEditorStore.getState,
+      bridge,
+      null,
+    )
+
+    const blocks = useEditorStore.getState().agentMessages[0].blocks
+    expect(blocks).toHaveLength(3)
+    expect(blocks[0]).toMatchObject({ kind: 'text', text: 'I will inspect the page first.' })
+    expect(blocks[1].kind).toBe('toolCall')
+    expect(blocks[2]).toMatchObject({ kind: 'text', text: 'All done — root has 3 children.' })
   })
 })
 
@@ -270,7 +351,6 @@ describe('sendAgentMessage — request lifecycle', () => {
       agentSessionId: null,
       agentSessionSiteId: null,
     })
-    localStorage.clear()
 
     const sessionId = '00000000-0000-4000-8000-000000000001'
     const intercept = captureFetch([

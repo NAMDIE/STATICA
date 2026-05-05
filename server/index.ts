@@ -1,5 +1,5 @@
 import { createDbClient } from './cms/db'
-import { runMigrations } from './cms/migrations'
+import { runMigrations } from './cms/db/runMigrations'
 import { readServerConfig } from './config'
 
 await import('./domEnvironment')
@@ -7,8 +7,8 @@ const { handleServerRequest } = await import('./router')
 const { activateInstalledServerPlugins } = await import('./cms/serverPluginRuntime')
 
 const config = readServerConfig()
-const db = createDbClient(config.databaseUrl)
-await runMigrations(db)
+const { db, migrations } = createDbClient(config.databaseUrl)
+await runMigrations(db, migrations)
 await activateInstalledServerPlugins(db, config.uploadsDir)
 
 const ALLOWED_ORIGINS = [
@@ -29,6 +29,15 @@ function corsHeaders(origin: string | null): Record<string, string> {
 
 Bun.serve({
   port: config.port,
+
+  // Disable Bun's default 10-second idle timeout. The agent endpoint streams
+  // NDJSON for as long as Claude's loop is running — Claude's "thinking"
+  // gaps between tool calls regularly exceed 10s on multi-step builds, and
+  // hitting the default would kill the streaming response mid-flight, leave
+  // the bridge resolver hanging server-side, and stall the agent. Other
+  // routes finish as normal HTTP request/response cycles, so removing the
+  // idle timeout has no downside for them.
+  idleTimeout: 0,
 
   async fetch(req: Request) {
     const origin = req.headers.get('origin')

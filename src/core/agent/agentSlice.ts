@@ -119,23 +119,13 @@ export interface AgentSlice {
 
 type EditorStoreSet = Parameters<EditorStoreSliceCreator<AgentSlice>>[0]
 
-const AGENT_SESSION_STORAGE_PREFIX = 'pb-agent-session:'
-
-function readStoredAgentSessionId(siteId: string | null | undefined): string | null {
-  if (!siteId || typeof localStorage === 'undefined') return null
-  const sessionId = localStorage.getItem(`${AGENT_SESSION_STORAGE_PREFIX}${siteId}`)
-  return sessionId && sessionId.trim() ? sessionId.trim() : null
-}
-
-function writeStoredAgentSessionId(siteId: string | null | undefined, sessionId: string): void {
-  if (!siteId || typeof localStorage === 'undefined') return
-  localStorage.setItem(`${AGENT_SESSION_STORAGE_PREFIX}${siteId}`, sessionId)
-}
-
-function clearStoredAgentSessionId(siteId: string | null | undefined): void {
-  if (!siteId || typeof localStorage === 'undefined') return
-  localStorage.removeItem(`${AGENT_SESSION_STORAGE_PREFIX}${siteId}`)
-}
+// Session-id is in-memory only. While the editor stays open, follow-up
+// messages reuse the SDK session id (Claude has continuity across the
+// thread). On page reload the message thread vanishes too, so starting
+// fresh is the right behaviour — we don't want a ghost session from a
+// thread the user can no longer see. A future "saved conversations" UI
+// will persist threads + their session ids explicitly with a "new chat"
+// button to start fresh.
 
 // ---------------------------------------------------------------------------
 // Bridge runtime — set on `bridgeReady`, read on `toolRequest`
@@ -143,6 +133,18 @@ function clearStoredAgentSessionId(siteId: string | null | undefined): void {
 
 export interface AgentBridgeRuntime {
   bridgeId: string | null
+}
+
+/**
+ * Sink for assistant text deltas. `append` accumulates a delta; `flush`
+ * drains accumulated text into the message's blocks immediately. The slice's
+ * implementation rAF-batches `append` calls; the toolStatus handler calls
+ * `flush` so any pending text lands BEFORE a tool-call block is appended,
+ * preserving chronological order in the UI.
+ */
+export interface AgentTextStreamSink {
+  append(assistantId: string, text: string): void
+  flush(): void
 }
 
 async function postToolResult(
@@ -188,10 +190,27 @@ export const createAgentSlice: EditorStoreSliceCreator<AgentSlice> = (set, get) 
   // AbortController held in closure (not reactive — intentional, not needed in UI)
   let _abortController: AbortController | null = null
 
-  // rAF-buffered text accumulation (Guideline #254)
+  // rAF-buffered text accumulation (Guideline #254). Pending deltas are
+  // flushed once per animation frame, OR explicitly before any tool-call
+  // block is added so chronological ordering is preserved.
   let _pendingText = ''
   let _pendingAssistantId = ''
   let _rafHandle = 0
+
+  /**
+   * Append `text` to the last text block of `msg`, or push a new text block
+   * if the trailing block is a tool call. This is what keeps text/tool
+   * ordering chronological — text that arrives after a tool call goes into
+   * its own block AFTER the tool, not concatenated into earlier text.
+   */
+  function appendTextToBlocks(msg: AgentMessage, text: string): void {
+    const last = msg.blocks[msg.blocks.length - 1]
+    if (last && last.kind === 'text') {
+      last.text += text
+    } else {
+      msg.blocks.push({ kind: 'text', text })
+    }
+  }
 
   function flushPendingText() {
     _rafHandle = 0
@@ -201,7 +220,7 @@ export const createAgentSlice: EditorStoreSliceCreator<AgentSlice> = (set, get) 
     _pendingText = ''
     set((state) => {
       const msg = state.agentMessages.find((m) => m.id === id)
-      if (msg) msg.content += text
+      if (msg) appendTextToBlocks(msg, text)
     })
   }
 
@@ -215,6 +234,15 @@ export const createAgentSlice: EditorStoreSliceCreator<AgentSlice> = (set, get) 
     _pendingAssistantId = assistantId
     _pendingText += text
     scheduleFlush()
+  }
+
+  // Single text-stream sink passed into processStreamEvent. The sink's
+  // `flush()` is called from the toolStatus handler to drain any pending
+  // text deltas BEFORE a tool-call block is added — that's what keeps the
+  // visual order in the panel chronologically correct.
+  const textSink: AgentTextStreamSink = {
+    append: appendTextDelta,
+    flush: flushPendingText,
   }
 
   return {
@@ -246,7 +274,6 @@ export const createAgentSlice: EditorStoreSliceCreator<AgentSlice> = (set, get) 
     },
 
     clearAgentMessages() {
-      clearStoredAgentSessionId(get().site?.id)
       set({
         agentMessages: [],
         agentError: null,
@@ -259,23 +286,17 @@ export const createAgentSlice: EditorStoreSliceCreator<AgentSlice> = (set, get) 
     async sendAgentMessage(content) {
       if (get().isAgentStreaming) return // one request at a time
 
+      // Reuse the in-memory session id only when it belongs to the current
+      // site. Switching sites or reloading the page resets it.
       const siteId = get().site?.id ?? null
-      const stateSessionId = get().agentSessionSiteId === siteId
+      const resumeSessionId = get().agentSessionSiteId === siteId
         ? get().agentSessionId
         : null
-      const resumeSessionId = stateSessionId ?? readStoredAgentSessionId(siteId)
-      if (resumeSessionId && resumeSessionId !== get().agentSessionId) {
-        set({
-          agentSessionId: resumeSessionId,
-          agentSessionSiteId: siteId,
-        })
-      }
 
       const userMsg: AgentMessage = {
         id: nanoid(),
         role: 'user',
-        content,
-        toolCalls: [],
+        blocks: [{ kind: 'text', text: content }],
         timestamp: Date.now(),
       }
 
@@ -283,8 +304,7 @@ export const createAgentSlice: EditorStoreSliceCreator<AgentSlice> = (set, get) 
       const assistantMsg: AgentMessage = {
         id: assistantId,
         role: 'assistant',
-        content: '',
-        toolCalls: [],
+        blocks: [],
         timestamp: Date.now(),
       }
 
@@ -318,7 +338,9 @@ export const createAgentSlice: EditorStoreSliceCreator<AgentSlice> = (set, get) 
             set({ agentError: 'Agent server is not running. Start it with: bun run dev' })
             set((state) => {
               const msg = state.agentMessages.find((m) => m.id === assistantId)
-              if (msg && !msg.content) msg.content = '_(agent error)_'
+              if (msg && msg.blocks.length === 0) {
+                msg.blocks.push({ kind: 'text', text: '_(agent error)_' })
+              }
             })
             return
           }
@@ -348,7 +370,7 @@ export const createAgentSlice: EditorStoreSliceCreator<AgentSlice> = (set, get) 
             await processStreamEvent(
               event,
               assistantId,
-              appendTextDelta,
+              textSink,
               set,
               get,
               bridge,
@@ -359,6 +381,11 @@ export const createAgentSlice: EditorStoreSliceCreator<AgentSlice> = (set, get) 
 
         flushPendingText()
       } catch (err) {
+        // Abort the fetch so any in-flight MCP tool handler on the server
+        // rejects cleanly (via destroyBridge in the stream's finally block)
+        // instead of waiting forever for a tool-result that won't arrive.
+        _abortController?.abort()
+
         if (err instanceof Error && err.name === 'AbortError') {
           flushPendingText()
         } else {
@@ -367,7 +394,9 @@ export const createAgentSlice: EditorStoreSliceCreator<AgentSlice> = (set, get) 
           set({ agentError: 'Something went wrong. Please try again.' })
           set((state) => {
             const msg = state.agentMessages.find((m) => m.id === assistantId)
-            if (msg && !msg.content) msg.content = '_(agent error)_'
+            if (msg && msg.blocks.length === 0) {
+              msg.blocks.push({ kind: 'text', text: '_(agent error)_' })
+            }
           })
         }
       } finally {
@@ -385,7 +414,7 @@ export const createAgentSlice: EditorStoreSliceCreator<AgentSlice> = (set, get) 
 export async function processStreamEvent(
   event: ServerStreamEvent,
   assistantId: string,
-  appendText: (id: string, text: string) => void,
+  textSink: AgentTextStreamSink,
   set: EditorStoreSet,
   get: () => EditorStore,
   bridge: AgentBridgeRuntime,
@@ -393,7 +422,7 @@ export async function processStreamEvent(
 ): Promise<void> {
   switch (event.type) {
     case 'text': {
-      appendText(assistantId, event.text)
+      textSink.append(assistantId, event.text)
       break
     }
 
@@ -403,7 +432,19 @@ export async function processStreamEvent(
     }
 
     case 'toolRequest': {
-      const result = await executeAgentTool(event.name, event.input)
+      // Defensive: executeAgentTool already converts caught throws into
+      // `{ success: false, error }`, but if anything ever escapes (or if
+      // executor evolves) we still need to ALWAYS POST a result so the
+      // server's bridge resolver fires and Claude sees a tool error rather
+      // than the loop hanging forever.
+      let result: AgentActionResult
+      try {
+        result = await executeAgentTool(event.name, event.input)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        console.error(`[AgentSlice] tool ${event.name} threw unexpectedly:`, err)
+        result = { success: false, error: `Browser exception: ${message}` }
+      }
       if (!bridge.bridgeId) {
         console.error('[AgentSlice] toolRequest received before bridgeReady')
         break
@@ -413,39 +454,45 @@ export async function processStreamEvent(
     }
 
     case 'toolStatus': {
+      // Drain any pending text deltas BEFORE adding/updating a tool-call
+      // block so the chronological order text → tool → text is preserved.
+      textSink.flush()
+
       set((state) => {
         const msg = state.agentMessages.find((m) => m.id === assistantId)
         if (!msg) return
 
-        const existing = msg.toolCalls.find((toolCall) => toolCall.externalId === event.toolCallId)
+        const inputAsRecord = event.input && typeof event.input === 'object'
+          ? (event.input as Record<string, unknown>)
+          : null
+        const newResult = event.status === 'pending'
+          ? null
+          : {
+              success: event.status === 'success',
+              error: event.status === 'error' ? event.error ?? 'Tool call failed.' : undefined,
+            }
+
+        const existing = msg.blocks.find(
+          (block): block is { kind: 'toolCall'; toolCall: AgentToolCall } =>
+            block.kind === 'toolCall' && block.toolCall.externalId === event.toolCallId,
+        )
         if (existing) {
-          existing.status = event.status
-          existing.params = event.input && typeof event.input === 'object'
-            ? event.input as Record<string, unknown>
-            : existing.params
-          existing.result = event.status === 'pending'
-            ? null
-            : {
-                success: event.status === 'success',
-                error: event.status === 'error' ? event.error ?? 'Tool call failed.' : undefined,
-              }
+          existing.toolCall.status = event.status
+          if (inputAsRecord) existing.toolCall.params = inputAsRecord
+          existing.toolCall.result = newResult
           return
         }
 
-        msg.toolCalls.push({
-          id: nanoid(),
-          externalId: event.toolCallId,
-          actionType: event.name,
-          params: event.input && typeof event.input === 'object'
-            ? event.input as Record<string, unknown>
-            : {},
-          result: event.status === 'pending'
-            ? null
-            : {
-                success: event.status === 'success',
-                error: event.status === 'error' ? event.error ?? 'Tool call failed.' : undefined,
-              },
-          status: event.status,
+        msg.blocks.push({
+          kind: 'toolCall',
+          toolCall: {
+            id: nanoid(),
+            externalId: event.toolCallId,
+            actionType: event.name,
+            params: inputAsRecord ?? {},
+            result: newResult,
+            status: event.status,
+          },
         })
       })
       break
@@ -453,7 +500,6 @@ export async function processStreamEvent(
 
     case 'session': {
       const siteId = get().site?.id ?? null
-      writeStoredAgentSessionId(siteId, event.sessionId)
       set({
         agentSessionId: event.sessionId,
         agentSessionSiteId: siteId,
@@ -517,7 +563,7 @@ export function buildPageContext(
 
   const availableModules = registry
     .list()
-    .filter((mod) => mod.id !== 'base.root')
+    .filter((mod) => mod.id !== 'base.body')
     .sort((a, b) => a.id.localeCompare(b.id))
     .map(moduleDefinitionToAgentContext)
 

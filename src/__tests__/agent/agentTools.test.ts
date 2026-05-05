@@ -125,6 +125,37 @@ describe('page-builder agent tools', () => {
     expect(inspected.node?.classes[0].breakpointStyles).toEqual({ fontSize: '36px' })
   })
 
+  it('returns the descendant subtree from inspect_node so the agent gets the full structure in one call', () => {
+    const snapshot = buildPageBuilderToolContext(makeContext())
+
+    const inspected = inspectPageNode(snapshot, { nodeId: 'root' })
+
+    // The focal node has full detail (resolvedProps, classes).
+    expect(inspected.node?.id).toBe('root')
+
+    // Plus its descendants as a tree of light-info objects.
+    const descendants = inspected.node?.descendants ?? []
+    expect(descendants).toHaveLength(1)
+    expect(descendants[0]).toMatchObject({
+      id: 'title',
+      moduleId: 'base.text',
+      classNames: ['hero-title'],
+      childCount: 0,
+      // Picks up `text` prop as the preview.
+      textPreview: 'Design tools',
+    })
+    expect(descendants[0].children).toEqual([])
+  })
+
+  it('respects maxDepth on inspect_node (0 = focal node only, no descendants)', () => {
+    const snapshot = buildPageBuilderToolContext(makeContext())
+
+    const inspected = inspectPageNode(snapshot, { nodeId: 'root', maxDepth: 0 })
+
+    expect(inspected.node?.id).toBe('root')
+    expect(inspected.node?.descendants).toEqual([])
+  })
+
   it('inspects one class with resolved breakpoint styles and assigned nodes', () => {
     const snapshot = buildPageBuilderToolContext(makeContext())
 

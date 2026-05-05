@@ -22,8 +22,9 @@
  * @see Constraint #385 — Standalone Editor: ambient Claude Code credentials
  */
 
-import { useRef, useEffect, useCallback, memo } from 'react'
+import { useRef, useEffect, useCallback, memo, useMemo } from 'react'
 import { useEditorStore } from '@core/editor-store/store'
+import { renderMarkdownToHtml } from '@core/agent/markdown'
 import type { AgentMessage, AgentToolCall } from '@core/agent/types'
 import { DeleteIcon } from 'pixel-art-icons/icons/delete'
 import { SquareIcon } from 'pixel-art-icons/icons/square'
@@ -250,7 +251,6 @@ interface MessageBubbleProps {
 
 const MessageBubble = memo(function MessageBubble({ msg }: MessageBubbleProps) {
   const isUser = msg.role === 'user'
-  const visibleContent = msg.content
 
   return (
     <div className={cn(styles.messageBubble, isUser ? styles.messageBubbleUser : styles.messageBubbleAssistant)}>
@@ -259,27 +259,59 @@ const MessageBubble = memo(function MessageBubble({ msg }: MessageBubbleProps) {
         {isUser ? 'You' : 'Assistant'}
       </div>
 
-      {/* Content bubble */}
-      {visibleContent && (
-        <div
-          className={cn(
-            styles.contentBubble,
-            isUser ? styles.contentBubbleUser : styles.contentBubbleAssistant,
-          )}
-        >
-          {visibleContent}
-        </div>
-      )}
-
-      {/* Tool call badges */}
-      {msg.toolCalls.length > 0 && (
-        <div className={styles.toolCallsContainer}>
-          {msg.toolCalls.map((tc) => (
-            <ToolCallBadge key={tc.id} toolCall={tc} />
-          ))}
-        </div>
+      {/* Chronological blocks — text and tool calls render in the order
+          Claude actually emitted them, so a "text → tool → text" sequence
+          shows two separate text bubbles around the tool badges. Text is
+          rendered as markdown (bold, lists, inline code, links, …) via a
+          DOMPurify-sanitised HTML pipeline. */}
+      {msg.blocks.map((block, index) =>
+        block.kind === 'text' ? (
+          <MarkdownTextBubble
+            // Stable key per text block: text deltas append in place, so each
+            // run of text gets its position-based key.
+            key={`text-${index}`}
+            text={block.text}
+            isUser={isUser}
+          />
+        ) : (
+          <div key={block.toolCall.id} className={styles.toolCallsContainer}>
+            <ToolCallBadge toolCall={block.toolCall} />
+          </div>
+        ),
       )}
     </div>
+  )
+})
+
+// ---------------------------------------------------------------------------
+// MarkdownTextBubble — parses + sanitises the block text and injects it via
+// dangerouslySetInnerHTML. Memoised render so streaming deltas don't re-parse
+// markdown for unchanged blocks.
+// ---------------------------------------------------------------------------
+
+interface MarkdownTextBubbleProps {
+  text: string
+  isUser: boolean
+}
+
+const MarkdownTextBubble = memo(function MarkdownTextBubble({
+  text,
+  isUser,
+}: MarkdownTextBubbleProps) {
+  const html = useMemo(() => renderMarkdownToHtml(text), [text])
+  // Empty/whitespace-only blocks don't render at all (avoids stray bubbles
+  // around stripped-out tool blocks during streaming).
+  if (!html) return null
+  return (
+    <div
+      className={cn(
+        styles.contentBubble,
+        isUser ? styles.contentBubbleUser : styles.contentBubbleAssistant,
+        styles.markdownBubble,
+      )}
+      // Safe: sanitised by DOMPurify (via sanitizeRichtext) before reaching here.
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
   )
 })
 

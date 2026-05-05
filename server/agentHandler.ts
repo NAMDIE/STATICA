@@ -378,10 +378,6 @@ function parseMaybeJson(value: string): unknown {
 // SDK query options
 // ---------------------------------------------------------------------------
 
-// Bound the corrective tool-loop. Plenty for the agent to do several rounds
-// of inspect → fix → retry, but stops runaway sequences.
-const AGENT_MAX_TURNS = 30
-
 // Toolset policy for the in-app AI panel.
 //
 // The panel's job is editing live sites. Filesystem mutations and shell
@@ -427,12 +423,23 @@ export function buildAgentQueryOptions({
       page_builder: pageBuilderMcpServer,
     },
     includePartialMessages: true,
-    // Enable every discovered skill — pure-prompt skills (react-best-practices,
-    // composition-patterns, claude-api, etc.) inform Claude's MCP tool choices
-    // even though Read/Write/Bash are blocked.
-    skills: 'all',
+    // Skills are disabled in the in-app panel. Claude Code's skills (init,
+    // review, brainstorming, simplify, etc.) are dev-workflow tools that
+    // either don't apply here (no filesystem access) or actively hurt UX —
+    // brainstorming, in particular, derails any vague prompt into a Q&A
+    // ceremony when the user wanted Claude to just build.
+    skills: [],
+    // Block filesystem/shell tools at the deny-rule level. Deny rules are
+    // evaluated before the permission mode and hold even in bypass modes.
     disallowedTools: PAGE_BUILDER_DISALLOWED_TOOLS,
-    maxTurns: AGENT_MAX_TURNS,
+    // canUseTool is the canonical pattern for in-app agents that have no CLI
+    // to prompt the user for tool approvals. Anything that survives the
+    // deny-rule check above is auto-approved here. The user reviews and
+    // undoes AI changes via the editor's history (Cmd+Z).
+    canUseTool: async (_toolName, input) => ({
+      behavior: 'allow',
+      updatedInput: input,
+    }),
   }
 
   if (sessionId) options.resume = sessionId
@@ -618,20 +625,23 @@ export async function handleAgentToolResult(req: Request): Promise<Response> {
   }
   const ok = resolvePendingToolResult(bridgeId, requestId, result)
   if (!ok) {
-    // Stream may have closed before this POST landed (user aborted, server
-    // dropped the connection). Acknowledge with 404 so the client can stop
-    // retrying.
+    // Stream may have closed before this POST landed (user aborted, agent
+    // loop ended, server dropped the connection, or the request hit the
+    // server-side timeout). Log enough detail to tell which.
+    const bridge = activeBridges.get(bridgeId)
+    if (!bridge) {
+      console.warn(
+        `[agentHandler] tool-result POST for unknown/expired bridge ${bridgeId} (requestId=${requestId}); ` +
+        `the streaming response likely closed before the browser POSTed.`,
+      )
+    } else {
+      console.warn(
+        `[agentHandler] tool-result POST for unknown requestId ${requestId} on bridge ${bridgeId}; ` +
+        `tool may have already timed out server-side.`,
+      )
+    }
     return jsonResponse({ ok: false }, { status: 404 })
   }
   return jsonResponse({ ok: true })
 }
 
-// ---------------------------------------------------------------------------
-// Single dispatch entry — used by the Vite dev plugin which mounts on /api/agent
-// ---------------------------------------------------------------------------
-
-export async function handleAgentRouteRequest(req: Request): Promise<Response> {
-  const url = new URL(req.url)
-  if (url.pathname === '/api/agent/tool-result') return handleAgentToolResult(req)
-  return handleAgentRequest(req)
-}

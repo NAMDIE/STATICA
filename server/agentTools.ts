@@ -307,10 +307,11 @@ export function createPageBuilderMcpServer(
       ),
       tool(
         'inspect_node',
-        'Return one node\'s detail: resolved props (base props + per-breakpoint overrides for the requested breakpoint), assigned classes with their resolved styles, and the merged class style result. Use this before updateNodeProps so you know the current values you\'re patching. `breakpointId` defaults to the active breakpoint.',
+        'Return one node\'s full detail PLUS its descendant subtree as a tree of light-info objects (id, moduleId, label, classIds, classNames, childCount, short textPreview, recursive children). One call gives you the whole structural picture for a section — you do NOT need to call inspect_node repeatedly to walk the tree. Detailed fields on the focal node: resolved props (base props + per-breakpoint overrides), assigned classes with resolved styles, merged class styles. `breakpointId` defaults to the active breakpoint. `maxDepth` defaults to 5 (deep enough for any reasonable section nesting); pass 0 for the focal node only.',
         {
           nodeId: z.string(),
           breakpointId: z.string().optional(),
+          maxDepth: z.number().int().min(0).max(50).optional(),
         },
         async (args) => jsonToolResult(inspectPageNode(snapshot, args)),
         { alwaysLoad: true },
@@ -426,6 +427,19 @@ interface SearchNodesArgs {
 interface InspectNodeArgs {
   nodeId: string
   breakpointId?: string
+  /** How deep to walk descendants. Default 5; pass 0 for no descendants. */
+  maxDepth?: number
+}
+
+interface DescendantNode {
+  id: string
+  moduleId: string
+  label?: string
+  classIds: string[]
+  classNames: string[]
+  childCount: number
+  textPreview?: string
+  children: DescendantNode[]
 }
 
 interface InspectClassArgs {
@@ -503,6 +517,9 @@ export function inspectPageNode(ctx: PageBuilderToolContext, args: InspectNodeAr
     }
   })
 
+  const maxDepth = Math.max(0, args.maxDepth ?? 5)
+  const descendants = buildDescendantTree(ctx, node.children, 1, maxDepth)
+
   return {
     node: {
       ...node,
@@ -510,8 +527,59 @@ export function inspectPageNode(ctx: PageBuilderToolContext, args: InspectNodeAr
       resolvedProps,
       classes,
       resolvedClassStyles: mergeResolvedClassStyles(classes),
+      descendants,
     },
   }
+}
+
+function buildDescendantTree(
+  ctx: PageBuilderToolContext,
+  childIds: string[],
+  depth: number,
+  maxDepth: number,
+): DescendantNode[] {
+  if (depth > maxDepth || childIds.length === 0) return []
+  const nodes: DescendantNode[] = []
+  for (const id of childIds) {
+    const child = ctx.page.nodes.find((node) => node.id === id)
+    if (!child) continue
+    nodes.push({
+      id: child.id,
+      moduleId: child.moduleId,
+      label: child.label,
+      classIds: child.classIds,
+      classNames: child.classIds.map((classId) => ctx.classes.find((cls) => cls.id === classId)?.name ?? classId),
+      childCount: child.children.length,
+      textPreview: extractTextPreview(child.props),
+      children: buildDescendantTree(ctx, child.children, depth + 1, maxDepth),
+    })
+  }
+  return nodes
+}
+
+const TEXT_PREVIEW_KEYS = ['text', 'label', 'title', 'heading', 'content', 'caption', 'alt']
+const TEXT_PREVIEW_MAX_LENGTH = 80
+
+function extractTextPreview(props: Record<string, unknown>): string | undefined {
+  // Try common text-bearing prop keys first.
+  for (const key of TEXT_PREVIEW_KEYS) {
+    const value = props[key]
+    if (typeof value === 'string' && value.trim()) {
+      return truncate(value)
+    }
+  }
+  // Fallback: any string prop with non-empty content.
+  for (const value of Object.values(props)) {
+    if (typeof value === 'string' && value.trim()) {
+      return truncate(value)
+    }
+  }
+  return undefined
+}
+
+function truncate(text: string): string {
+  if (text.length <= TEXT_PREVIEW_MAX_LENGTH) return text
+  return `${text.slice(0, TEXT_PREVIEW_MAX_LENGTH - 1).trimEnd()}…`
 }
 
 export function inspectPageClass(ctx: PageBuilderToolContext, args: InspectClassArgs) {
