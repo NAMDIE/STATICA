@@ -46,6 +46,7 @@ import {
   getNodeClassNames,
 } from '@core/page-tree/nodeDisplayName'
 import { TreeNode } from './TreeNode'
+import { TreeBackgroundContextMenu } from './TreeBackgroundContextMenu'
 import { useDomTree } from './DomTreeContext'
 import { DomTreeProvider } from './DomTreeProvider'
 import { DomPanelDndContext } from './DomPanelDndContext'
@@ -175,6 +176,13 @@ function DomPanelInner({ variant = 'floating' }: { variant?: PanelVariant }) {
 
   const [searchQuery, setSearchQuery] = useState('')
 
+  // Right-click on the empty background of the tree area opens a small
+  // context menu with Paste + Insert module options targeting the page root.
+  // Per-row right-clicks are handled by `LayerNodeContextMenu` via `TreeNode`,
+  // which calls `e.stopPropagation()` so this handler only fires on truly
+  // empty space (padding around / below the rendered rows).
+  const [bgContextMenu, setBgContextMenu] = useState<{ x: number; y: number } | null>(null)
+
   // ── Draggable panel position ───────────────────────────────────────────────
   const { panelRef, headerDragProps, panelPositionStyle } = useDraggablePanel(
     'dom',
@@ -278,6 +286,22 @@ function DomPanelInner({ variant = 'floating' }: { variant?: PanelVariant }) {
       }
     },
     [page, expandAll, collapseAll],
+  )
+
+  // ─── Background right-click → tree-background context menu ───────────────
+  // Fires only for clicks on the empty padding/space of the tree area —
+  // TreeNode's onContextMenu calls e.stopPropagation() so per-row right-clicks
+  // don't reach this handler. Skipped while search is active because the
+  // tree-mode UI (with its root anchor) isn't what's on screen.
+  const handleBackgroundContextMenu = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (searchQuery.trim()) return
+      if (!page) return
+      e.preventDefault()
+      e.stopPropagation()
+      setBgContextMenu({ x: e.clientX, y: e.clientY })
+    },
+    [page, searchQuery],
   )
 
   // ─── DnD drag-end: commit one validated move to store ────────────────────
@@ -421,8 +445,15 @@ function DomPanelInner({ variant = 'floating' }: { variant?: PanelVariant }) {
           className={styles.searchBar}
         />
 
-        {/* ── Tree / search results — scrollable area ───────────────────── */}
-        <div ref={treeAreaRef} className={styles.treeArea}>
+        {/* ── Tree / search results — scrollable area ─────────────────────
+            onContextMenu fires only for right-clicks on EMPTY space inside
+            this scrollable area; TreeNode rows stop propagation so they
+            keep their per-row context menu. */}
+        <div
+          ref={treeAreaRef}
+          className={styles.treeArea}
+          onContextMenu={handleBackgroundContextMenu}
+        >
           {!page ? (
             <div className={styles.emptyMsg}>
               Loading site...
@@ -475,6 +506,19 @@ function DomPanelInner({ variant = 'floating' }: { variant?: PanelVariant }) {
           )}
         </div>
       </>
+
+      {/* Tree-background context menu — rendered via portal at document.body
+          to escape the panel's transform: translateZ(0) stacking context.
+          Without the portal, position:fixed inside a transformed ancestor is
+          positioned relative to that ancestor, not the viewport. */}
+      {bgContextMenu && createPortal(
+        <TreeBackgroundContextMenu
+          x={bgContextMenu.x}
+          y={bgContextMenu.y}
+          onClose={() => setBgContextMenu(null)}
+        />,
+        document.body,
+      )}
     </div>
   )
 }

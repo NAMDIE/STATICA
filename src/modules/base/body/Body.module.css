@@ -1,0 +1,28 @@
+/**
+ * BodyEditor — editor-only canvas styles for the page body wrapper.
+ *
+ * The body's children render directly into <body> at publish time (no wrapper
+ * element), so this CSS does NOT ship to published pages. It exists purely so
+ * the editor canvas treats the body as a viewport-filling surface — when the
+ * user adds a class with a background-color to the body, that color visibly
+ * covers the whole canvas instead of just hugging the content.
+ *
+ * The wrapping `BreakpointFrame` provides the outer viewport (`.viewport` has
+ * `min-height: 100vh`); this rule makes the inner body div stretch to fill it.
+ */
+
+.body {
+    /*
+     * `min-height: 100%` does NOT resolve here because the wrapping
+     * `.viewport` (BreakpointFrame) only sets `min-height: 100vh`, not
+     * `height: 100vh`. Per CSS spec, a percentage min-height on a child
+     * needs an explicit height on its parent to resolve — otherwise it
+     * collapses to `auto`. So use `100vh` directly to match what the
+     * published `<body>` does at the document level. Content that exceeds
+     * 100vh grows the wrapper naturally because this is `min-height`, not
+     * `height`.
+     */
+    min-height: 100vh;
+    width: 100%;
+    display: block;
+}

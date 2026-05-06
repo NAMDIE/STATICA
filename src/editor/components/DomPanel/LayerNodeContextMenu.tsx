@@ -14,13 +14,23 @@
  * persisted to localStorage, so it can survive page reloads and span
  * across sites.
  *
+ * Multi-select awareness:
+ * - When multiple nodes are selected AND the right-clicked node is part of
+ *   that selection, the menu acts on every selected node:
+ *     - Rename → hidden (only meaningful for one node).
+ *     - Duplicate / Copy / Cut / Wrap / Delete → multi-aware actions.
+ *     - "Insert module here" → hidden (anchored to one parent).
+ * - Wrap is now a SUBMENU with two choices: Container and Loop. The
+ *   underlying action is `wrapNode` (single) or `wrapNodes` (multi, with
+ *   closest-common-ancestor semantics).
+ *
  * Architecture gate (G4, G5): Visual Component insertion MUST go through the
  * shared `insertComponentRef` action in `siteSlice` so cycle detection and
  * VC/page-mode dispatch are applied uniformly.
  * See `src/__tests__/architecture/component-system-placement.test.ts`.
  */
 
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import {
   ContextMenu as UIContextMenu,
   ContextMenuItem,
@@ -28,6 +38,8 @@ import {
   ContextMenuSubmenu,
 } from '@ui/components/ContextMenu'
 import { useEditorStore, selectActiveCanvasPage } from '@core/editor-store/store'
+import { useShallow } from 'zustand/react/shallow'
+import { registry } from '@core/module-engine/registry'
 import { useInsertModule } from '../../hooks/useInsertModule'
 import { ModulePicker } from '../ModulePicker'
 import type { AnyModuleDefinition } from '@core/module-engine/types'
@@ -39,14 +51,23 @@ import { FilesStack2Icon } from 'pixel-art-icons/icons/files-stack-2'
 import { CheckboxIcon } from 'pixel-art-icons/icons/checkbox'
 import { DeleteIcon } from 'pixel-art-icons/icons/delete'
 import { PlusIcon } from 'pixel-art-icons/icons/plus'
+import { BoxStackIcon } from 'pixel-art-icons/icons/box-stack'
+import styles from './LayerNodeContextMenu.module.css'
 
 interface LayerNodeContextMenuProps {
   x: number
   y: number
   onClose: () => void
+  /**
+   * Single-node delete handler (used when the selection has one node).
+   * Multi-delete is dispatched internally via `deleteNodes` to avoid each
+   * caller wiring a separate confirm dialog for the multi-case — see comment
+   * inside the component for the rationale.
+   */
   onDelete: () => void
   onDuplicate: () => void
   onRename: () => void
+  /** Single-node wrap handler. Multi-wrap is dispatched internally. */
   onWrapInContainer: () => void
   onCopy: () => void
   onCut: () => void
@@ -71,17 +92,39 @@ export function LayerNodeContextMenu({
   const firstItemRef = useRef<HTMLButtonElement>(null)
 
   // Per-node selector — fallback for nodeId when no explicit prop is given.
-  // CanvasRoot selects the right-clicked node before opening the menu, so
-  // selectedNodeId is reliable there even without an explicit nodeId prop.
+  // CanvasRoot / TreeNode select the right-clicked node before opening the menu,
+  // so selectedNodeId is reliable there even without an explicit nodeId prop.
   const selectedNodeId = useEditorStore((s) => s.selectedNodeId)
+  // Multi-select awareness: when 2+ nodes are selected, the menu acts on the
+  // whole set. `useShallow` keeps subscriptions stable for content equality.
+  const selectedNodeIds = useEditorStore(useShallow((s) => s.selectedNodeIds))
   const insertComponentRef = useEditorStore((s) => s.insertComponentRef)
   const insertModule = useInsertModule()
+  const wrapNodesAction = useEditorStore((s) => s.wrapNodes)
+  const duplicateNodesAction = useEditorStore((s) => s.duplicateNodes)
+  const copyNodesAction = useEditorStore((s) => s.copyNodes)
+  const cutNodesAction = useEditorStore((s) => s.cutNodes)
+  const deleteNodesAction = useEditorStore((s) => s.deleteNodes)
 
   // Reactive boolean for the conditional Paste item — re-renders whenever
   // the clipboard entry transitions between null and non-null.
   const canPaste = useEditorStore((s) => s.clipboardEntry !== null)
 
   const nodeId = nodeIdProp ?? selectedNodeId
+
+  // Resolve whether we're acting on a multi-selection. The menu is "multi"
+  // only when the right-clicked nodeId is part of an existing 2+ selection.
+  // Right-clicking outside a multi-selection demotes back to single-select
+  // (the calling site already replaced selection in that case — see
+  // CanvasRoot.onNodeContextMenu and TreeNode's onContextMenu).
+  const isMulti = useMemo(
+    () => selectedNodeIds.length > 1 && nodeId !== null && selectedNodeIds.includes(nodeId),
+    [selectedNodeIds, nodeId],
+  )
+  const targetIds = useMemo(
+    () => (isMulti ? selectedNodeIds : nodeId ? [nodeId] : []),
+    [isMulti, selectedNodeIds, nodeId],
+  )
 
   // slot-instance structural lock-down — Task 5
   //
@@ -94,6 +137,7 @@ export function LayerNodeContextMenu({
   const lockedSlotInstance = useEditorStore(
     useCallback(
       (s) => {
+        if (isMulti) return false  // Multi-select already filters slot-instance per slice rules.
         if (!nodeId) return false
         const tree = selectActiveCanvasPage(s)
         if (!tree) return false
@@ -105,7 +149,28 @@ export function LayerNodeContextMenu({
         )
         return parent?.moduleId === 'base.visual-component-ref'
       },
-      [nodeId],
+      [nodeId, isMulti],
+    ),
+  )
+
+  // Whether the right-clicked node can host children. "Insert module here"
+  // is meaningless on a non-container (Text, Button, Image, etc.) — there's
+  // nowhere for the new node to land. Hide the submenu for those nodes.
+  // Always shown for slot-instances (which are containers — `canHaveChildren:
+  // true` — their whole purpose is to host content).
+  const canHostChildren = useEditorStore(
+    useCallback(
+      (s) => {
+        if (isMulti) return false  // Insert-here is single-anchor only.
+        if (!nodeId) return false
+        const tree = selectActiveCanvasPage(s)
+        if (!tree) return false
+        const node = tree.nodes[nodeId]
+        if (!node) return false
+        const def = registry.get(node.moduleId)
+        return Boolean(def?.canHaveChildren)
+      },
+      [nodeId, isMulti],
     ),
   )
 
@@ -129,37 +194,119 @@ export function LayerNodeContextMenu({
     [insertComponentRef, nodeId],
   )
 
+  // Multi-aware action dispatchers. For single-select they delegate to the
+  // pre-existing single-node handlers (which carry their own UX: rename
+  // dialog, confirm-delete dialog, etc.); for multi-select they call the
+  // *Nodes batch actions directly. The multi delete path dispatches without
+  // the central confirm dialog because wiring it from here would require
+  // duplicating the dialog plumbing for the multi-case — the user can still
+  // undo with Ctrl/Cmd+Z. (TODO: route through `useConfirmDelete` once the
+  // dialog supports a "Delete N layers?" message; tracked in the multi-select
+  // task notes.)
+  const dispatchDuplicate = useCallback(() => {
+    if (isMulti) {
+      duplicateNodesAction(targetIds)
+      onClose()
+    } else {
+      onDuplicate()
+    }
+  }, [isMulti, targetIds, duplicateNodesAction, onDuplicate, onClose])
+
+  const dispatchCopy = useCallback(() => {
+    if (isMulti) {
+      copyNodesAction(targetIds)
+      onClose()
+    } else {
+      onCopy()
+    }
+  }, [isMulti, targetIds, copyNodesAction, onCopy, onClose])
+
+  const dispatchCut = useCallback(() => {
+    if (isMulti) {
+      cutNodesAction(targetIds)
+      onClose()
+    } else {
+      onCut()
+    }
+  }, [isMulti, targetIds, cutNodesAction, onCut, onClose])
+
+  const dispatchDelete = useCallback(() => {
+    if (isMulti) {
+      deleteNodesAction(targetIds)
+      onClose()
+    } else {
+      onDelete()
+    }
+  }, [isMulti, targetIds, deleteNodesAction, onDelete, onClose])
+
+  const dispatchWrapInContainer = useCallback(() => {
+    if (isMulti) {
+      wrapNodesAction(targetIds, 'base.container')
+      onClose()
+    } else {
+      onWrapInContainer()
+    }
+  }, [isMulti, targetIds, wrapNodesAction, onWrapInContainer, onClose])
+
+  const dispatchWrapInLoop = useCallback(() => {
+    if (isMulti) {
+      wrapNodesAction(targetIds, 'base.loop')
+    } else if (nodeId) {
+      useEditorStore.getState().wrapNode(nodeId, 'base.loop')
+    }
+    onClose()
+  }, [isMulti, nodeId, targetIds, wrapNodesAction, onClose])
+
+  // Selection-count chip in the menu header (multi only). Lives as a
+  // disabled menuitem-equivalent label so screen readers can read "3 layers
+  // selected" before announcing the action items.
+  const headerLabel = isMulti ? `${selectedNodeIds.length} layers selected` : null
+
   return (
     <UIContextMenu
       x={x}
       y={y}
-      ariaLabel="Node options"
+      ariaLabel={headerLabel ?? 'Node options'}
       onClose={onClose}
     >
-      {/* Rename, Duplicate, Copy/Cut/Paste, Wrap, Delete are hidden for
-          slot-instance nodes — they are structural placeholders managed by
-          syncSlotInstances and must not be moved, renamed, or deleted by hand.
-          Only "Insert module here" remains so users can populate the slot. */}
-      {!lockedSlotInstance && (
+      {headerLabel && (
+        <>
+          <div role="presentation" className={styles.headerChip}>
+            {headerLabel}
+          </div>
+          <ContextMenuSeparator />
+        </>
+      )}
+
+      {/* Rename — hidden for slot-instance lockdown AND for multi-select
+          (rename is single-node only). */}
+      {!lockedSlotInstance && !isMulti && (
         <>
           <ContextMenuItem ref={firstItemRef} onClick={onRename}>
             <span aria-hidden="true"><EditIcon size={13} /></span>
             Rename
           </ContextMenuItem>
+        </>
+      )}
 
-          <ContextMenuItem onClick={onDuplicate}>
+      {!lockedSlotInstance && (
+        <>
+          <ContextMenuItem
+            ref={isMulti ? firstItemRef : undefined}
+            onClick={dispatchDuplicate}
+          >
             <span aria-hidden="true"><CopyIcon size={13} /></span>
             Duplicate
           </ContextMenuItem>
 
           <ContextMenuSeparator />
 
-          <ContextMenuItem onClick={onCopy}>
+          <ContextMenuItem onClick={dispatchCopy}>
             <span aria-hidden="true"><Copy2Icon size={13} /></span>
             Copy
           </ContextMenuItem>
 
-          <ContextMenuItem onClick={onCut}>
+          <ContextMenuItem onClick={dispatchCut}>
             <span aria-hidden="true"><EraserIcon size={13} /></span>
             Cut
           </ContextMenuItem>
@@ -173,35 +320,58 @@ export function LayerNodeContextMenu({
 
           <ContextMenuSeparator />
 
-          <ContextMenuItem onClick={onWrapInContainer}>
-            <span aria-hidden="true"><CheckboxIcon size={13} /></span>
-            Wrap in Container
-          </ContextMenuItem>
+          {/* Wrap is now a submenu with Container / Loop choices. Same UX in
+              single- and multi-select — for multi the closest common ancestor
+              is computed by `wrapNodes` so cross-parent selections become a
+              single wrapper at the right tree level. */}
+          <ContextMenuSubmenu
+            label="Wrap in"
+            icon={<CheckboxIcon size={13} />}
+            onClose={onClose}
+            width={200}
+          >
+            <ContextMenuItem onClick={dispatchWrapInContainer}>
+              <span aria-hidden="true"><CheckboxIcon size={13} /></span>
+              Container
+            </ContextMenuItem>
+            <ContextMenuItem onClick={dispatchWrapInLoop}>
+              <span aria-hidden="true"><BoxStackIcon size={13} /></span>
+              Loop
+            </ContextMenuItem>
+          </ContextMenuSubmenu>
         </>
       )}
 
-      <ContextMenuSubmenu
-        label="Insert module here"
-        icon={<PlusIcon size={13} />}
-        onClose={onClose}
-        width={280}
-        maxHeight={420}
-        // The submenu hosts a search input — clicks on the input must not
-        // dismiss the panel. Only menuitem clicks (i.e. picking a module/VC)
-        // should close.
-        closeOnItemClickOnly
-      >
-        <ModulePicker
-          onSelectModule={handleSelectModule}
-          onSelectVC={handleSelectVC}
-        />
-      </ContextMenuSubmenu>
+      {/*
+        "Insert module here" is hidden when the right-clicked node can't host
+        children (Text, Button, Image, etc.) and for multi-select (which has
+        no single anchor for the new node). Containers and slot-instances in
+        single-select always show it.
+      */}
+      {canHostChildren && (
+        <ContextMenuSubmenu
+          label="Insert module here"
+          icon={<PlusIcon size={13} />}
+          onClose={onClose}
+          width={280}
+          maxHeight={420}
+          // The submenu hosts a search input — clicks on the input must not
+          // dismiss the panel. Only menuitem clicks (i.e. picking a module/VC)
+          // should close.
+          closeOnItemClickOnly
+        >
+          <ModulePicker
+            onSelectModule={handleSelectModule}
+            onSelectVC={handleSelectVC}
+          />
+        </ContextMenuSubmenu>
+      )}
 
       {!lockedSlotInstance && (
         <>
           <ContextMenuSeparator />
 
-          <ContextMenuItem danger onClick={onDelete}>
+          <ContextMenuItem danger onClick={dispatchDelete}>
             <span aria-hidden="true"><DeleteIcon size={13} /></span>
             Delete
           </ContextMenuItem>

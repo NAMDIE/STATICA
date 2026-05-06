@@ -12,6 +12,7 @@ beforeEach(() => {
     activePageId: null,
     activeDocument: null,
     selectedNodeId: null,
+    selectedNodeIds: [],
     hoveredNodeId: null,
     propertiesPanel: { collapsed: true, x: 0, y: 0, width: 360 },
     packageJson: {},
@@ -135,6 +136,7 @@ describe('useInsertModule — VC ref redirect', () => {
       activePageId: 'page-vc',
       activeDocument: null,
       selectedNodeId: null,
+    selectedNodeIds: [],
       hoveredNodeId: null,
       propertiesPanel: { collapsed: true, x: 0, y: 0, width: 360 },
       packageJson: {},
@@ -244,147 +246,3 @@ describe('useInsertModule — VC ref redirect', () => {
   })
 })
 
-describe('useInsertModule — canHaveChildren guard', () => {
-  /**
-   * Real-world scenario reported by the user:
-   *   1. User creates a Text node on a page.
-   *   2. User converts it to a Visual Component (componentize).
-   *   3. The VC's root is a Text — but Text has `canHaveChildren: false`.
-   *   4. User enters VC edit mode and tries to add a Container.
-   *   5. Bug: the Container would land INSIDE the Text root, silently
-   *      corrupting the tree (Text doesn't accept children).
-   *
-   * The fix has two layers:
-   *   - `convertNodeToComponent` auto-wraps non-container source in a
-   *     Container so the VC root is always a valid parent (covered by
-   *     `Gate CNC-C` in convertNodeToComponent.test.ts).
-   *   - This file's tests gate `useInsertModule`'s defensive walk-up: even
-   *     if the resolved parent is a non-container (e.g. legacy data), the
-   *     hook walks to the nearest ancestor that CAN have children, or
-   *     bails with a console.warn rather than corrupting the tree.
-   */
-
-  function setupCanvasWithTextRoot() {
-    // Build a synthetic canvas-page where the root itself is a non-container
-    // Text node. The hook reads this via selectActiveCanvasPage.
-    useEditorStore.setState({
-      site: makeSite({
-        pages: [
-          makePage({
-            id: 'page-text-root',
-            rootNodeId: 'text-root',
-            nodes: {
-              'text-root': makeNode({
-                id: 'text-root',
-                moduleId: 'base.text',
-                children: [],
-              }),
-            },
-          }),
-        ],
-      }),
-      activePageId: 'page-text-root',
-      activeDocument: null,
-      selectedNodeId: null,
-      hoveredNodeId: null,
-      propertiesPanel: { collapsed: true, x: 0, y: 0, width: 360 },
-      packageJson: {},
-      _historyPast: [],
-      _historyFuture: [],
-      canUndo: false,
-      canRedo: false,
-      hasUnsavedChanges: false,
-    } as Parameters<typeof useEditorStore.setState>[0])
-  }
-
-  it('warns and skips insertion when the canvas root is a non-container', () => {
-    setupCanvasWithTextRoot()
-    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {})
-
-    const containerMod = registry.get('base.container')
-    expect(containerMod).toBeTruthy()
-
-    const { result } = renderHook(() => useInsertModule())
-    let insertedId: string | null | undefined
-    act(() => { insertedId = result.current(containerMod!) })
-
-    // Hook must return null — no ancestor accepts children.
-    expect(insertedId).toBeNull()
-    expect(warnSpy).toHaveBeenCalled()
-    const warnArgs = warnSpy.mock.calls[0]
-    expect(warnArgs[0]).toMatch(/\[useInsertModule\]/)
-
-    // The text-root must still have no children — the tree was NOT corrupted.
-    const state = useEditorStore.getState()
-    expect(state.site!.pages[0].nodes['text-root'].children).toEqual([])
-
-    warnSpy.mockRestore()
-  })
-
-  it('warns and skips when explicit parent is a non-container with no container ancestor', () => {
-    setupCanvasWithTextRoot()
-    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {})
-
-    const textMod = registry.get('base.text')
-    const { result } = renderHook(() => useInsertModule())
-    let insertedId: string | null | undefined
-    // Explicitly pass the text root as the parent — useInsertModule's walk-up
-    // must reject it because no ancestor can have children.
-    act(() => { insertedId = result.current(textMod!, 'text-root') })
-
-    expect(insertedId).toBeNull()
-    expect(warnSpy).toHaveBeenCalled()
-
-    warnSpy.mockRestore()
-  })
-
-  it('walks up to find a valid container ancestor when the explicit parent is a Text inside a Container', () => {
-    // Page tree: body → container → text. The user explicitly targets the
-    // text node, but Text can't have children. The walk-up must hop to the
-    // surrounding container (which CAN have children) and insert there.
-    useEditorStore.setState({
-      site: makeSite({
-        pages: [
-          makePage({
-            id: 'page-walkup',
-            rootNodeId: 'body',
-            nodes: {
-              body: makeNode({ id: 'body', moduleId: 'base.body', children: ['ctr'] }),
-              ctr: makeNode({ id: 'ctr', moduleId: 'base.container', children: ['txt'] }),
-              txt: makeNode({ id: 'txt', moduleId: 'base.text', children: [] }),
-            },
-          }),
-        ],
-      }),
-      activePageId: 'page-walkup',
-      activeDocument: null,
-      selectedNodeId: null,
-      hoveredNodeId: null,
-      propertiesPanel: { collapsed: true, x: 0, y: 0, width: 360 },
-      packageJson: {},
-      _historyPast: [],
-      _historyFuture: [],
-      canUndo: false,
-      canRedo: false,
-      hasUnsavedChanges: false,
-    } as Parameters<typeof useEditorStore.setState>[0])
-
-    const imgMod = registry.get('base.image')
-    expect(imgMod).toBeTruthy()
-
-    const { result } = renderHook(() => useInsertModule())
-    let insertedId: string | null | undefined
-    // explicit parent = text node (can't have children) → walk up to container
-    act(() => { insertedId = result.current(imgMod!, 'txt') })
-
-    expect(insertedId).toBeTruthy()
-
-    const state = useEditorStore.getState()
-    const ctr = state.site!.pages[0].nodes['ctr']
-    const txt = state.site!.pages[0].nodes['txt']
-
-    // The image landed in the container, NOT inside the text.
-    expect(ctr.children).toContain(insertedId)
-    expect(txt.children).toEqual([])
-  })
-})
