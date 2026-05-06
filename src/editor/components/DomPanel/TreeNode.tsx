@@ -64,8 +64,10 @@ export const TreeNode = memo(function TreeNode({ nodeId, depth }: TreeNodeProps)
   const node = useEditorStore(
     useCallback((s) => selectActiveCanvasPage(s)?.nodes[nodeId] ?? null, [nodeId]),
   )
-  // Per-node selection: only 2 rows re-render per canvas click (prev + next selected)
-  const isSelected = useEditorStore(useCallback((s) => s.selectedNodeId === nodeId, [nodeId]))
+  // Per-node selection: only the rows whose membership flips re-render per
+  // selection event. With multi-select, several rows may flip in one event
+  // (e.g. shift-click range), but each row still reads only its own boolean.
+  const isSelected = useEditorStore(useCallback((s) => s.selectedNodeIds.includes(nodeId), [nodeId]))
   const isHovered = useEditorStore(useCallback((s) => s.hoveredNodeId === nodeId, [nodeId]))
   const isRoot = useEditorStore(useCallback((s) => selectActiveCanvasPage(s)?.rootNodeId === nodeId, [nodeId]))
   // Subscribe to visualComponents so VC renames re-render every ref's tree row
@@ -253,13 +255,31 @@ export const TreeNode = memo(function TreeNode({ nodeId, depth }: TreeNodeProps)
         tabIndex={0}
         onClick={(e) => {
           e.stopPropagation()
+          // Modifier-aware selection (multi-select): Cmd/Ctrl-click toggles,
+          // Shift-click extends a range from the anchor. Modifier-clicks do
+          // NOT toggle expansion — that's reserved for plain clicks so users
+          // can build a multi-selection without accidentally rearranging the
+          // tree's visible structure.
+          if (e.shiftKey) {
+            selectNode(nodeId, 'range')
+            return
+          }
+          if (e.metaKey || e.ctrlKey) {
+            selectNode(nodeId, 'toggle')
+            return
+          }
           selectNode(nodeId)
           if (hasChildren && !isRoot) toggleExpanded(nodeId)
         }}
         onKeyDown={handleKeyDown}
         onContextMenu={(e) => {
           e.preventDefault(); e.stopPropagation()
-          selectNode(nodeId)
+          // Right-click on a node already in the multi-selection keeps the set;
+          // otherwise replace with just this node. Matches the canvas + Figma.
+          const currentIds = useEditorStore.getState().selectedNodeIds
+          if (!currentIds.includes(nodeId)) {
+            selectNode(nodeId)
+          }
           setContextMenu({ x: e.clientX, y: e.clientY })
         }}
         onMouseEnter={() => hoverNode(nodeId)}

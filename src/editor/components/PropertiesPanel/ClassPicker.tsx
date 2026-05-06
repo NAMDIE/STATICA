@@ -364,8 +364,8 @@ function ClassPickerInner({ nodeId, trailingAction }: ClassPickerProps, ref) {
             side="auto"
             align="start"
             offset={6}
-            width={inputRowRef.current?.getBoundingClientRect().width ?? 240}
-            minWidth={inputRowRef.current?.getBoundingClientRect().width ?? 240}
+            matchAnchorWidth
+            minWidth={240}
             // Cap the suggestions list height so long utility lists (e.g. the
             // generated `text-primary-*` / `bg-primary-*` scales) scroll
             // inside the dropdown instead of overflowing the viewport.

@@ -47,6 +47,7 @@ function resetStore() {
     site: null,
     activePageId: null,
     selectedNodeId: null,
+    selectedNodeIds: [],
     hoveredNodeId: null,
     domTreePanel: { collapsed: false, x: 0, y: 0, width: 280 },
     propertiesPanel: { collapsed: false, x: 0, y: 0, width: 280 },
@@ -189,10 +190,15 @@ describe('DomPanel — empty states', () => {
     expect(screen.getByText('Loading site...')).toBeDefined()
   })
 
-  it('shows "no elements" hint when page has only root node', () => {
+  it('renders the body root row when the page is empty (always-show invariant)', () => {
     loadSite(false) // only root, no children
     render(<DomPanel />)
-    expect(screen.getByText(/no elements yet/i)).toBeDefined()
+    // The empty-state hint is gone — the Body row is always rendered now,
+    // matching the always-wrap invariant (every NodeTree's root is base.body).
+    expect(screen.queryByText(/no elements yet/i)).toBeNull()
+    // The body row is in the tree as a treeitem.
+    const treeItems = screen.getAllByRole('treeitem')
+    expect(treeItems.length).toBeGreaterThan(0)
   })
 
   it('renders tree rows when page has child nodes', () => {
@@ -340,8 +346,10 @@ describe('DomPanel — tree accessibility', () => {
 
   it('selected tree node has aria-selected="true"', () => {
     loadSite(true)
-    // Select the root node (root is always visible regardless of expand state)
-    useEditorStore.setState({ selectedNodeId: 'root-1' } as Parameters<typeof useEditorStore.setState>[0])
+    // Select the root node (root is always visible regardless of expand state).
+    // Multi-select: keep `selectedNodeId` and `selectedNodeIds` in sync — the
+    // per-row `isSelected` selector reads `selectedNodeIds.includes(nodeId)`.
+    useEditorStore.setState({ selectedNodeId: 'root-1', selectedNodeIds: ['root-1'] } as Parameters<typeof useEditorStore.setState>[0])
     render(<DomPanel />)
     const selected = screen.getByRole('treeitem', { selected: true })
     expect(selected).toBeDefined()
@@ -349,7 +357,7 @@ describe('DomPanel — tree accessibility', () => {
 
   it('unselected tree node has aria-selected="false"', () => {
     loadSite(true)
-    useEditorStore.setState({ selectedNodeId: null } as Parameters<typeof useEditorStore.setState>[0])
+    useEditorStore.setState({ selectedNodeId: null, selectedNodeIds: [] } as Parameters<typeof useEditorStore.setState>[0])
     render(<DomPanel />)
     const items = screen.getAllByRole('treeitem')
     // All items should have aria-selected=false when nothing selected
@@ -425,7 +433,7 @@ describe('DomPanel — open container group highlight', () => {
 describe('DomPanel — tree keyboard navigation', () => {
   it('pressing Enter on a tree row selects the node', () => {
     loadSite(true)
-    useEditorStore.setState({ selectedNodeId: null } as Parameters<typeof useEditorStore.setState>[0])
+    useEditorStore.setState({ selectedNodeId: null, selectedNodeIds: [] } as Parameters<typeof useEditorStore.setState>[0])
     render(<DomPanel />)
     // Root is always the first (and only top-level) treeitem visible
     const items = screen.getAllByRole('treeitem')
@@ -437,7 +445,7 @@ describe('DomPanel — tree keyboard navigation', () => {
 
   it('pressing Space on a tree row selects the node', () => {
     loadSite(true)
-    useEditorStore.setState({ selectedNodeId: null } as Parameters<typeof useEditorStore.setState>[0])
+    useEditorStore.setState({ selectedNodeId: null, selectedNodeIds: [] } as Parameters<typeof useEditorStore.setState>[0])
     render(<DomPanel />)
     const items = screen.getAllByRole('treeitem')
     const rootItem = items[0]

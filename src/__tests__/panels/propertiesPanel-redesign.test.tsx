@@ -50,6 +50,7 @@ function resetStore() {
     activePageId: null,
     activeDocument: null,
     selectedNodeId: null,
+    selectedNodeIds: [],
     hoveredNodeId: null,
     activeBreakpointId: 'desktop',
     activeClassId: null,
@@ -214,8 +215,9 @@ describe('ClassComposer inline style filtering', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /edit class class-1/i }))
 
-    // All sections always rendered — both display (layout) and fontFamily (typography) present.
-    expect(document.querySelector('[data-testid="css-property-row-display"]')).not.toBeNull()
+    // All sections always rendered — layout-position renders the DisplaySwitcher
+    // and typography renders the fontFamily row.
+    expect(document.querySelector('[data-testid="css-display-switcher"]')).not.toBeNull()
     expect(document.querySelector('[data-testid="css-property-row-fontFamily"]')).not.toBeNull()
 
     const typographyButton = screen.getByRole('button', { name: /show typography styles/i })
@@ -225,10 +227,10 @@ describe('ClassComposer inline style filtering', () => {
     expect(typographyButton.getAttribute('aria-pressed')).toBe('true')
     expect(document.querySelector('[data-testid="css-property-row-fontFamily"]')).not.toBeNull()
     // Scroll-anchor: clicking a section scrolls to it, does NOT hide other sections.
-    expect(document.querySelector('[data-testid="css-property-row-display"]')).not.toBeNull()
+    expect(document.querySelector('[data-testid="css-display-switcher"]')).not.toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: /show all class style categories/i }))
-    expect(document.querySelector('[data-testid="css-property-row-display"]')).not.toBeNull()
+    expect(document.querySelector('[data-testid="css-display-switcher"]')).not.toBeNull()
   })
 
   it('search filters across all categories regardless of which rail button was last clicked', () => {
@@ -241,15 +243,17 @@ describe('ClassComposer inline style filtering', () => {
     fireEvent.click(screen.getByRole('button', { name: /show typography styles/i }))
 
     // All sections still present after clicking a rail button in scroll-anchor mode.
-    expect(document.querySelector('[data-testid="css-property-row-display"]')).not.toBeNull()
+    expect(document.querySelector('[data-testid="css-display-switcher"]')).not.toBeNull()
 
-    // Search for 'display' — only display-related properties are shown.
+    // Search for 'fontFamily' — only typography rows match. The layout-position
+    // section, which is not specially filtered by query inside LayoutSection,
+    // collapses to nothing because none of its property keys match.
     fireEvent.change(screen.getByRole('searchbox', { name: /search class style properties to add/i }), {
-      target: { value: 'display' },
+      target: { value: 'fontFamily' },
     })
 
-    expect(document.querySelector('[data-testid="css-property-row-display"]')).not.toBeNull()
-    expect(document.querySelector('[data-testid="css-property-row-fontFamily"]')).toBeNull()
+    expect(document.querySelector('[data-testid="css-property-row-fontFamily"]')).not.toBeNull()
+    expect(document.querySelector('[data-testid="css-property-row-color"]')).toBeNull()
   })
 })
 
@@ -571,19 +575,23 @@ describe('PP-11 — Editing a text-type class property via TextControl updates c
 })
 
 describe('ClassComposer unset CSS property placeholders', () => {
-  it('renders unset select defaults as placeholders, not selected values', () => {
+  it('renders the display switcher with no segment pressed when display is unset', () => {
     const { nodeId } = loadSiteWithClasses(1)
     selectNode(nodeId)
     render(<PropertiesPanel />)
 
     fireEvent.click(screen.getByRole('button', { name: /edit class class-1/i }))
 
-    const displayRow = document.querySelector('[data-testid="css-property-row-display"]')
-    const displaySelect = displayRow?.querySelector('[role="combobox"]') as HTMLInputElement
+    const displaySwitcher = document.querySelector('[data-testid="css-display-switcher"]')
+    expect(displaySwitcher).not.toBeNull()
+    expect(displaySwitcher?.getAttribute('data-display-value')).toBe('')
 
-    expect(displayRow?.getAttribute('data-state')).toBe('unset')
-    expect(displaySelect.value).toBe('')
-    expect(displaySelect.placeholder).toBe('block')
+    // No segment is pressed in the unset state.
+    const flexSegment = screen.getByRole('button', { name: /^flex layout$/i })
+    const gridSegment = screen.getByRole('button', { name: /^grid layout$/i })
+    expect(flexSegment.getAttribute('aria-pressed')).toBe('false')
+    expect(gridSegment.getAttribute('aria-pressed')).toBe('false')
+
     expect(useEditorStore.getState().site!.classes[useEditorStore.getState().activeClassId!].styles.display).toBeUndefined()
   })
 
@@ -612,15 +620,189 @@ describe('ClassComposer unset CSS property placeholders', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /edit class class-1/i }))
 
-    const displaySelect = document
-      .querySelector('[data-testid="css-property-row-display"]')
-      ?.querySelector('[role="combobox"]') as HTMLInputElement
+    // The Flex segment of the SegmentedControl is pressed when display: flex
+    // is stored on the class.
+    const flexSegment = screen.getByRole('button', { name: /^flex layout$/i })
+    expect(flexSegment.getAttribute('aria-pressed')).toBe('true')
+
     const gapInput = document
       .querySelector('[data-testid="css-property-row-gap"]')
       ?.querySelector('input') as HTMLInputElement
-
-    expect(displaySelect.value).toBe('flex')
     expect(gapInput.value).toBe('32px')
+  })
+})
+
+describe('LayoutSection — clear via active segment X', () => {
+  it('clicking the active flex segment clears display from base styles', () => {
+    const { nodeId, classIds } = loadSiteWithClasses(1)
+    const clsId = classIds[0]
+    useEditorStore.getState().updateClassStyles(clsId, { display: 'flex' })
+    selectNode(nodeId)
+    render(<PropertiesPanel />)
+
+    fireEvent.click(screen.getByRole('button', { name: /edit class class-1/i }))
+
+    const flexSegment = screen.getByRole('button', { name: /^flex layout$/i })
+    expect(flexSegment.getAttribute('aria-pressed')).toBe('true')
+
+    fireEvent.click(flexSegment)
+
+    expect(useEditorStore.getState().site!.classes[clsId].styles.display).toBeUndefined()
+    // After clearing, no segment is pressed.
+    expect(screen.getByRole('button', { name: /^flex layout$/i }).getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('clicking the active grid segment clears display from base styles even when on a breakpoint tab', () => {
+    const { nodeId, classIds } = loadSiteWithClasses(1)
+    const clsId = classIds[0]
+    useEditorStore.getState().updateClassStyles(clsId, { display: 'grid' })
+    useEditorStore.setState({ activeBreakpointId: 'mobile' } as Parameters<typeof useEditorStore.setState>[0])
+    selectNode(nodeId)
+    render(<PropertiesPanel />)
+
+    fireEvent.click(screen.getByRole('button', { name: /edit class class-1/i }))
+
+    const gridSegment = screen.getByRole('button', { name: /^grid layout$/i })
+    expect(gridSegment.getAttribute('aria-pressed')).toBe('true')
+
+    fireEvent.click(gridSegment)
+
+    // X click clears the property entirely, not just at the active breakpoint —
+    // otherwise the inherited base value would bleed through and the segment
+    // would stay pressed (Job #1342 followup).
+    expect(useEditorStore.getState().site!.classes[clsId].styles.display).toBeUndefined()
+    expect(screen.getByRole('button', { name: /^grid layout$/i }).getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByRole('button', { name: /^flex layout$/i }).getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('clicking the active flex direction icon clears flexDirection', () => {
+    const { nodeId, classIds } = loadSiteWithClasses(1)
+    const clsId = classIds[0]
+    useEditorStore.getState().updateClassStyles(clsId, { display: 'flex', flexDirection: 'column' })
+    selectNode(nodeId)
+    render(<PropertiesPanel />)
+
+    fireEvent.click(screen.getByRole('button', { name: /edit class class-1/i }))
+
+    const columnSegment = screen.getByRole('button', { name: /^column$/i })
+    expect(columnSegment.getAttribute('aria-pressed')).toBe('true')
+
+    fireEvent.click(columnSegment)
+
+    expect(useEditorStore.getState().site!.classes[clsId].styles.flexDirection).toBeUndefined()
+  })
+})
+
+describe('LayoutSection — grid block', () => {
+  it('renders the grid block when display is grid', () => {
+    const { nodeId, classIds } = loadSiteWithClasses(1)
+    const clsId = classIds[0]
+    useEditorStore.getState().updateClassStyles(clsId, { display: 'grid' })
+    selectNode(nodeId)
+    render(<PropertiesPanel />)
+
+    fireEvent.click(screen.getByRole('button', { name: /edit class class-1/i }))
+
+    // Grid template column / row track pickers and the alignment switchers
+    // are present.
+    expect(screen.getByRole('group', { name: /grid template columns/i })).toBeDefined()
+    expect(screen.getByRole('group', { name: /grid template rows/i })).toBeDefined()
+    expect(screen.getByRole('group', { name: /^align items$/i })).toBeDefined()
+    expect(screen.getByRole('group', { name: /^justify items$/i })).toBeDefined()
+  })
+
+  it('does not render the grid block when display is flex', () => {
+    const { nodeId, classIds } = loadSiteWithClasses(1)
+    const clsId = classIds[0]
+    useEditorStore.getState().updateClassStyles(clsId, { display: 'flex' })
+    selectNode(nodeId)
+    render(<PropertiesPanel />)
+
+    fireEvent.click(screen.getByRole('button', { name: /edit class class-1/i }))
+
+    expect(screen.queryByRole('group', { name: /grid template columns/i })).toBeNull()
+  })
+
+  it('clicking a column count segment writes repeat(N, 1fr) to gridTemplateColumns', () => {
+    const { nodeId, classIds } = loadSiteWithClasses(1)
+    const clsId = classIds[0]
+    useEditorStore.getState().updateClassStyles(clsId, { display: 'grid' })
+    selectNode(nodeId)
+    render(<PropertiesPanel />)
+
+    fireEvent.click(screen.getByRole('button', { name: /edit class class-1/i }))
+
+    // Column track group renders [1, 2, 3, 4, 5, 6] count segments. Click "3".
+    const columnGroup = screen.getByRole('group', { name: /grid template columns/i })
+    const threeColsSegment = columnGroup.querySelector('button[aria-label="3 tracks"]') as HTMLButtonElement
+    expect(threeColsSegment).not.toBeNull()
+    fireEvent.click(threeColsSegment)
+
+    expect(useEditorStore.getState().site!.classes[clsId].styles.gridTemplateColumns).toBe('repeat(3, 1fr)')
+  })
+
+  it('reflects an existing repeat(N, 1fr) value as a pressed segment', () => {
+    const { nodeId, classIds } = loadSiteWithClasses(1)
+    const clsId = classIds[0]
+    useEditorStore.getState().updateClassStyles(clsId, { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)' })
+    selectNode(nodeId)
+    render(<PropertiesPanel />)
+
+    fireEvent.click(screen.getByRole('button', { name: /edit class class-1/i }))
+
+    const columnGroup = screen.getByRole('group', { name: /grid template columns/i })
+    const fourColsSegment = columnGroup.querySelector('button[aria-label="4 tracks"]') as HTMLButtonElement
+    expect(fourColsSegment.getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('falls back to a custom-value chip when gridTemplateColumns is a non-preset template', () => {
+    const { nodeId, classIds } = loadSiteWithClasses(1)
+    const clsId = classIds[0]
+    useEditorStore.getState().updateClassStyles(clsId, { display: 'grid', gridTemplateColumns: '200px 1fr 200px' })
+    selectNode(nodeId)
+    render(<PropertiesPanel />)
+
+    fireEvent.click(screen.getByRole('button', { name: /edit class class-1/i }))
+
+    // The chip exposes the raw value as the button's accessible name.
+    const chip = screen.getByRole('button', { name: /grid template columns: 200px 1fr 200px/i })
+    expect(chip).toBeDefined()
+  })
+
+  it('clicking the active grid column segment clears gridTemplateColumns', () => {
+    const { nodeId, classIds } = loadSiteWithClasses(1)
+    const clsId = classIds[0]
+    useEditorStore.getState().updateClassStyles(clsId, { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)' })
+    selectNode(nodeId)
+    render(<PropertiesPanel />)
+
+    fireEvent.click(screen.getByRole('button', { name: /edit class class-1/i }))
+
+    const columnGroup = screen.getByRole('group', { name: /grid template columns/i })
+    const twoColsSegment = columnGroup.querySelector('button[aria-label="2 tracks"]') as HTMLButtonElement
+    expect(twoColsSegment.getAttribute('aria-pressed')).toBe('true')
+
+    fireEvent.click(twoColsSegment)
+
+    expect(useEditorStore.getState().site!.classes[clsId].styles.gridTemplateColumns).toBeUndefined()
+  })
+
+  it('hides gridTemplateColumns / gridTemplateRows / justifyItems fallback rows when display is grid', () => {
+    const { nodeId, classIds } = loadSiteWithClasses(1)
+    const clsId = classIds[0]
+    useEditorStore.getState().updateClassStyles(clsId, { display: 'grid' })
+    selectNode(nodeId)
+    render(<PropertiesPanel />)
+
+    fireEvent.click(screen.getByRole('button', { name: /edit class class-1/i }))
+
+    // Generic ClassPropertyRow rows for the grid-owned properties are
+    // suppressed; the visual GridBlock owns those controls instead.
+    expect(document.querySelector('[data-testid="css-property-row-gridTemplateColumns"]')).toBeNull()
+    expect(document.querySelector('[data-testid="css-property-row-gridTemplateRows"]')).toBeNull()
+    expect(document.querySelector('[data-testid="css-property-row-justifyItems"]')).toBeNull()
+    // Other fallback rows still render — gap, position, etc.
+    expect(document.querySelector('[data-testid="css-property-row-gap"]')).not.toBeNull()
   })
 })
 
@@ -656,10 +838,11 @@ describe('ClassComposer set style indicators', () => {
     expect(screen.queryByTestId('class-style-section-dot-layout-position')).toBeNull()
     expect(screen.queryByTestId('class-style-category-dot-layout-position')).toBeNull()
 
-    const displayRow = document.querySelector('[data-testid="css-property-row-display"]')
-    const displaySelect = displayRow?.querySelector('[role="combobox"]') as HTMLInputElement
-    expect(displaySelect.value).toBe('')
-    expect(displaySelect.placeholder).toBe('flex')
+    // Inherited base style (display: flex) is reflected on the SegmentedControl
+    // — the Flex segment is pressed because the inherited cascade resolves to
+    // flex on this breakpoint, even though nothing is stored at the mobile tab.
+    const flexSegment = screen.getByRole('button', { name: /^flex layout$/i })
+    expect(flexSegment.getAttribute('aria-pressed')).toBe('true')
   })
 })
 
@@ -1018,7 +1201,9 @@ describe('PP-21 — Empty class shows full property catalog', () => {
     fireEvent.click(pill)
 
     // Full catalog rows are visible even before a property is assigned.
-    expect(document.querySelector('[data-testid="css-property-row-display"]')).not.toBeNull()
+    // Layout-position uses the DisplaySwitcher; typography still uses
+    // generic property rows (fontFamily).
+    expect(document.querySelector('[data-testid="css-display-switcher"]')).not.toBeNull()
     expect(document.querySelector('[data-testid="css-property-row-fontFamily"]')).not.toBeNull()
     expect(document.querySelectorAll('[data-testid^="css-property-row-"]').length).toBeGreaterThan(0)
 

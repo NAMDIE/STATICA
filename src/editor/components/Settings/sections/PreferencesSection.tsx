@@ -75,7 +75,6 @@ function BooleanPreferenceRow({ pref }: { pref: BooleanCatalogDef }) {
       <Switch
         id={id}
         checked={checked}
-        hitArea
         onCheckedChange={(value) => setEditorPreference(pref.id, value)}
       />
     </div>

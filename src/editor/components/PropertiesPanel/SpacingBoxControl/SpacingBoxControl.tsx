@@ -774,7 +774,7 @@ function SideInput({
             side="auto"
             align="start"
             offset={4}
-            width={Math.max(inputRef.current?.getBoundingClientRect().width ?? 132, 132)}
+            matchAnchorWidth
             minWidth={132}
             ariaLabel={`${box} ${side} spacing tokens`}
             triggerRef={inputRef}

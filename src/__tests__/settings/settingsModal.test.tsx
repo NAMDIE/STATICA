@@ -53,6 +53,7 @@ function resetStore() {
     site: null,
     activePageId: null,
     selectedNodeId: null,
+    selectedNodeIds: [],
     hoveredNodeId: null,
     settingsModalOpen: false,
     settingsModalSection: 'pages',
@@ -625,43 +626,45 @@ describe('SettingsButton + uiSlice — section ID alignment (source enforcement)
 // ---------------------------------------------------------------------------
 // 14 — WCAG 2.4.7 — Input focus rings (source-scan enforcement)
 //
-// inputStyle in styles.ts uses outline:none — all settings inputs had zero
-// visible focus indicator for keyboard users. Fix: a scoped <style> tag in
-// SettingsModal.tsx supplies :focus-visible box-shadow for input/select/textarea.
-// Consistent with the ZoomControls and NodeWrapper inset-box-shadow pattern.
+// Focus rings are now provided by the Input / Select / Textarea UI primitives
+// themselves (`src/ui/components/Input/Input.module.css`,
+// `src/ui/components/Select/Select.module.css`) via the `--input-border-focus`
+// token. The Settings modal no longer needs (and no longer has) a scoped
+// `<style>` block overriding focus styles — that band-aid existed when the
+// legacy `inputStyle` had `outline:none` with no replacement; the primitives
+// now own this contract.
 // ---------------------------------------------------------------------------
 
 describe('SettingsModal — WCAG 2.4.7 input focus rings (source enforcement)', () => {
-  const modalSrc = readFileSync(
-    new URL('../../editor/components/Settings/SettingsModal.tsx', import.meta.url),
+  const inputCss = readFileSync(
+    new URL('../../ui/components/Input/Input.module.css', import.meta.url),
+    'utf-8',
+  )
+  const selectCss = readFileSync(
+    new URL('../../ui/components/Select/Select.module.css', import.meta.url),
     'utf-8',
   )
 
-  it('SettingsModal contains a <style> tag for scoped :focus-visible rules', () => {
-    // The style tag must be present — removing it would restore the WCAG 2.4.7 violation
-    // (outline:none with no visible alternative).
-    expect(modalSrc).toContain('<style>')
+  it('Input primitive has a visible :focus / :focus-within style', () => {
+    // The Input primitive must carry its own focus indicator — every settings
+    // text/number/url field uses it.
+    expect(inputCss).toMatch(/:focus(-within)?/)
+    expect(inputCss).toContain('--input-border-focus')
   })
 
-  it(':focus-visible rule is scoped to [data-testid="settings-modal"]', () => {
-    // Prevents the focus-ring styles from leaking outside the modal.
-    expect(modalSrc).toContain('[data-testid="settings-modal"]')
-    expect(modalSrc).toContain(':focus-visible')
+  it('Select primitive has a visible focus indicator', () => {
+    // Select's combobox trigger renders an <input role="combobox"> internally,
+    // which inherits the same focus contract via the input/border tokens.
+    expect(selectCss).toMatch(/--input-border-focus|:focus/)
   })
 
-  it('focus ring style includes box-shadow fallback for input and select', () => {
-    // The substitute focus indicator must use a visible box-shadow
-    // (outline:none alone is insufficient — WCAG SC 2.4.7).
-    expect(modalSrc).toContain('box-shadow')
-    // Must cover both input and select elements (PagesSection + BreakpointsSection
-    // use both input and select controls).
-    expect(modalSrc).toMatch(/input:focus-visible/)
-    expect(modalSrc).toMatch(/select:focus-visible/)
-  })
-
-  it('border-color changes on focus to reinforce visibility (two-cue pattern)', () => {
-    // Box-shadow alone can be missed by users with certain visual impairments.
-    // Adding border-color change provides a second visual cue.
-    expect(modalSrc).toContain('border-color')
+  it('SettingsModal no longer carries an inline <style> band-aid', () => {
+    // Hardcoded rgba focus ring inside the modal violated the design-token
+    // policy. Primitives now own this — the `<style>` block must stay gone.
+    const modalSrc = readFileSync(
+      new URL('../../editor/components/Settings/SettingsModal.tsx', import.meta.url),
+      'utf-8',
+    )
+    expect(modalSrc).not.toContain('<style>')
   })
 })

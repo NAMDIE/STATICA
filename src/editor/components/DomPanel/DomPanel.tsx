@@ -293,7 +293,10 @@ function DomPanelInner({ variant = 'floating' }: { variant?: PanelVariant }) {
       if (page?.id.startsWith('vc-virtual:')) return
 
       try {
-        useEditorStore.getState().moveNode(target.draggedId, target.parentId, target.index)
+        // Multi-drag: route to `moveNodes` so every dragged id is moved in a
+        // single undo step. For single-drag, `target.draggedIds` is `[draggedId]`
+        // and `moveNodes` collapses to `moveNode` internally.
+        useEditorStore.getState().moveNodes(target.draggedIds, target.parentId, target.index)
       } catch (err) {
         console.warn('[DomPanel] Ignored stale drag/drop target:', err)
       }
@@ -365,7 +368,11 @@ function DomPanelInner({ variant = 'floating' }: { variant?: PanelVariant }) {
             iconSize={11}
             iconColor="var(--editor-text-subtle)"
           />
-          <TreeLabel>{dnd.activeLabel}</TreeLabel>
+          {dnd.activeCount > 1 ? (
+            <TreeLabel>{dnd.activeCount} layers</TreeLabel>
+          ) : (
+            <TreeLabel>{dnd.activeLabel}</TreeLabel>
+          )}
         </TreeRow>
       ) : null}
     </DragOverlay>
@@ -448,24 +455,17 @@ function DomPanelInner({ variant = 'floating' }: { variant?: PanelVariant }) {
                   testId="dom-panel-tree"
                   containerRef={treeRef}
                 >
-                  {(() => {
-                    // The "no elements yet" hint is appropriate ONLY for empty
-                    // pages whose rootNode is the standard base.body wrapper.
-                    // VC canvases whose rootNode is the converted module
-                    // itself (e.g. a single Button) must still render the
-                    // tree — the rootNode IS the content there.
-                    const rootNode = page.nodes[page.rootNodeId]
-                    const isEmptyPage =
-                      rootNode?.moduleId === 'base.body' &&
-                      rootNode.children.length === 0
-                    return isEmptyPage ? (
-                      <div className={styles.emptyMsg}>
-                        This page has no elements yet. Use the + button to add a module.
-                      </div>
-                    ) : (
-                      <TreeNode nodeId={page.rootNodeId} depth={0} />
-                    )
-                  })()}
+                  {/*
+                    Always render the root. By the always-wrap invariant,
+                    every NodeTree (page, VC, slot fragment) has `base.body`
+                    as its root. Empty pages used to hide the body and show
+                    a "no elements yet" hint, which made the body appear to
+                    pop into existence when the user added their first
+                    module. Showing the body row from the start makes the
+                    tree's structure (and its `+` affordances) consistent
+                    across the empty → populated transition.
+                  */}
+                  <TreeNode nodeId={page.rootNodeId} depth={0} />
                 </TreeContainer>
               </DomPanelDndContext.Provider>
               {typeof document === 'undefined'

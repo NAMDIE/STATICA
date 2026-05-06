@@ -91,11 +91,18 @@ export function CanvasRoot() {
   const hoverNode = useEditorStore((s) => s.hoverNode)
   const clearSelection = useEditorStore((s) => s.clearSelection)
   const deleteNode = useEditorStore((s) => s.deleteNode)
+  // Multi-select: keyboard shortcuts dispatch the *Nodes batch actions when a
+  // multi-selection is active so a single Ctrl+D / Delete / Cmd+C/X/V acts on
+  // every selected layer in one undo step.
+  const deleteNodes = useEditorStore((s) => s.deleteNodes)
   const duplicateNode = useEditorStore((s) => s.duplicateNode)
+  const duplicateNodes = useEditorStore((s) => s.duplicateNodes)
   const renameNode = useEditorStore((s) => s.renameNode)
   const wrapNode = useEditorStore((s) => s.wrapNode)
   const copyNode = useEditorStore((s) => s.copyNode)
+  const copyNodes = useEditorStore((s) => s.copyNodes)
   const cutNode = useEditorStore((s) => s.cutNode)
+  const cutNodes = useEditorStore((s) => s.cutNodes)
   const pasteNode = useEditorStore((s) => s.pasteNode)
   const setActiveBreakpoint = useEditorStore((s) => s.setActiveBreakpoint)
   const setFocusedPanel = useEditorStore((s) => s.setFocusedPanel)
@@ -156,7 +163,15 @@ export function CanvasRoot() {
       if (breakpointId && breakpointId !== activeBreakpointId) {
         setActiveBreakpoint(breakpointId)
       }
-      selectNode(nodeId)
+      // Modifier-aware selection (multi-select): Cmd/Ctrl-click toggles, Shift-
+      // click extends a range from the anchor. Plain clicks replace the
+      // selection (default mode in `selectNode`).
+      const mode = e.shiftKey
+        ? 'range'
+        : e.metaKey || e.ctrlKey
+          ? 'toggle'
+          : 'replace'
+      selectNode(nodeId, mode)
       setFocusedPanel('canvas')
     },
     [activeBreakpointId, selectNode, setActiveBreakpoint, setFocusedPanel],
@@ -176,7 +191,13 @@ export function CanvasRoot() {
       if (breakpointId && breakpointId !== activeBreakpointId) {
         setActiveBreakpoint(breakpointId)
       }
-      selectNode(nodeId)
+      // If the right-clicked node is part of an existing multi-selection,
+      // KEEP the selection (the menu acts on the whole set). Otherwise replace
+      // the selection with just this node — matches Figma / VS Code behavior.
+      const currentIds = useEditorStore.getState().selectedNodeIds
+      if (!currentIds.includes(nodeId)) {
+        selectNode(nodeId)
+      }
       setFocusedPanel('canvas')
       setContextMenu({ x: e.clientX, y: e.clientY, nodeId })
     },
@@ -234,7 +255,12 @@ export function CanvasRoot() {
 
       if (!selectedNodeId) return
 
-      // Delete / Backspace → delete selected node (gated by confirmBeforeDelete pref)
+      // Read the live selection set inside the handler so multi-actions see
+      // the latest state (subscribing in the component body would cause
+      // re-renders on every selection change just to refresh this callback).
+      const currentIds = useEditorStore.getState().selectedNodeIds
+
+      // Delete / Backspace → delete selected layer(s)
       if (e.key === 'Delete' || e.key === 'Backspace') {
         // Don't intercept backspace in inputs
         const target = e.target as HTMLElement
@@ -244,13 +270,24 @@ export function CanvasRoot() {
           target.isContentEditable
         ) return
         e.preventDefault()
-        requestDeleteNode(selectedNodeId)
+        if (currentIds.length > 1) {
+          // Multi-delete: skip the central confirm dialog for v1 (no plumbing
+          // to render "Delete N layers?" from this hot path). Undo via Ctrl+Z.
+          deleteNodes(currentIds)
+          clearSelection()
+        } else {
+          requestDeleteNode(selectedNodeId)
+        }
       }
 
       // Ctrl/Cmd+D → duplicate
       if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
         e.preventDefault()
-        duplicateNode(selectedNodeId)
+        if (currentIds.length > 1) {
+          duplicateNodes(currentIds)
+        } else {
+          duplicateNode(selectedNodeId)
+        }
       }
 
       // Ctrl/Cmd+C / X / V — clipboard. Skip when the active element is a
@@ -266,12 +303,15 @@ export function CanvasRoot() {
 
         if (e.key === 'c') {
           e.preventDefault()
-          copyNode(selectedNodeId)
+          if (currentIds.length > 1) copyNodes(currentIds)
+          else copyNode(selectedNodeId)
         } else if (e.key === 'x') {
           e.preventDefault()
-          cutNode(selectedNodeId)
+          if (currentIds.length > 1) cutNodes(currentIds)
+          else cutNode(selectedNodeId)
         } else if (e.key === 'v') {
           e.preventDefault()
+          // Paste anchors to the multi-selection's anchor — same single target.
           pasteNode(selectedNodeId)
         }
       }
@@ -279,12 +319,17 @@ export function CanvasRoot() {
     [
       selectedNodeId,
       canvasKeyDown,
+      clearSelection,
       requestDeleteNode,
       duplicateNode,
+      duplicateNodes,
+      deleteNodes,
       activeDocument,
       setActiveDocument,
       copyNode,
+      copyNodes,
       cutNode,
+      cutNodes,
       pasteNode,
     ],
   )
