@@ -15,7 +15,7 @@ import {
   frameworkColorClassId,
   generateFrameworkColorUtilityClasses,
 } from '@core/framework/colors'
-import { buildSiteCssBundle } from '../../../server/cms/siteCssBundle'
+import { buildSiteCssBundle } from '../../../server/publish/siteCssBundle'
 import { makeModule, makeRegistry, makePage, makeSite } from '../publisher/helpers'
 
 describe('buildSiteCssBundle', () => {

@@ -5,9 +5,9 @@
  *                              order. The repository handles the actual ordering
  *                              and the (currently unbounded) result limit.
  */
-import type { DbClient } from '../../cms/db/client'
-import { requireCapability } from '../../cms/authz'
-import { listAuditEvents } from '../../cms/auditRepository'
+import type { DbClient } from '../../db/client'
+import { requireCapability } from '../../auth/authz'
+import { listAuditEvents } from '../../repositories/audit'
 import { jsonResponse, methodNotAllowed } from '../../http'
 import { CMS_API_PREFIX } from './shared'
 

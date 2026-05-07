@@ -5,4 +5,4 @@
  * reference the type without creating a cycle through AdminLayout.tsx, which
  * itself imports the editor chrome.
  */
-export type AdminWorkspace = 'site' | 'content' | 'plugins' | 'pluginPage'
+export type AdminWorkspace = 'site' | 'content' | 'plugins' | 'users' | 'pluginPage'

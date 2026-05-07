@@ -12,7 +12,7 @@ import {
   computePrimarySubset,
   mapWithConcurrency,
   parseCss2Faces,
-} from '../../../server/cms/fontsRepository'
+} from '../../../server/repositories/fonts'
 
 const ROBOTO_CSS = `
 /* cyrillic */

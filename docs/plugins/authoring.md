@@ -57,14 +57,14 @@ Use `activate` to register backend routes:
 
 ```js
 export function activate(api) {
-  api.cms.routes.get('/status', () => ({ ok: true }))
+  api.cms.routes.get('/status', 'plugins.manage', () => ({ ok: true }))
 }
 ```
 
 Routes are mounted under:
 
 ```text
-/api/cms/plugins/:pluginId/runtime/*
+/admin/api/cms/plugins/:pluginId/runtime/*
 ```
 
 ## Plugin Storage

@@ -111,7 +111,7 @@ describe('SiteExplorerPanel templates', () => {
   it('uses the shared Select dropdown for the template collection field', async () => {
     let collectionRequests = 0
     globalThis.fetch = async (input: RequestInfo | URL) => {
-      if (String(input) === '/api/cms/content/collections') {
+      if (String(input) === '/admin/api/cms/content/collections') {
         collectionRequests += 1
         return new Response(JSON.stringify({
           collections: [

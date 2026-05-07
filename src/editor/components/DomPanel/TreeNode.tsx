@@ -44,7 +44,7 @@ import {
   TreeRow,
 } from '../../ui/Tree'
 import { ModuleIcon } from '../../ui/ModuleIcon'
-import { pillAccent } from '../../ui/pillAccent'
+import { pillAccent } from '@ui/pillAccent'
 import { useEditorPreference } from '@editor/preferences/editorPreferences'
 import { useConfirmDelete } from '../shared/ConfirmDeleteDialog'
 import styles from './TreeNode.module.css'
@@ -437,4 +437,3 @@ function ChildrenGroup({ nodeId, depth }: { nodeId: string; depth: number }) {
     </div>
   )
 }
-

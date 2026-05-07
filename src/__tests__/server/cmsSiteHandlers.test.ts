@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test'
 import type { SiteDocument } from '@core/page-tree/schemas'
-import { SESSION_COOKIE_NAME, hashSessionToken } from '../../../server/cms/auth'
-import type { DbClient, DbResult } from '../../../server/cms/db'
-import { handleCmsRequest } from '../../../server/cms/handlers'
+import { SESSION_COOKIE_NAME, hashSessionToken } from '../../../server/auth/tokens'
+import type { DbClient, DbResult } from '../../../server/db'
+import { handleCmsRequest } from '../../../server/handlers/cms'
 
 function makeFakeDb() {
   let siteRow: Record<string, unknown> | null = null
@@ -25,12 +25,31 @@ function makeFakeDb() {
     const sql = strings.reduce<string>((acc, str, i) => (i === 0 ? str : `${acc}$${i}${str}`), '')
     const normalized = sql.replace(/\s+/g, ' ').trim().toLowerCase()
 
-    // findAdminBySessionHash — values[0]=idHash
-    if (normalized.includes('select admin_users.id, admin_users.email')) {
+    if (normalized.includes('from sessions') && normalized.includes('join users')) {
       const session = sessions.find((s) => String(s.id_hash) === String(values[0]))
       if (!session) return { rows: [], rowCount: 0 }
-      const admin = admins.find((a) => a.id === session.admin_user_id)
-      return { rows: admin ? [admin as Row] : [], rowCount: admin ? 1 : 0 }
+      const admin = admins.find((a) => a.id === session.user_id)
+      return {
+        rows: admin ? [{
+          ...admin,
+          email_normalized: admin.email,
+          display_name: 'Owner',
+          status: 'active',
+          role_id: 'owner',
+          last_login_at: null,
+          updated_at: admin.created_at,
+          deleted_at: null,
+          role_slug: 'owner',
+          role_name: 'Owner',
+          role_description: '',
+          role_is_system: true,
+          role_capabilities_json: ['site.read', 'site.edit'],
+        } as Row] : [],
+        rowCount: admin ? 1 : 0,
+      }
+    }
+    if (normalized.includes('update sessions') && normalized.includes('last_seen_at')) {
+      return { rows: [], rowCount: 1 }
     }
     // saveDraftSite insert into site (via transaction) — values[0]=name, values[1]=siteShell
     if (normalized.includes('insert into site')) {
@@ -141,7 +160,7 @@ async function createCookie(db: ReturnType<typeof makeFakeDb>): Promise<string> 
   const token = 'valid-session-token'
   db.sessions.push({
     id_hash: await hashSessionToken(token),
-    admin_user_id: 'admin_1',
+    user_id: 'admin_1',
     expires_at: new Date('2030-01-01').toISOString(),
   })
   return `${SESSION_COOKIE_NAME}=${token}`
@@ -171,7 +190,7 @@ function cmsRequest(
 describe('cms site handlers', () => {
   it('requires an admin session for draft site reads', async () => {
     const db = makeFakeDb()
-    const res = await handleCmsRequest(cmsRequest('http://localhost/api/cms/site'), db)
+    const res = await handleCmsRequest(cmsRequest('http://localhost/admin/api/cms/site'), db)
 
     expect(res.status).toBe(401)
   })
@@ -180,7 +199,7 @@ describe('cms site handlers', () => {
     const db = makeFakeDb()
     const cookie = await createCookie(db)
 
-    const save = await handleCmsRequest(cmsRequest('http://localhost/api/cms/site', {
+    const save = await handleCmsRequest(cmsRequest('http://localhost/admin/api/cms/site', {
       method: 'PUT',
       body: JSON.stringify({ site: site() }),
       headers: {
@@ -190,7 +209,7 @@ describe('cms site handlers', () => {
     }), db)
     expect(save.status).toBe(200)
 
-    const load = await handleCmsRequest(cmsRequest('http://localhost/api/cms/site', {
+    const load = await handleCmsRequest(cmsRequest('http://localhost/admin/api/cms/site', {
       headers: { cookie },
     }), db)
     expect(load.status).toBe(200)

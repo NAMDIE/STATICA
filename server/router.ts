@@ -1,21 +1,21 @@
-import { handleAgentRequest, handleAgentToolResult } from './agentHandler'
-import { handleCmsRequest } from './cms/handlers'
-import type { DbClient } from './cms/db/client'
+import { handleAgentRequest, handleAgentToolResult } from './handlers/agent'
+import { handleCmsRequest } from './handlers/cms'
+import type { DbClient } from './db/client'
 import {
   getContentEntryRedirectByRoute,
   getPublishedContentEntryByRoute,
-} from './cms/contentRepository'
-import { renderContentDocumentHtml } from './cms/contentRenderer'
-import { getLatestPublishedSiteSnapshot, getPublishedPageBySlug } from './cms/publishRepository'
-import { renderPublishedContentTemplate, renderPublishedSnapshot } from './cms/publicRenderer'
-import { getSetupStatus } from './cms/repositories'
-import { getPublishedRuntimeAsset } from './cms/runtimeAssetRepository'
-import { handleLoopRequest, isLoopRuntimeAssetPath, serveLoopRuntimeAsset } from './cms/handlers/loop'
+} from './repositories/content'
+import { renderContentDocumentHtml } from './publish/contentRenderer'
+import { getLatestPublishedSiteSnapshot, getPublishedPageBySlug } from './repositories/publish'
+import { renderPublishedContentTemplate, renderPublishedSnapshot } from './publish/publicRenderer'
+import { getSetupStatus } from './repositories/setup'
+import { getPublishedRuntimeAsset } from './repositories/runtimeAsset'
+import { handleLoopRequest, isLoopRuntimeAssetPath, serveLoopRuntimeAsset } from './handlers/cms/loop'
 import { jsonResponse } from './http'
 import { serveAdminApp, serveStaticFile } from './static'
 import { registry } from '@core/module-engine/registry'
 import type { CssBundleFile } from '@core/publisher/siteCssBundle'
-import { buildSiteCssBundle } from './cms/siteCssBundle'
+import { buildSiteCssBundle } from './publish/siteCssBundle'
 
 const VITE_DEV_URL = 'http://localhost:5173'
 

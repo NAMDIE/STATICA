@@ -116,7 +116,7 @@ describe('AdminLayout — CMS site hydration gate', () => {
     let siteFetchCalls = 0
     const originalFetch = globalThis.fetch
     globalThis.fetch = (async (input: RequestInfo | URL) => {
-      if (String(input).includes('/api/cms/site')) siteFetchCalls += 1
+      if (String(input).includes('/admin/api/cms/site')) siteFetchCalls += 1
       return new Response(JSON.stringify({ error: 'draft site not found' }), { status: 404 })
     }) as typeof fetch
 

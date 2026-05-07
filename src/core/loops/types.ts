@@ -74,7 +74,7 @@ export interface LoopItem {
  * Minimal tagged-template SQL surface used by source fetch implementations.
  *
  * The full server-side `DbClient` (with `.transaction()`, `.unsafe()`, etc.)
- * lives in `server/cms/db/client.ts`. Loop sources only need the
+ * lives in `server/db/client.ts`. Loop sources only need the
  * tagged-template callable form, so we narrow to this shape to keep the
  * core/loops module free of server-only imports. The publisher passes
  * the real `DbClient` at runtime; this type is structurally compatible.

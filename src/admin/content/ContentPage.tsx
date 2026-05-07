@@ -74,6 +74,21 @@ export function ContentPage() {
     }
   }
 
+  async function handleUpdateEntryAuthor(authorUserId: string) {
+    const entry = workspace.selectedEntry
+    if (!entry || entry.authorUserId === authorUserId) return
+    draft.setSaveMessage('saving')
+    workspace.setError(null)
+    try {
+      const updatedEntry = await workspace.updateEntryAuthor(entry, authorUserId)
+      draft.applySelectedEntry(updatedEntry)
+      draft.setSaveMessage('saved')
+    } catch (err) {
+      draft.setSaveMessage('error')
+      workspace.setError(err instanceof Error ? err.message : 'Could not update author')
+    }
+  }
+
   async function handleUpdateCollection(
     collection: ContentCollection,
     input: UpdateContentCollectionInput,
@@ -137,6 +152,49 @@ export function ContentPage() {
       }
     } catch (err) {
       workspace.setError(err instanceof Error ? err.message : 'Could not delete entry')
+      throw err
+    }
+  }
+
+  async function handleDuplicateEntry(entry: ContentEntry) {
+    draft.setSaveMessage('saving')
+    workspace.setError(null)
+    try {
+      // If duplicating the currently-edited entry, persist the in-memory
+      // draft first so the duplicate captures the latest unsaved edits.
+      // Otherwise we'd silently copy the last-saved version of the body
+      // which is confusing — the user clicked duplicate on the row they're
+      // visibly editing.
+      const source = workspace.selectedEntry?.id === entry.id
+        ? {
+            ...entry,
+            bodyMarkdown: serializeMarkdownBlocks(draft.blocks),
+            featuredMediaId: draft.featuredMediaId,
+            seoTitle: draft.seoTitle,
+            seoDescription: draft.seoDescription,
+            title: draft.title || entry.title,
+          }
+        : entry
+      const duplicated = await workspace.duplicateEntry(source)
+      draft.applySelectedEntry(duplicated)
+      draft.setSaveMessage('saved')
+    } catch (err) {
+      draft.setSaveMessage('error')
+      workspace.setError(err instanceof Error ? err.message : 'Could not duplicate entry')
+      throw err
+    }
+  }
+
+  async function handleMoveEntryToCollection(entry: ContentEntry, collectionId: string) {
+    if (entry.collectionId === collectionId) return
+    workspace.setError(null)
+    try {
+      const updatedEntry = await workspace.moveEntryToCollection(entry, collectionId)
+      if (workspace.selectedEntry?.id === entry.id) {
+        draft.applySelectedEntry(updatedEntry)
+      }
+    } catch (err) {
+      workspace.setError(err instanceof Error ? err.message : 'Could not move entry')
       throw err
     }
   }
@@ -236,6 +294,8 @@ export function ContentPage() {
                 onPublishEntry={handlePublishEntry}
                 onConvertEntryToDraft={handleConvertEntryToDraft}
                 onDeleteEntry={handleDeleteEntry}
+                onDuplicateEntry={handleDuplicateEntry}
+                onMoveEntryToCollection={handleMoveEntryToCollection}
                 onClose={() => setActiveContentPanel(null)}
               />
             )}
@@ -266,6 +326,8 @@ export function ContentPage() {
         contentRightPanel={workspace.selectedEntry ? (
           <ContentSettingsPanel
             selectedEntry={workspace.selectedEntry}
+            authors={workspace.authors}
+            authorsLoading={workspace.authorsLoading}
             collections={workspace.collections}
             selectedCollection={workspace.selectedCollection}
             loading={workspace.contentLoading}
@@ -282,6 +344,7 @@ export function ContentPage() {
             featuredMediaId={draft.featuredMediaId}
             featuredMediaAsset={mediaPicker.featuredMediaAsset}
             onCollectionChange={(collectionId) => void handleMoveEntryCollection(collectionId)}
+            onAuthorChange={(authorUserId) => void handleUpdateEntryAuthor(authorUserId)}
             onSlugChange={draft.setSlug}
             onSeoTitleChange={draft.setSeoTitle}
             onSeoDescriptionChange={draft.setSeoDescription}

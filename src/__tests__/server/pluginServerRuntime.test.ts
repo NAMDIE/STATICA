@@ -4,13 +4,39 @@ import {
   handleServerPluginRuntimeRequest,
   runServerPluginLifecycleHook,
   serverPluginRuntime,
-} from '../../../server/cms/serverPluginRuntime'
+} from '../../../server/plugins/runtime'
 import type { PluginManifest } from '@core/plugin-sdk'
 import { createFakeDb } from './dbTestFake'
+import { SESSION_COOKIE_NAME } from '../../../server/auth/tokens'
 
-// Plugin runtime tests do not exercise DB queries — the db arg is threaded
-// through for lifecycle hooks but none of the tested hooks use it.
 const fakeDb = createFakeDb(async (sql) => {
+  const normalized = sql.replace(/\s+/g, ' ').trim().toLowerCase()
+  if (normalized.includes('from sessions') && normalized.includes('join users')) {
+    return {
+      rows: [{
+        id: 'owner_1',
+        email: 'owner@example.com',
+        email_normalized: 'owner@example.com',
+        display_name: 'Owner',
+        password_hash: 'hash',
+        status: 'active',
+        role_id: 'owner',
+        last_login_at: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted_at: null,
+        role_slug: 'owner',
+        role_name: 'Owner',
+        role_description: '',
+        role_is_system: true,
+        role_capabilities_json: ['plugins.manage'],
+      }],
+      rowCount: 1,
+    }
+  }
+  if (normalized.includes('update sessions') && normalized.includes('last_seen_at')) {
+    return { rows: [], rowCount: 1 }
+  }
   throw new Error(`Unexpected DB call in plugin runtime test: ${sql}`)
 })
 
@@ -33,21 +59,36 @@ describe('server plugin runtime SDK', () => {
   it('lets trusted server plugin code register authenticated backend routes', async () => {
     await activateServerPlugin(workflowManifest, {
       activate(api) {
-        api.cms.routes.get('/approvals', async () => ({
+        api.cms.routes.get('/approvals', 'plugins.manage', async () => ({
           approvals: [{ pageId: 'page_home', status: 'approved' }],
         }))
       },
     }, fakeDb)
 
-    const res = await handleServerPluginRuntimeRequest(
-      new Request('http://localhost/api/cms/plugins/acme.workflow/runtime/approvals'),
-      fakeDb,
-    )
+    const req = new Request('http://localhost/admin/api/cms/plugins/acme.workflow/runtime/approvals')
+    req.headers.set('cookie', `${SESSION_COOKIE_NAME}=token`)
+    const res = await handleServerPluginRuntimeRequest(req, fakeDb)
 
     expect(res?.status).toBe(200)
     expect(await res?.json()).toEqual({
       approvals: [{ pageId: 'page_home', status: 'approved' }],
     })
+  })
+
+  it('lets plugins explicitly register public GET routes', async () => {
+    await activateServerPlugin(workflowManifest, {
+      activate(api) {
+        api.cms.routes.getPublic('/status', async () => ({ ok: true }))
+      },
+    }, fakeDb)
+
+    const res = await handleServerPluginRuntimeRequest(
+      new Request('http://localhost/admin/api/cms/plugins/acme.workflow/runtime/status'),
+      fakeDb,
+    )
+
+    expect(res?.status).toBe(200)
+    expect(await res?.json()).toEqual({ ok: true })
   })
 
   it('blocks backend route registration without the cms.routes permission grant', async () => {
@@ -56,7 +97,7 @@ describe('server plugin runtime SDK', () => {
       grantedPermissions: ['cms.storage'],
     }, {
       activate(api) {
-        api.cms.routes.get('/approvals', async () => ({ ok: true }))
+        api.cms.routes.get('/approvals', 'plugins.manage', async () => ({ ok: true }))
       },
     }, fakeDb)).rejects.toThrow('requires permission "cms.routes"')
   })
@@ -67,7 +108,7 @@ describe('server plugin runtime SDK', () => {
       grantedPermissions: [],
     }, {
       activate(api) {
-        api.cms.routes.get('/blocked', () => ({ ok: true }))
+        api.cms.routes.get('/blocked', 'plugins.manage', () => ({ ok: true }))
       },
     }, fakeDb)).rejects.toThrow('Plugin "acme.workflow" requires permission "cms.routes"')
   })

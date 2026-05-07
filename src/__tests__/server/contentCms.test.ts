@@ -1,18 +1,20 @@
 import { describe, expect, it } from 'bun:test'
-import type { DbResult } from '../../../server/cms/db'
-import { migrations } from '../../../server/cms/db/migrations-pg'
+import type { DbResult } from '../../../server/db'
+import { migrations } from '../../../server/db/migrations-pg'
 import {
   createContentCollection,
   getContentEntryRedirectByRoute,
   createContentEntry,
   getPublishedContentEntryByRoute,
+  listContentAuthorOptions,
   listContentCollections,
   publishContentEntry,
   saveContentEntryDraft,
+  updateContentEntryAuthor,
   updateContentCollection,
   updateContentEntryCollection,
-} from '../../../server/cms/contentRepository'
-import { renderContentDocumentHtml } from '../../../server/cms/contentRenderer'
+} from '../../../server/repositories/content'
+import { renderContentDocumentHtml } from '../../../server/publish/contentRenderer'
 import { handleServerRequest } from '../../../server/router'
 import { createFakeDb } from './dbTestFake'
 
@@ -92,8 +94,10 @@ describe('content CMS repository', () => {
         custom: [],
       },
       createdAt: '2026-05-01T10:00:00.000Z',
-      updatedAt: '2026-05-01T10:00:00.000Z',
-    }])
+	      updatedAt: '2026-05-01T10:00:00.000Z',
+	      createdByUserId: null,
+	      updatedByUserId: null,
+	    }])
   })
 
   it('creates collections with persisted field settings', async () => {
@@ -105,10 +109,12 @@ describe('content CMS repository', () => {
           'Products',
           'products',
           '/products',
-          'Product',
-          'Products',
-          productCollectionFields,
-        ])
+	          'Product',
+	          'Products',
+	          productCollectionFields,
+	          null,
+	          null,
+	        ])
         return {
           rows: [{
             id: 'products',
@@ -159,10 +165,11 @@ describe('content CMS repository', () => {
           'catalog',
           '/catalog',
           'Product',
-          'Products',
-          nextFields,
-          'products',
-        ])
+	          'Products',
+	          nextFields,
+	          null,
+	          'products',
+	        ])
         return {
           rows: [{
             id: 'products',
@@ -197,14 +204,15 @@ describe('content CMS repository', () => {
   })
 
   it('moves an entry to another collection when its slug is available there', async () => {
+    let moved = false
     const db = makeContentFakeDb([
       (sql, params) => {
-        if (sql.startsWith('select id, collection_id, title, slug')) {
+        if (sql.startsWith('select content_entries.id')) {
           expect(params).toEqual(['entry_1'])
           return {
             rows: [{
               id: 'entry_1',
-              collection_id: 'posts',
+              collection_id: moved ? 'products' : 'posts',
               title: 'Hello',
               slug: 'hello',
               status: 'draft',
@@ -213,7 +221,9 @@ describe('content CMS repository', () => {
               seo_title: '',
               seo_description: '',
               created_at: rowDate('2026-05-01T10:00:00Z'),
-              updated_at: rowDate('2026-05-01T10:01:00Z'),
+              updated_at: rowDate(
+                moved ? '2026-05-01T10:02:00Z' : '2026-05-01T10:01:00Z',
+              ),
               published_at: null,
               deleted_at: null,
             }],
@@ -229,9 +239,10 @@ describe('content CMS repository', () => {
           expect(params).toEqual(['products', 'hello', 'entry_1'])
           return { rows: [], rowCount: 0 }
         }
-        if (sql.startsWith('update content_entries set collection_id')) {
-          // Template order: SET collection_id=$1  WHERE id=$2
-          expect(params).toEqual(['products', 'entry_1'])
+	        if (sql.startsWith('update content_entries set collection_id')) {
+	          // Template order: SET collection_id=$1, updated_by_user_id=$2 WHERE id=$3
+	          expect(params).toEqual(['products', null, 'entry_1'])
+          moved = true
           return {
             rows: [{
               id: 'entry_1',
@@ -263,11 +274,19 @@ describe('content CMS repository', () => {
         title: 'Hello',
         slug: 'hello',
         status: 'draft',
-        bodyMarkdown: '# Hello',
-        featuredMediaId: null,
-        seoTitle: '',
-        seoDescription: '',
-        createdAt: '2026-05-01T10:00:00.000Z',
+	        bodyMarkdown: '# Hello',
+	        featuredMediaId: null,
+	        seoTitle: '',
+	        seoDescription: '',
+	        authorUserId: null,
+	        createdByUserId: null,
+	        updatedByUserId: null,
+	        publishedByUserId: null,
+	        author: null,
+	        createdBy: null,
+	        updatedBy: null,
+	        publishedBy: null,
+	        createdAt: '2026-05-01T10:00:00.000Z',
         updatedAt: '2026-05-01T10:02:00.000Z',
         publishedAt: null,
         deletedAt: null,
@@ -275,8 +294,123 @@ describe('content CMS repository', () => {
     })
   })
 
+  it('lists active content authors with role display metadata', async () => {
+    const db = makeContentFakeDb([
+      (sql, params) => {
+        if (!sql.startsWith('select users.id')) return undefined
+        expect(sql).toContain('users.status = $1')
+        expect(params).toEqual(['active'])
+        return {
+          rows: [
+            {
+              id: 'author_1',
+              email: 'author@example.com',
+              email_normalized: 'author@example.com',
+              display_name: 'Author Name',
+              password_hash: 'hash',
+              status: 'active',
+              role_id: 'editor',
+              last_login_at: null,
+              created_at: rowDate('2026-05-01T10:00:00Z'),
+              updated_at: rowDate('2026-05-01T10:00:00Z'),
+              deleted_at: null,
+              role_slug: 'editor',
+              role_name: 'Editor',
+              role_description: '',
+              role_is_system: true,
+              role_capabilities_json: ['content.edit'],
+            },
+          ],
+          rowCount: 1,
+        }
+      },
+    ])
+
+    await expect(listContentAuthorOptions(db)).resolves.toEqual([{
+      id: 'author_1',
+      email: 'author@example.com',
+      displayName: 'Author Name',
+      roleSlug: 'editor',
+      roleName: 'Editor',
+    }])
+  })
+
+  it('updates an entry author and returns hydrated display metadata', async () => {
+    let assigned = false
+    const db = makeContentFakeDb([
+      (sql, params) => {
+        if (sql.startsWith('update content_entries set author_user_id')) {
+          expect(params).toEqual(['author_2', 'editor_1', 'entry_1'])
+          assigned = true
+          return {
+            rows: [{
+              id: 'entry_1',
+              collection_id: 'posts',
+              title: 'Hello',
+              slug: 'hello',
+              status: 'draft',
+              body_markdown: '# Hello',
+              featured_media_id: null,
+              seo_title: '',
+              seo_description: '',
+              author_user_id: 'author_2',
+              created_by_user_id: 'author_1',
+              updated_by_user_id: 'editor_1',
+              published_by_user_id: null,
+              created_at: rowDate('2026-05-01T10:00:00Z'),
+              updated_at: rowDate('2026-05-01T10:04:00Z'),
+              published_at: null,
+              deleted_at: null,
+            }],
+            rowCount: 1,
+          }
+        }
+        if (sql.startsWith('select content_entries.id')) {
+          expect(assigned).toBe(true)
+          return {
+            rows: [{
+              id: 'entry_1',
+              collection_id: 'posts',
+              title: 'Hello',
+              slug: 'hello',
+              status: 'draft',
+              body_markdown: '# Hello',
+              featured_media_id: null,
+              seo_title: '',
+              seo_description: '',
+              author_user_id: 'author_2',
+              author_email: 'author2@example.com',
+              author_display_name: 'Second Author',
+              author_role_slug: 'admin',
+              author_role_name: 'Admin',
+              created_by_user_id: 'author_1',
+              updated_by_user_id: 'editor_1',
+              published_by_user_id: null,
+              created_at: rowDate('2026-05-01T10:00:00Z'),
+              updated_at: rowDate('2026-05-01T10:04:00Z'),
+              published_at: null,
+              deleted_at: null,
+            }],
+            rowCount: 1,
+          }
+        }
+        return undefined
+      },
+    ])
+
+    await expect(updateContentEntryAuthor(db, 'entry_1', 'author_2', 'editor_1')).resolves.toMatchObject({
+      authorUserId: 'author_2',
+      author: {
+        displayName: 'Second Author',
+        roleName: 'Admin',
+      },
+      updatedByUserId: 'editor_1',
+    })
+  })
+
   it('creates drafts, saves body markdown, and publishes a snapshot', async () => {
     const calls: string[] = []
+    let entryState: 'created' | 'saved' | 'published' = 'created'
     const db = makeContentFakeDb([
       (sql, params) => {
         calls.push(sql)
@@ -291,6 +425,9 @@ describe('content CMS repository', () => {
             null,
             '',
             '',
+            'author_1',
+            'author_1',
+            'author_1',
           ])
           return {
             rows: [{
@@ -307,12 +444,17 @@ describe('content CMS repository', () => {
               updated_at: rowDate('2026-05-01T10:00:00Z'),
               published_at: null,
               deleted_at: null,
+              author_user_id: 'author_1',
+              created_by_user_id: 'author_1',
+              updated_by_user_id: 'author_1',
+              published_by_user_id: null,
             }],
             rowCount: 1,
           }
         }
         // publishContentEntry: UPDATE ... SET active_version_id=$1 WHERE id=$2
         if (sql.startsWith('update content_entries set status =')) {
+          entryState = 'published'
           return {
             rows: [{
               id: 'entry_1',
@@ -328,6 +470,10 @@ describe('content CMS repository', () => {
               updated_at: rowDate('2026-05-01T10:02:00Z'),
               published_at: rowDate('2026-05-01T10:02:00Z'),
               deleted_at: null,
+              author_user_id: 'author_1',
+              created_by_user_id: 'author_1',
+              updated_by_user_id: 'publisher_1',
+              published_by_user_id: 'publisher_1',
             }],
             rowCount: 1,
           }
@@ -341,8 +487,10 @@ describe('content CMS repository', () => {
             null,
             'SEO Hello',
             'SEO Description',
+            'editor_1',
             'entry_1',
           ])
+          entryState = 'saved'
           return {
             rows: [{
               id: 'entry_1',
@@ -358,6 +506,10 @@ describe('content CMS repository', () => {
               updated_at: rowDate('2026-05-01T10:01:00Z'),
               published_at: null,
               deleted_at: null,
+              author_user_id: 'author_1',
+              created_by_user_id: 'author_1',
+              updated_by_user_id: 'editor_1',
+              published_by_user_id: null,
             }],
             rowCount: 1,
           }
@@ -368,22 +520,58 @@ describe('content CMS repository', () => {
         if (sql.startsWith('select coalesce(max(version_number), 0) + 1')) {
           return { rows: [{ next_version: 1 }], rowCount: 1 }
         }
-        if (sql.startsWith('select id, collection_id, title, slug')) {
+        if (sql.startsWith('select content_entries.id')) {
+          const published = entryState === 'published'
+          const saved = entryState === 'saved' || published
           return {
             rows: [{
               id: 'entry_1',
               collection_id: 'posts',
               title: 'Hello',
               slug: 'hello',
-              status: 'draft',
-              body_markdown: '# Hello',
+              status: published ? 'published' : 'draft',
+              body_markdown: saved ? '# Hello' : '',
               featured_media_id: null,
-              seo_title: 'SEO Hello',
-              seo_description: 'SEO Description',
+              seo_title: saved ? 'SEO Hello' : '',
+              seo_description: saved ? 'SEO Description' : '',
               created_at: rowDate('2026-05-01T10:00:00Z'),
-              updated_at: rowDate('2026-05-01T10:01:00Z'),
-              published_at: null,
+              updated_at: rowDate(
+                published
+                  ? '2026-05-01T10:02:00Z'
+                  : saved
+                    ? '2026-05-01T10:01:00Z'
+                    : '2026-05-01T10:00:00Z',
+              ),
+              published_at: published ? rowDate('2026-05-01T10:02:00Z') : null,
               deleted_at: null,
+              author_user_id: 'author_1',
+              author_email: 'author@example.com',
+              author_display_name: 'Author Name',
+              author_role_slug: 'editor',
+              author_role_name: 'Editor',
+              created_by_user_id: 'author_1',
+              created_by_email: 'author@example.com',
+              created_by_display_name: 'Author Name',
+              created_by_role_slug: 'editor',
+              created_by_role_name: 'Editor',
+              updated_by_user_id: published ? 'publisher_1' : saved ? 'editor_1' : 'author_1',
+              updated_by_email: published
+                ? 'publisher@example.com'
+                : saved
+                  ? 'editor@example.com'
+                  : 'author@example.com',
+              updated_by_display_name: published
+                ? 'Publisher Name'
+                : saved
+                  ? 'Editor Name'
+                  : 'Author Name',
+              updated_by_role_slug: published ? 'admin' : saved ? 'editor' : 'editor',
+              updated_by_role_name: published ? 'Admin' : saved ? 'Editor' : 'Editor',
+              published_by_user_id: published ? 'publisher_1' : null,
+              published_by_email: published ? 'publisher@example.com' : null,
+              published_by_display_name: published ? 'Publisher Name' : null,
+              published_by_role_slug: published ? 'admin' : null,
+              published_by_role_name: published ? 'Admin' : null,
             }],
             rowCount: 1,
           }
@@ -398,6 +586,7 @@ describe('content CMS repository', () => {
             null,
             'SEO Hello',
             'SEO Description',
+            'publisher_1',
           ])
           return { rows: [], rowCount: 1 }
         }
@@ -405,12 +594,23 @@ describe('content CMS repository', () => {
       },
     ])
 
-    await createContentEntry(db, {
+    const draft = await createContentEntry(db, {
       id: 'entry_1',
       collectionId: 'posts',
       title: 'Hello',
       slug: 'hello',
+    }, 'author_1')
+    expect(draft).toMatchObject({
+      authorUserId: 'author_1',
+      author: {
+        displayName: 'Author Name',
+        roleName: 'Editor',
+      },
+      createdByUserId: 'author_1',
+      updatedByUserId: 'author_1',
+      publishedByUserId: null,
     })
+
     await saveContentEntryDraft(db, 'entry_1', {
       title: 'Hello',
       slug: 'hello',
@@ -418,11 +618,18 @@ describe('content CMS repository', () => {
       featuredMediaId: null,
       seoTitle: 'SEO Hello',
       seoDescription: 'SEO Description',
-    })
-    const result = await publishContentEntry(db, 'entry_1', 'admin_1')
+    }, 'editor_1')
+    const result = await publishContentEntry(db, 'entry_1', 'publisher_1')
 
     expect(result.version.versionNumber).toBe(1)
     expect(result.entry.status).toBe('published')
+    expect(result.entry).toMatchObject({
+      authorUserId: 'author_1',
+      createdByUserId: 'author_1',
+      updatedByUserId: 'publisher_1',
+      publishedByUserId: 'publisher_1',
+    })
+    expect(result.version.publishedByUserId).toBe('publisher_1')
     // Verify the insert SQL was emitted with all 9 params
     expect(calls.some((sql) => sql.startsWith('insert into content_entry_versions'))).toBe(true)
     // Template order: SET active_version_id=$1 (versionId) WHERE id=$2 (entryId)
@@ -434,7 +641,7 @@ describe('content CMS repository', () => {
     const db = makeContentFakeDb([
       (sql, params) => {
         calls.push(sql)
-        if (sql.startsWith('select id, collection_id, title, slug')) {
+        if (sql.startsWith('select content_entries.id')) {
           return {
             rows: [{
               id: 'entry_1',
@@ -474,15 +681,18 @@ describe('content CMS repository', () => {
             'post',
             '# Post',
             null,
-            '',
-            '',
-          ])
+	        '',
+	        '',
+	        'admin_1',
+	      ])
           return { rows: [], rowCount: 1 }
         }
         if (sql.startsWith('update content_entries set status =')) {
-          // Template order: SET active_version_id=$1 (versionId) WHERE id=$2 (entryId)
-          expect(typeof params[0]).toBe('string')  // versionId (nanoid)
-          expect(params[1]).toBe('entry_1')
+	          // Template order: SET active_version_id=$1, publisher/updater=$2/$3 WHERE id=$4
+	          expect(typeof params[0]).toBe('string')  // versionId (nanoid)
+	          expect(params[1]).toBe('admin_1')
+	          expect(params[2]).toBe('admin_1')
+	          expect(params[3]).toBe('entry_1')
           return {
             rows: [{
               id: 'entry_1',
@@ -537,6 +747,10 @@ describe('content CMS repository', () => {
             featured_media_id: null,
             seo_title: 'SEO',
             seo_description: 'Description',
+            author_user_id: 'author_1',
+            author_display_name: 'Author Name',
+            published_by_user_id: 'publisher_1',
+            published_by_display_name: 'Publisher Name',
             published_at: rowDate('2026-05-01T10:02:00Z'),
             created_at: rowDate('2026-05-01T10:02:00Z'),
           }],
@@ -551,6 +765,10 @@ describe('content CMS repository', () => {
       collectionRouteBase: '/posts',
       title: 'Published Hello',
       bodyMarkdown: 'Published body',
+      authorUserId: 'author_1',
+      authorName: 'Author Name',
+      publishedByUserId: 'publisher_1',
+      publishedByName: 'Publisher Name',
     })
   })
 

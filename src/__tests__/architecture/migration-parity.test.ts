@@ -21,14 +21,14 @@
  *   now() → current_timestamp, distinct on → window function subquery,
  *   multi-ADD COLUMN → split into one ALTER TABLE per column.
  *
- * @see server/cms/db/migrations-pg.ts     — Postgres dialect
- * @see server/cms/db/migrations-sqlite.ts — SQLite dialect
- * @see server/cms/db/runMigrations.ts     — migration runner (shared)
+ * @see server/db/migrations-pg.ts     — Postgres dialect
+ * @see server/db/migrations-sqlite.ts — SQLite dialect
+ * @see server/db/runMigrations.ts     — migration runner (shared)
  */
 
 import { describe, test, expect } from 'bun:test'
-import { migrations as pgMigrations } from '../../../server/cms/db/migrations-pg'
-import { migrations as sqliteMigrations } from '../../../server/cms/db/migrations-sqlite'
+import { migrations as pgMigrations } from '../../../server/db/migrations-pg'
+import { migrations as sqliteMigrations } from '../../../server/db/migrations-sqlite'
 
 describe('Migration parity — migrations-pg.ts ↔ migrations-sqlite.ts', () => {
   test('PG and SQLite have the same number of migrations', () => {

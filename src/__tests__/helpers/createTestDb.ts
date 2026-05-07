@@ -1,8 +1,8 @@
 import * as os from 'node:os'
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
-import { createDbClient, type DbClient } from '../../../server/cms/db'
-import { runMigrations } from '../../../server/cms/db/runMigrations'
+import { createDbClient, type DbClient } from '../../../server/db'
+import { runMigrations } from '../../../server/db/runMigrations'
 
 export interface TestDb {
   db: DbClient

@@ -3,15 +3,15 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { SESSION_COOKIE_NAME, hashSessionToken } from '../../../server/cms/auth'
-import type { DbClient, DbResult } from '../../../server/cms/db'
-import { handleCmsRequest } from '../../../server/cms/handlers'
+import { SESSION_COOKIE_NAME, hashSessionToken } from '../../../server/auth/tokens'
+import type { DbClient, DbResult } from '../../../server/db'
+import { handleCmsRequest } from '../../../server/handlers/cms'
 import {
   createMediaAsset,
   deleteMediaAsset,
   listMediaAssets,
   renameMediaAsset,
-} from '../../../server/cms/mediaRepository'
+} from '../../../server/repositories/media'
 
 function makeFakeDb() {
   const admins: Record<string, unknown>[] = [
@@ -33,14 +33,33 @@ function makeFakeDb() {
     const sql = strings.reduce<string>((acc, str, i) => (i === 0 ? str : `${acc}$${i}${str}`), '')
     const normalized = sql.replace(/\s+/g, ' ').trim().toLowerCase()
 
-    // findAdminBySessionHash — values[0] = idHash
-    if (normalized.includes('select admin_users.id, admin_users.email')) {
+    if (normalized.includes('from sessions') && normalized.includes('join users')) {
       const session = sessions.find((s) => String(s.id_hash) === String(values[0]))
       if (!session) return { rows: [], rowCount: 0 }
-      const admin = admins.find((a) => a.id === session.admin_user_id)
-      return { rows: admin ? [admin as Row] : [], rowCount: admin ? 1 : 0 }
+      const admin = admins.find((a) => a.id === session.user_id)
+      return {
+        rows: admin ? [{
+          ...admin,
+          email_normalized: admin.email,
+          display_name: 'Owner',
+          status: 'active',
+          role_id: 'owner',
+          last_login_at: null,
+          updated_at: admin.created_at,
+          deleted_at: null,
+          role_slug: 'owner',
+          role_name: 'Owner',
+          role_description: '',
+          role_is_system: true,
+          role_capabilities_json: ['media.manage'],
+        } as Row] : [],
+        rowCount: admin ? 1 : 0,
+      }
     }
-    // createMediaAsset — values[0..5] = id, filename, mimeType, sizeBytes, storagePath, publicPath
+    if (normalized.includes('update sessions') && normalized.includes('last_seen_at')) {
+      return { rows: [], rowCount: 1 }
+    }
+    // createMediaAsset — values[0..6] = id, filename, mimeType, sizeBytes, storagePath, publicPath, uploadedByUserId
     if (normalized.includes('insert into media_assets')) {
       const row = {
         id: values[0],
@@ -49,6 +68,7 @@ function makeFakeDb() {
         size_bytes: values[3],
         storage_path: values[4],
         public_path: values[5],
+        uploaded_by_user_id: values[6],
         created_at: new Date('2026-01-03').toISOString(),
       }
       media.push(row)
@@ -85,7 +105,7 @@ async function createCookie(db: ReturnType<typeof makeFakeDb>): Promise<string> 
   const token = 'valid-session-token'
   db.sessions.push({
     id_hash: await hashSessionToken(token),
-    admin_user_id: 'admin_1',
+    user_id: 'admin_1',
     expires_at: new Date('2030-01-01').toISOString(),
   })
   return `${SESSION_COOKIE_NAME}=${token}`
@@ -126,6 +146,7 @@ describe('CMS media repository', () => {
       sizeBytes: 12,
       storagePath: 'asset_1-hero.png',
       publicPath: '/uploads/asset_1-hero.png',
+      uploadedByUserId: 'user_1',
     })
 
     const assets = await listMediaAssets(db)
@@ -136,6 +157,7 @@ describe('CMS media repository', () => {
       mimeType: 'image/png',
       sizeBytes: 12,
       publicPath: '/uploads/asset_1-hero.png',
+      uploadedByUserId: 'user_1',
       createdAt: '2026-01-03T00:00:00.000Z',
     }])
   })
@@ -150,6 +172,7 @@ describe('CMS media repository', () => {
       sizeBytes: 12,
       storagePath: 'asset_1-hero.png',
       publicPath: '/uploads/asset_1-hero.png',
+      uploadedByUserId: 'user_1',
     })
 
     const asset = await renameMediaAsset(db, 'asset_1', 'Hero renamed.png')
@@ -168,6 +191,7 @@ describe('CMS media repository', () => {
       sizeBytes: 12,
       storagePath: 'asset_1-hero.png',
       publicPath: '/uploads/asset_1-hero.png',
+      uploadedByUserId: 'user_1',
     })
 
     const deleted = await deleteMediaAsset(db, 'asset_1')
@@ -180,7 +204,7 @@ describe('CMS media repository', () => {
 describe('CMS media handlers', () => {
   it('requires an admin session for media listing', async () => {
     const res = await handleCmsRequest(
-      cmsRequest('http://localhost/api/cms/media'),
+      cmsRequest('http://localhost/admin/api/cms/media'),
       makeFakeDb(),
     )
 
@@ -196,7 +220,7 @@ describe('CMS media handlers', () => {
 
     try {
       const res = await handleCmsRequest(
-        cmsRequest('http://localhost/api/cms/media', {
+        cmsRequest('http://localhost/admin/api/cms/media', {
           method: 'POST',
           headers: { cookie },
           formData: body,
@@ -206,10 +230,13 @@ describe('CMS media handlers', () => {
       )
 
       expect(res.status).toBe(201)
-      const payload = await res.json() as { asset: { filename: string; publicPath: string; mimeType: string } }
+      const payload = await res.json() as {
+        asset: { filename: string; publicPath: string; mimeType: string; uploadedByUserId: string }
+      }
       expect(payload.asset).toMatchObject({
         filename: 'Hero Image.png',
         mimeType: 'image/png',
+        uploadedByUserId: 'admin_1',
       })
       expect(payload.asset.publicPath).toStartWith('/uploads/')
       expect(db.media).toHaveLength(1)
@@ -229,10 +256,11 @@ describe('CMS media handlers', () => {
       sizeBytes: 12,
       storagePath: 'asset_1-hero.png',
       publicPath: '/uploads/asset_1-hero.png',
+      uploadedByUserId: 'user_1',
     })
 
     const res = await handleCmsRequest(
-      cmsRequest('http://localhost/api/cms/media', {
+      cmsRequest('http://localhost/admin/api/cms/media', {
         headers: { cookie },
       }),
       db,
@@ -254,10 +282,11 @@ describe('CMS media handlers', () => {
       sizeBytes: 12,
       storagePath: 'asset_1-hero.png',
       publicPath: '/uploads/asset_1-hero.png',
+      uploadedByUserId: 'user_1',
     })
 
     const res = await handleCmsRequest(
-      cmsRequest('http://localhost/api/cms/media/asset_1', {
+      cmsRequest('http://localhost/admin/api/cms/media/asset_1', {
         method: 'PATCH',
         headers: { cookie, 'content-type': 'application/json' },
         body: JSON.stringify({ filename: 'Hero renamed.png' }),
@@ -282,12 +311,13 @@ describe('CMS media handlers', () => {
       sizeBytes: 12,
       storagePath: 'asset_1-hero.png',
       publicPath: '/uploads/asset_1-hero.png',
+      uploadedByUserId: 'user_1',
     })
     await writeFile(join(uploadsDir, 'asset_1-hero.png'), 'image-bytes')
 
     try {
       const res = await handleCmsRequest(
-        cmsRequest('http://localhost/api/cms/media/asset_1', {
+        cmsRequest('http://localhost/admin/api/cms/media/asset_1', {
           method: 'DELETE',
           headers: { cookie },
         }),

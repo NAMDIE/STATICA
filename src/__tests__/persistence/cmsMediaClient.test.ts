@@ -19,6 +19,7 @@ describe('CMS media client', () => {
           mimeType: 'image/png',
           sizeBytes: 12,
           publicPath: '/uploads/asset_1-hero.png',
+          uploadedByUserId: null,
           createdAt: '2026-01-03T00:00:00.000Z',
         }],
       }), { status: 200 })
@@ -27,7 +28,7 @@ describe('CMS media client', () => {
     expect(assets).toHaveLength(1)
     expect(assets[0].publicPath).toBe('/uploads/asset_1-hero.png')
     expect(calls[0]).toMatchObject({
-      input: '/api/cms/media',
+      input: '/admin/api/cms/media',
       init: { method: 'GET', credentials: 'include' },
     })
   })
@@ -45,6 +46,7 @@ describe('CMS media client', () => {
           mimeType: 'image/png',
           sizeBytes: 12,
           publicPath: '/uploads/asset_1-hero.png',
+          uploadedByUserId: null,
           createdAt: '2026-01-03T00:00:00.000Z',
         },
       }), { status: 201 })
@@ -52,7 +54,7 @@ describe('CMS media client', () => {
 
     expect(asset.filename).toBe('hero.png')
     expect(calls[0]).toMatchObject({
-      input: '/api/cms/media',
+      input: '/admin/api/cms/media',
       init: { method: 'POST', credentials: 'include' },
     })
     expect(calls[0].init?.body).toBeInstanceOf(FormData)
@@ -70,6 +72,7 @@ describe('CMS media client', () => {
           mimeType: 'image/png',
           sizeBytes: 12,
           publicPath: '/uploads/asset_1-hero.png',
+          uploadedByUserId: null,
           createdAt: '2026-01-03T00:00:00.000Z',
         },
       }), { status: 200 })
@@ -77,7 +80,7 @@ describe('CMS media client', () => {
 
     expect(asset.filename).toBe('Hero renamed.png')
     expect(calls[0]).toMatchObject({
-      input: '/api/cms/media/media-1',
+      input: '/admin/api/cms/media/media-1',
       init: {
         method: 'PATCH',
         credentials: 'include',
@@ -96,7 +99,7 @@ describe('CMS media client', () => {
     })
 
     expect(calls[0]).toMatchObject({
-      input: '/api/cms/media/media-1',
+      input: '/admin/api/cms/media/media-1',
       init: {
         method: 'DELETE',
         credentials: 'include',

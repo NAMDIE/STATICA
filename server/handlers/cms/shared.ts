@@ -17,9 +17,9 @@
 import type { Static, TSchema } from '@sinclair/typebox'
 import { Type, Value } from '@core/utils/typeboxHelpers'
 import { jsonResponse, readJsonObject } from '../../http'
-import { clientIp } from '../../cms/security'
-import { UserMutationError } from '../../cms/usersRepository'
-import { RoleMutationError } from '../../cms/rolesRepository'
+import { clientIp } from '../../auth/security'
+import { UserMutationError } from '../../repositories/users'
+import { RoleMutationError } from '../../repositories/roles'
 
 export const CMS_API_PREFIX = '/admin/api/cms'
 

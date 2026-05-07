@@ -4,8 +4,8 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'bun:test'
 import type { SiteDocument } from '@core/page-tree/schemas'
 import { normalizeSiteRuntimeConfig } from '@core/site-runtime'
-import { buildRuntimePreviewDocument } from '../../../server/cms/runtime/previewRuntime'
-import { buildSiteRuntimeScripts } from '../../../server/cms/runtime/bundleScripts'
+import { buildRuntimePreviewDocument } from '../../../server/publish/runtime/previewRuntime'
+import { buildSiteRuntimeScripts } from '../../../server/publish/runtime/bundleScripts'
 import { makeModule, makePage, makeRegistry, makeSite } from '../publisher/helpers'
 
 const page = makePage({

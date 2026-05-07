@@ -153,6 +153,8 @@ function mediaAssetToLoopItem(asset: CmsMediaAsset): LoopItem {
       path: asset.publicPath,
       url: asset.publicPath,
       src: asset.publicPath,
+      uploadedByUserId: asset.uploadedByUserId,
+      uploadedById: asset.uploadedByUserId,
       createdAt: asset.createdAt,
     },
   }

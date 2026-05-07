@@ -17,6 +17,14 @@ function entry(overrides: Partial<ContentEntry>): ContentEntry {
     featuredMediaId: overrides.featuredMediaId ?? null,
     seoTitle: overrides.seoTitle ?? '',
     seoDescription: overrides.seoDescription ?? '',
+    authorUserId: overrides.authorUserId ?? null,
+    createdByUserId: overrides.createdByUserId ?? null,
+    updatedByUserId: overrides.updatedByUserId ?? null,
+    publishedByUserId: overrides.publishedByUserId ?? null,
+    author: overrides.author ?? null,
+    createdBy: overrides.createdBy ?? null,
+    updatedBy: overrides.updatedBy ?? null,
+    publishedBy: overrides.publishedBy ?? null,
     createdAt: overrides.createdAt ?? '2026-05-01T10:00:00.000Z',
     updatedAt: overrides.updatedAt ?? '2026-05-01T10:00:00.000Z',
     publishedAt: overrides.publishedAt ?? null,
@@ -31,6 +39,7 @@ function mediaAsset(overrides: Partial<CmsMediaAsset>): CmsMediaAsset {
     mimeType: overrides.mimeType ?? 'image/png',
     sizeBytes: overrides.sizeBytes ?? 1024,
     publicPath: overrides.publicPath ?? '/uploads/cover.png',
+    uploadedByUserId: overrides.uploadedByUserId ?? null,
     createdAt: overrides.createdAt ?? '2026-05-01T10:00:00.000Z',
   }
 }
@@ -67,6 +76,49 @@ describe('template preview data', () => {
       collectionRouteBase: '/posts',
       title: 'Mapped Post',
       bodyMarkdown: 'Body',
+    })
+  })
+
+  it('maps editable entry authorship into template binding fields', () => {
+    const item = contentEntryToLoopItem(entry({
+      authorUserId: 'user_author',
+      updatedByUserId: 'user_editor',
+      publishedByUserId: 'user_publisher',
+      author: {
+        id: 'user_author',
+        email: 'author@example.com',
+        displayName: 'Author Name',
+        roleSlug: 'editor',
+        roleName: 'Editor',
+      },
+      updatedBy: {
+        id: 'user_editor',
+        email: 'editor@example.com',
+        displayName: 'Editor Name',
+        roleSlug: 'admin',
+        roleName: 'Admin',
+      },
+      publishedBy: {
+        id: 'user_publisher',
+        email: 'publisher@example.com',
+        displayName: 'Publisher Name',
+        roleSlug: 'admin',
+        roleName: 'Admin',
+      },
+    }))
+
+    expect(item.fields).toMatchObject({
+      authorUserId: 'user_author',
+      authorId: 'user_author',
+      authorName: 'Author Name',
+      authorRoleName: 'Editor',
+      authorRoleSlug: 'editor',
+      updatedByUserId: 'user_editor',
+      updatedByName: 'Editor Name',
+      updatedByRoleName: 'Admin',
+      publishedByUserId: 'user_publisher',
+      publishedByName: 'Publisher Name',
+      publishedByRoleName: 'Admin',
     })
   })
 

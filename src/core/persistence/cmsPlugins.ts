@@ -48,7 +48,7 @@ function emptyPayload(body: Partial<CmsPluginsPayload>): CmsPluginsPayload {
 
 export async function listCmsPlugins(
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<CmsPluginsPayload> {
   const res = await fetchImpl(`${basePath}/plugins`, {
     method: 'GET',
@@ -62,7 +62,7 @@ export async function installCmsPluginManifest(
   manifest: PluginManifest,
   grantedPermissionsOrFetch: PluginPermission[] | FetchLike = [],
   fetchImplOrBasePath: FetchLike | string = globalThis.fetch.bind(globalThis),
-  maybeBasePath = '/api/cms',
+  maybeBasePath = '/admin/api/cms',
 ): Promise<{ plugin?: InstalledPlugin } & CmsPluginsPayload> {
   const grantedPermissions = Array.isArray(grantedPermissionsOrFetch) ? grantedPermissionsOrFetch : []
   const fetchImpl =
@@ -96,7 +96,7 @@ export async function installCmsPluginManifest(
 export async function inspectCmsPluginPackage(
   file: File,
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<PluginManifest> {
   const formData = new FormData()
   formData.set('file', file)
@@ -114,7 +114,7 @@ export async function installCmsPluginPackage(
   file: File,
   grantedPermissions: PluginPermission[],
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<{ plugin?: InstalledPlugin } & CmsPluginsPayload> {
   const formData = new FormData()
   formData.set('file', file)
@@ -136,7 +136,7 @@ export async function setCmsPluginEnabled(
   pluginId: string,
   enabled: boolean,
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<{ plugin?: InstalledPlugin } & CmsPluginsPayload> {
   const res = await fetchImpl(`${basePath}/plugins/${encodeURIComponent(pluginId)}`, {
     method: 'PATCH',
@@ -154,7 +154,7 @@ export async function setCmsPluginEnabled(
 export async function removeCmsPlugin(
   pluginId: string,
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<void> {
   const res = await fetchImpl(`${basePath}/plugins/${encodeURIComponent(pluginId)}`, {
     method: 'DELETE',

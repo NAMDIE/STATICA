@@ -51,7 +51,7 @@ import {
   isGeneratedClassLocked,
   isUserVisibleClass,
 } from '@core/page-tree/classUtils'
-import { pillAccent } from '../../ui/pillAccent'
+import { pillAccent } from '@ui/pillAccent'
 import {
   CLASS_USAGE_RECENT_LIMIT,
   readSiteClassUsage,
@@ -77,9 +77,9 @@ interface ClassContextMenuState {
 }
 
 // ---------------------------------------------------------------------------
-// pillAccent now lives in src/editor/ui/pillAccent.ts so the Layers panel can
-// share the exact same hash (so a "header" tag and a "header" class always
-// pick the same tint).
+// pillAccent lives in src/ui/pillAccent.ts so editor and admin surfaces share
+// the exact same hash (so a "header" tag and a "header" class always pick the
+// same tint).
 // ---------------------------------------------------------------------------
 
 function keyboardMenuPosition(element: HTMLElement) {

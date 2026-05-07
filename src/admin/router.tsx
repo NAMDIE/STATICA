@@ -42,6 +42,7 @@ export function AdminRoutes() {
       <Route path="/admin/site" element={withRouteBoundary(<AdminEntry section="site" />)} />
       <Route path="/admin/content" element={withRouteBoundary(<AdminEntry section="content" />)} />
       <Route path="/admin/plugins" element={withRouteBoundary(<AdminEntry section="plugins" />)} />
+      <Route path="/admin/users" element={withRouteBoundary(<AdminEntry section="users" />)} />
       <Route
         path="/admin/plugins/:pluginId/:pageId"
         element={withRouteBoundary(<AdminEntry section="pluginPage" />)}

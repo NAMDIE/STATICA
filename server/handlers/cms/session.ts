@@ -13,7 +13,7 @@
  *    "no such user" branch so latency stays constant and an attacker
  *    can't enumerate emails by timing.
  */
-import { SESSION_COOKIE_NAME, hashPassword } from '../../cms/auth'
+import { SESSION_COOKIE_NAME, hashPassword } from '../../auth/tokens'
 
 /**
  * True when the inbound request was made over HTTPS.

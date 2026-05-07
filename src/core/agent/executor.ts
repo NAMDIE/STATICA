@@ -1,7 +1,7 @@
 /**
  * Browser-side executor for page-builder write tools.
  *
- * The Claude Agent SDK calls these tools server-side (see server/agentTools.ts)
+ * The Claude Agent SDK calls these tools server-side (see server/handlers/agent/tools.ts)
  * which emits a `toolRequest` stream event so the browser can apply the
  * mutation against the live editor store. The browser then POSTs the result
  * back to /api/agent/tool-result; the server-side MCP tool handler returns
@@ -33,7 +33,7 @@ const getStoreState = (): EditorStore => getAgentStoreApi<EditorStore>().getStat
 // Per-tool TypeBox schemas
 //
 // Tool names and shapes mirror the AgentAction interfaces in ./types and the
-// Zod schemas in server/agentTools.ts. The server validates the input via
+// Zod schemas in server/handlers/agent/tools.ts. The server validates the input via
 // the SDK's Zod gate before sending toolRequest; this second pass is defence-
 // in-depth at the store boundary (Constraint #272).
 // ---------------------------------------------------------------------------

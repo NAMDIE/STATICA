@@ -6,7 +6,7 @@ export function activate(api) {
   api.plugin.log('Workflow Tools activated')
   const approvals = api.cms.storage.collection('approvals')
 
-  api.cms.routes.get('/status', async () => {
+  api.cms.routes.get('/status', 'plugins.manage', async () => {
     const records = await approvals.list()
     const counts = records.reduce((summary, record) => {
       const status = String(record.data.status || 'unknown')
@@ -22,7 +22,7 @@ export function activate(api) {
     }
   })
 
-  api.cms.routes.post('/seed', async () => {
+  api.cms.routes.post('/seed', 'plugins.manage', async () => {
     const record = await approvals.create({
       'page-title': 'Homepage',
       'page-id': 'page_home',

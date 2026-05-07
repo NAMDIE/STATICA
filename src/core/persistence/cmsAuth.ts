@@ -4,6 +4,8 @@ import {
   ErrorEnvelopeSchema,
   type CmsSetupStatus,
 } from './responseSchemas'
+import { Type } from '@sinclair/typebox'
+import { readEnvelope } from './httpJson'
 
 interface CmsSetupInput {
   siteName: string
@@ -15,6 +17,34 @@ interface CmsLoginInput {
   email: string
   password: string
 }
+
+export interface CmsCurrentUser {
+  id: string
+  email: string
+  displayName: string
+  status: 'active' | 'suspended'
+  role: {
+    id: string
+    slug: string
+    name: string
+    description: string
+    isSystem: boolean
+    capabilities: string[]
+  }
+  capabilities: string[]
+  lastLoginAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+const CurrentUserEnvelope = Type.Object(
+  {
+    user: Type.Optional(Type.Unknown()),
+    role: Type.Optional(Type.Unknown()),
+    capabilities: Type.Optional(Type.Array(Type.String())),
+  },
+  { additionalProperties: true },
+)
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 
@@ -32,7 +62,7 @@ async function assertOk(res: Response, fallback: string): Promise<void> {
 
 export async function getCmsSetupStatus(
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<CmsSetupStatus> {
   const res = await fetchImpl(`${basePath}/setup/status`, {
     method: 'GET',
@@ -45,7 +75,7 @@ export async function getCmsSetupStatus(
 export async function setupCms(
   input: CmsSetupInput,
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<void> {
   const res = await fetchImpl(`${basePath}/setup`, {
     method: 'POST',
@@ -59,7 +89,7 @@ export async function setupCms(
 export async function loginCms(
   input: CmsLoginInput,
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<void> {
   const res = await fetchImpl(`${basePath}/login`, {
     method: 'POST',
@@ -72,7 +102,7 @@ export async function loginCms(
 
 export async function logoutCms(
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<void> {
   const res = await fetchImpl(`${basePath}/logout`, {
     method: 'POST',
@@ -83,15 +113,28 @@ export async function logoutCms(
 
 export async function probeCmsSession(
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<boolean> {
-  const res = await fetchImpl(`${basePath}/site`, {
+  const res = await fetchImpl(`${basePath}/me`, {
     method: 'GET',
     credentials: 'include',
   })
 
-  if (res.ok || res.status === 404) return true
+  if (res.ok) return true
   if (res.status === 401) return false
   await assertOk(res, `CMS session check failed with ${res.status}`)
   return false
+}
+
+export async function getCurrentCmsUser(
+  fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
+  basePath = '/admin/api/cms',
+): Promise<CmsCurrentUser> {
+  const res = await fetchImpl(`${basePath}/me`, {
+    method: 'GET',
+    credentials: 'include',
+  })
+  const body = await readEnvelope(res, CurrentUserEnvelope, `CMS current user failed with ${res.status}`)
+  if (!body.user || typeof body.user !== 'object') throw new Error('CMS current user response was missing user')
+  return body.user as CmsCurrentUser
 }

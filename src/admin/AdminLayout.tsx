@@ -285,6 +285,11 @@ export function AdminSectionNavigation({
       ) : (
         <AdminRouteLink to="/admin/plugins" onNavigateStart={onWorkspaceNavigateStart}>Plugins</AdminRouteLink>
       )}
+      {section === 'users' ? (
+        <span className={toolbarStyles.activeSection}>Users</span>
+      ) : (
+        <AdminRouteLink to="/admin/users" onNavigateStart={onWorkspaceNavigateStart}>Users</AdminRouteLink>
+      )}
       {pluginPages.map((page) => (
         <AdminRouteLink
           key={`${page.pluginId}:${page.id}`}

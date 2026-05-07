@@ -1,4 +1,4 @@
-import type { DbClient, DbResult } from '../../../server/cms/db'
+import type { DbClient, DbResult } from '../../../server/db'
 
 /**
  * Reconstruct positional-parameter SQL from a tagged-template call.

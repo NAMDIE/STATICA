@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { RateLimiter } from '../../../server/cms/rateLimit'
+import { RateLimiter } from '../../../server/auth/rateLimit'
 
 describe('RateLimiter', () => {
   it('allows attempts up to the limit, then rejects', () => {

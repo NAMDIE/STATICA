@@ -5,7 +5,7 @@ import {
   hashPassword,
   hashSessionToken,
   verifyPassword,
-} from '../../../server/cms/auth'
+} from '../../../server/auth/tokens'
 
 describe('CMS auth primitives', () => {
   it('hashes and verifies passwords', async () => {

@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'bun:test'
 import type { SiteDocument } from '@core/page-tree/schemas'
 import { normalizeSiteRuntimeConfig } from '@core/site-runtime'
-import type { DbResult } from '../../../server/cms/db'
+import type { DbResult } from '../../../server/db'
 import {
   loadDraftSite,
   saveDraftSite,
-} from '../../../server/cms/siteRepository'
+} from '../../../server/repositories/site'
 import { createFakeDb } from './dbTestFake'
 
 function createSiteFakeDb() {
@@ -34,6 +34,9 @@ function createSiteFakeDb() {
         slug: params[2],
         draft_document_json: params[3],
         sort_order: params[4],
+        owner_user_id: params[5],
+        created_by_user_id: params[6],
+        updated_by_user_id: params[7],
         created_at: new Date('2026-01-01').toISOString(),
         updated_at: new Date('2026-01-02').toISOString(),
       }
@@ -123,7 +126,7 @@ function validSite(overrides: Partial<SiteDocument> = {}): SiteDocument {
 describe('CMS draft site persistence', () => {
   it('saves the single-site site shell and page draft rows', async () => {
     const { state, db } = createSiteFakeDb()
-    await saveDraftSite(db, validSite())
+    await saveDraftSite(db, validSite(), 'user_1')
 
     expect(state.site).toMatchObject({ name: 'Example Site' })
     expect(state.site?.settings_json).toMatchObject({
@@ -140,12 +143,15 @@ describe('CMS draft site persistence', () => {
       title: 'Home',
       slug: 'index',
       sort_order: 0,
+      owner_user_id: 'user_1',
+      created_by_user_id: 'user_1',
+      updated_by_user_id: 'user_1',
     })
   })
 
   it('loads a saved draft site without reading published versions', async () => {
     const { db } = createSiteFakeDb()
-    await saveDraftSite(db, validSite())
+    await saveDraftSite(db, validSite(), 'user_1')
 
     const loaded = await loadDraftSite(db)
 
@@ -154,7 +160,14 @@ describe('CMS draft site persistence', () => {
       name: 'Example Site',
       settings: { metaTitle: 'Example' },
       classes: { class_1: { name: 'Hero' } },
-      pages: [{ id: 'page_home', title: 'Home', slug: 'index' }],
+      pages: [{
+        id: 'page_home',
+        title: 'Home',
+        slug: 'index',
+        ownerUserId: 'user_1',
+        createdByUserId: 'user_1',
+        updatedByUserId: 'user_1',
+      }],
     })
   })
 

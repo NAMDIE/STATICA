@@ -23,6 +23,7 @@ const imageAsset = {
   width: 1200,
   height: 800,
   durationSeconds: null,
+  uploadedByUserId: null,
   createdAt: '2026-05-01T10:00:00.000Z',
 }
 
@@ -35,6 +36,7 @@ const videoAsset = {
   width: 1920,
   height: 1080,
   durationSeconds: 12,
+  uploadedByUserId: null,
   createdAt: '2026-05-01T10:05:00.000Z',
 }
 
@@ -45,6 +47,30 @@ const allCollectionFields = {
     seo: true,
   },
   custom: [],
+}
+
+const ownerAuthor = {
+  id: 'user_owner',
+  email: 'owner@example.com',
+  displayName: 'Owner Name',
+  roleSlug: 'owner',
+  roleName: 'Owner',
+}
+
+const editorAuthor = {
+  id: 'user_editor',
+  email: 'editor@example.com',
+  displayName: 'Editor Name',
+  roleSlug: 'editor',
+  roleName: 'Editor',
+}
+
+const adminAuthor = {
+  id: 'user_admin',
+  email: 'admin@example.com',
+  displayName: 'Admin Name',
+  roleSlug: 'admin',
+  roleName: 'Admin',
 }
 
 const titleOnlyCollectionFields = {
@@ -121,7 +147,7 @@ beforeEach(() => {
     calls.push({ input, init })
     const url = String(input)
 
-    if (url === '/api/cms/content/collections') {
+    if (url === '/admin/api/cms/content/collections') {
       return json({
         collections: [{
           id: 'posts',
@@ -136,11 +162,15 @@ beforeEach(() => {
       })
     }
 
-    if (url === '/api/cms/content/collections/posts/entries' && init?.method === 'GET') {
+    if (url === '/admin/api/cms/content/collections/posts/entries' && init?.method === 'GET') {
       return json({ entries: [] })
     }
 
-    if (url === '/api/cms/content/collections/posts/entries' && init?.method === 'POST') {
+    if (url === '/admin/api/cms/content/authors' && init?.method === 'GET') {
+      return json({ authors: [ownerAuthor, editorAuthor, adminAuthor] })
+    }
+
+    if (url === '/admin/api/cms/content/collections/posts/entries' && init?.method === 'POST') {
       return json({
         entry: {
           id: 'entry_1',
@@ -152,6 +182,8 @@ beforeEach(() => {
           featuredMediaId: null,
           seoTitle: '',
           seoDescription: '',
+          authorUserId: ownerAuthor.id,
+          author: ownerAuthor,
           createdAt: '2026-05-01T10:00:00.000Z',
           updatedAt: '2026-05-01T10:00:00.000Z',
           publishedAt: null,
@@ -160,7 +192,7 @@ beforeEach(() => {
       }, 201)
     }
 
-    if (url === '/api/cms/content/entries/entry_1' && init?.method === 'PUT') {
+    if (url === '/admin/api/cms/content/entries/entry_1' && init?.method === 'PUT') {
       const draft = JSON.parse(String(init.body))
       return json({
         entry: {
@@ -176,7 +208,7 @@ beforeEach(() => {
       })
     }
 
-    if (url === '/api/cms/content/entries/entry_1/publish' && init?.method === 'POST') {
+    if (url === '/admin/api/cms/content/entries/entry_1/publish' && init?.method === 'POST') {
       return json({
         entry: {
           id: 'entry_1',
@@ -196,7 +228,7 @@ beforeEach(() => {
       })
     }
 
-    if (url === '/api/cms/content/entries/entry_1/status' && init?.method === 'PATCH') {
+    if (url === '/admin/api/cms/content/entries/entry_1/status' && init?.method === 'PATCH') {
       const body = JSON.parse(String(init.body))
       return json({
         entry: {
@@ -217,7 +249,7 @@ beforeEach(() => {
       })
     }
 
-    if (url === '/api/cms/media') {
+    if (url === '/admin/api/cms/media') {
       return json({ assets: [imageAsset, videoAsset] })
     }
 
@@ -344,7 +376,7 @@ describe('ContentPage', () => {
     globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
 
-      if (url === '/api/cms/content/collections') {
+      if (url === '/admin/api/cms/content/collections') {
         return json({
           collections: [{
             id: 'posts',
@@ -359,7 +391,7 @@ describe('ContentPage', () => {
         })
       }
 
-      if (url === '/api/cms/content/collections/posts/entries' && init?.method === 'GET') {
+      if (url === '/admin/api/cms/content/collections/posts/entries' && init?.method === 'GET') {
         return entriesResponse
       }
 
@@ -428,6 +460,113 @@ describe('ContentPage', () => {
     expect(await screen.findByTestId('content-settings-panel')).toBeDefined()
   })
 
+  it('shows entry authors in the content list and reassigns the selected entry author', async () => {
+    const user = userEvent.setup()
+    const calls: FetchCall[] = []
+    ;(globalThis as typeof globalThis & { __contentFetchCalls?: FetchCall[] }).__contentFetchCalls = calls
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ input, init })
+      const url = String(input)
+
+      if (url === '/admin/api/cms/content/collections') {
+        return json({
+          collections: [{
+            id: 'posts',
+            name: 'Posts',
+            slug: 'posts',
+            routeBase: '/posts',
+            singularLabel: 'Post',
+            pluralLabel: 'Posts',
+            fields: allCollectionFields,
+            createdAt: '2026-05-01T10:00:00.000Z',
+            updatedAt: '2026-05-01T10:00:00.000Z',
+          }],
+        })
+      }
+
+      if (url === '/admin/api/cms/content/authors' && init?.method === 'GET') {
+        return json({ authors: [editorAuthor, adminAuthor] })
+      }
+
+      if (url === '/admin/api/cms/content/collections/posts/entries' && init?.method === 'GET') {
+        return json({
+          entries: [{
+            id: 'entry_1',
+            collectionId: 'posts',
+            title: 'Authored post',
+            slug: 'authored-post',
+            status: 'draft',
+            bodyMarkdown: 'Body',
+            featuredMediaId: null,
+            seoTitle: '',
+            seoDescription: '',
+            authorUserId: editorAuthor.id,
+            author: editorAuthor,
+            createdAt: '2026-05-01T10:00:00.000Z',
+            updatedAt: '2026-05-01T10:00:00.000Z',
+            publishedAt: null,
+            deletedAt: null,
+          }],
+        })
+      }
+
+      if (url === '/admin/api/cms/content/entries/entry_1/author' && init?.method === 'PATCH') {
+        return json({
+          entry: {
+            id: 'entry_1',
+            collectionId: 'posts',
+            title: 'Authored post',
+            slug: 'authored-post',
+            status: 'draft',
+            bodyMarkdown: 'Body',
+            featuredMediaId: null,
+            seoTitle: '',
+            seoDescription: '',
+            authorUserId: adminAuthor.id,
+            author: adminAuthor,
+            createdAt: '2026-05-01T10:00:00.000Z',
+            updatedAt: '2026-05-01T10:04:00.000Z',
+            publishedAt: null,
+            deletedAt: null,
+          },
+        })
+      }
+
+      if (url === '/admin/api/cms/media') {
+        return json({ assets: [] })
+      }
+
+      return json({ error: `Unhandled ${url}` }, 500)
+    }
+
+    render(
+      <MemoryRouter>
+        <ContentPage />
+      </MemoryRouter>,
+    )
+
+    const postsRegion = await screen.findByRole('region', { name: 'Posts' })
+    expect(within(postsRegion).getByText('Editor Name')).toBeDefined()
+    expect(await screen.findByTestId('content-settings-panel')).toBeDefined()
+
+    const authorSelect = screen.getByRole('combobox', { name: 'Author' }) as HTMLInputElement
+    expect(authorSelect.value).toBe('Editor Name')
+    expect(screen.getByText('Editor')).toBeDefined()
+
+    await user.click(authorSelect)
+    await user.click(await screen.findByRole('option', { name: 'Admin Name' }))
+
+    await waitFor(() => {
+      expect(calls.some((call) =>
+        String(call.input) === '/admin/api/cms/content/entries/entry_1/author' &&
+        call.init?.method === 'PATCH' &&
+        call.init?.body === JSON.stringify({ authorUserId: adminAuthor.id })
+      )).toBe(true)
+    })
+    expect((screen.getByRole('combobox', { name: 'Author' }) as HTMLInputElement).value).toBe('Admin Name')
+    expect(within(postsRegion).getByText('Admin Name')).toBeDefined()
+  })
+
   it('uses content-specific rail panels instead of editor-only panels', async () => {
     render(
       <MemoryRouter>
@@ -492,7 +631,7 @@ describe('ContentPage', () => {
     expect(publishedButton.getAttribute('aria-disabled')).toBe('true')
 
     const calls = (globalThis as typeof globalThis & { __contentFetchCalls?: FetchCall[] }).__contentFetchCalls ?? []
-    const saveCall = calls.find((call) => String(call.input) === '/api/cms/content/entries/entry_1' && call.init?.method === 'PUT')
+    const saveCall = calls.find((call) => String(call.input) === '/admin/api/cms/content/entries/entry_1' && call.init?.method === 'PUT')
     expect(saveCall?.init?.body).toBe(JSON.stringify({
       title: 'My first post',
       slug: 'untitled',
@@ -502,7 +641,7 @@ describe('ContentPage', () => {
       seoDescription: '',
     }))
     expect(calls.some((call) =>
-      String(call.input) === '/api/cms/content/entries/entry_1/publish' &&
+      String(call.input) === '/admin/api/cms/content/entries/entry_1/publish' &&
       call.init?.method === 'POST'
     )).toBe(true)
   })
@@ -542,7 +681,7 @@ describe('ContentPage', () => {
       calls.push({ input, init })
       const url = String(input)
 
-      if (url === '/api/cms/content/collections' && init?.method === 'GET') {
+      if (url === '/admin/api/cms/content/collections' && init?.method === 'GET') {
         return json({
           collections: [{
             id: 'posts',
@@ -558,11 +697,11 @@ describe('ContentPage', () => {
         })
       }
 
-      if (url === '/api/cms/content/collections/posts/entries' && init?.method === 'GET') {
+      if (url === '/admin/api/cms/content/collections/posts/entries' && init?.method === 'GET') {
         return json({ entries: [] })
       }
 
-      if (url === '/api/cms/content/collections' && init?.method === 'POST') {
+      if (url === '/admin/api/cms/content/collections' && init?.method === 'POST') {
         const body = JSON.parse(String(init.body))
         return json({
           collection: {
@@ -579,11 +718,11 @@ describe('ContentPage', () => {
         }, 201)
       }
 
-      if (url === '/api/cms/content/collections/products/entries' && init?.method === 'GET') {
+      if (url === '/admin/api/cms/content/collections/products/entries' && init?.method === 'GET') {
         return json({ entries: [] })
       }
 
-      if (url === '/api/cms/content/collections/products/entries' && init?.method === 'POST') {
+      if (url === '/admin/api/cms/content/collections/products/entries' && init?.method === 'POST') {
         return json({
           entry: {
             id: 'product_1',
@@ -634,7 +773,7 @@ describe('ContentPage', () => {
     expect(await screen.findByLabelText('Title')).toBeDefined()
 
     const createCollectionCall = calls.find((call) =>
-      String(call.input) === '/api/cms/content/collections' &&
+      String(call.input) === '/admin/api/cms/content/collections' &&
       call.init?.method === 'POST'
     )
     expect(createCollectionCall?.init?.body).toBe(JSON.stringify({
@@ -653,7 +792,7 @@ describe('ContentPage', () => {
       },
     }))
     expect(calls.some((call) =>
-      String(call.input) === '/api/cms/content/collections/products/entries' &&
+      String(call.input) === '/admin/api/cms/content/collections/products/entries' &&
       call.init?.method === 'POST'
     )).toBe(true)
   })
@@ -665,7 +804,7 @@ describe('ContentPage', () => {
       calls.push({ input, init })
       const url = String(input)
 
-      if (url === '/api/cms/content/collections') {
+      if (url === '/admin/api/cms/content/collections') {
         return json({
           collections: [
             {
@@ -694,7 +833,7 @@ describe('ContentPage', () => {
         })
       }
 
-      if (url === '/api/cms/content/collections/posts/entries' && init?.method === 'GET') {
+      if (url === '/admin/api/cms/content/collections/posts/entries' && init?.method === 'GET') {
         return json({
           entries: [{
             id: 'entry_1',
@@ -714,7 +853,7 @@ describe('ContentPage', () => {
         })
       }
 
-      if (url === '/api/cms/content/entries/entry_1/collection' && init?.method === 'PATCH') {
+      if (url === '/admin/api/cms/content/entries/entry_1/collection' && init?.method === 'PATCH') {
         return json({
           entry: {
             id: 'entry_1',
@@ -734,7 +873,7 @@ describe('ContentPage', () => {
         })
       }
 
-      if (url === '/api/cms/content/collections/products/entries' && init?.method === 'GET') {
+      if (url === '/admin/api/cms/content/collections/products/entries' && init?.method === 'GET') {
         return json({
           entries: [{
             id: 'entry_1',
@@ -754,7 +893,7 @@ describe('ContentPage', () => {
         })
       }
 
-      if (url === '/api/cms/media') {
+      if (url === '/admin/api/cms/media') {
         return json({ assets: [imageAsset] })
       }
 
@@ -776,7 +915,7 @@ describe('ContentPage', () => {
 
     await waitFor(() => {
       expect(calls.some((call) =>
-        String(call.input) === '/api/cms/content/entries/entry_1/collection' &&
+        String(call.input) === '/admin/api/cms/content/entries/entry_1/collection' &&
         call.init?.method === 'PATCH' &&
         call.init?.body === JSON.stringify({ collectionId: 'products' })
       )).toBe(true)
@@ -794,7 +933,7 @@ describe('ContentPage', () => {
       calls.push({ input, init })
       const url = String(input)
 
-      if (url === '/api/cms/content/collections' && init?.method === 'GET') {
+      if (url === '/admin/api/cms/content/collections' && init?.method === 'GET') {
         return json({
           collections: [
             {
@@ -823,7 +962,7 @@ describe('ContentPage', () => {
         })
       }
 
-      if (url === '/api/cms/content/collections/posts/entries' && init?.method === 'GET') {
+      if (url === '/admin/api/cms/content/collections/posts/entries' && init?.method === 'GET') {
         return json({
           entries: [
             {
@@ -860,11 +999,11 @@ describe('ContentPage', () => {
         })
       }
 
-      if (url === '/api/cms/content/collections/products/entries' && init?.method === 'GET') {
+      if (url === '/admin/api/cms/content/collections/products/entries' && init?.method === 'GET') {
         return json({ entries: [] })
       }
 
-      if (url === '/api/cms/content/entries/entry_1' && init?.method === 'PUT') {
+      if (url === '/admin/api/cms/content/entries/entry_1' && init?.method === 'PUT') {
         const draft = JSON.parse(String(init.body))
         return json({
           entry: {
@@ -880,7 +1019,7 @@ describe('ContentPage', () => {
         })
       }
 
-      if (url === '/api/cms/content/entries/entry_1/publish' && init?.method === 'POST') {
+      if (url === '/admin/api/cms/content/entries/entry_1/publish' && init?.method === 'POST') {
         return json({
           entry: {
             id: 'entry_1',
@@ -900,7 +1039,7 @@ describe('ContentPage', () => {
         })
       }
 
-      if (url === '/api/cms/content/entries/entry_2/status' && init?.method === 'PATCH') {
+      if (url === '/admin/api/cms/content/entries/entry_2/status' && init?.method === 'PATCH') {
         return json({
           entry: {
             id: 'entry_2',
@@ -920,7 +1059,7 @@ describe('ContentPage', () => {
         })
       }
 
-      if (url === '/api/cms/content/entries/entry_1' && init?.method === 'DELETE') {
+      if (url === '/admin/api/cms/content/entries/entry_1' && init?.method === 'DELETE') {
         return json({
           entry: {
             id: 'entry_1',
@@ -940,7 +1079,7 @@ describe('ContentPage', () => {
         })
       }
 
-      if (url === '/api/cms/content/collections/products' && init?.method === 'PATCH') {
+      if (url === '/admin/api/cms/content/collections/products' && init?.method === 'PATCH') {
         const body = JSON.parse(String(init.body))
         return json({
           collection: {
@@ -952,7 +1091,7 @@ describe('ContentPage', () => {
         })
       }
 
-      if (url === '/api/cms/content/collections/products' && init?.method === 'DELETE') {
+      if (url === '/admin/api/cms/content/collections/products' && init?.method === 'DELETE') {
         return json({
           collection: {
             id: 'products',
@@ -968,7 +1107,7 @@ describe('ContentPage', () => {
         })
       }
 
-      if (url === '/api/cms/media') {
+      if (url === '/admin/api/cms/media') {
         return json({ assets: [] })
       }
 
@@ -993,7 +1132,7 @@ describe('ContentPage', () => {
     fireEvent.click(within(menu).getByRole('menuitem', { name: /convert to draft/i }))
     await waitFor(() => {
       expect(calls.some((call) =>
-        String(call.input) === '/api/cms/content/entries/entry_2/status' &&
+        String(call.input) === '/admin/api/cms/content/entries/entry_2/status' &&
         call.init?.method === 'PATCH' &&
         call.init?.body === JSON.stringify({ status: 'draft' })
       )).toBe(true)
@@ -1010,7 +1149,7 @@ describe('ContentPage', () => {
     fireEvent.click(within(menu).getByRole('menuitem', { name: /^publish$/i }))
     await waitFor(() => {
       expect(calls.some((call) =>
-        String(call.input) === '/api/cms/content/entries/entry_1/publish' &&
+        String(call.input) === '/admin/api/cms/content/entries/entry_1/publish' &&
         call.init?.method === 'POST'
       )).toBe(true)
     })
@@ -1026,7 +1165,7 @@ describe('ContentPage', () => {
 
     expect(await within(postsRegion).findByText('Winter sale')).toBeDefined()
     expect(calls.some((call) =>
-      String(call.input) === '/api/cms/content/entries/entry_1' &&
+      String(call.input) === '/admin/api/cms/content/entries/entry_1' &&
       call.init?.method === 'PUT' &&
       call.init?.body === JSON.stringify({
         title: 'Winter sale',
@@ -1057,7 +1196,7 @@ describe('ContentPage', () => {
 
     expect(await within(collectionsRegion).findByText('Catalog')).toBeDefined()
     expect(calls.some((call) =>
-      String(call.input) === '/api/cms/content/collections/products' &&
+      String(call.input) === '/admin/api/cms/content/collections/products' &&
       call.init?.method === 'PATCH' &&
       call.init?.body === JSON.stringify({
         name: 'Catalog',
@@ -1077,7 +1216,7 @@ describe('ContentPage', () => {
 
     await waitFor(() => {
       expect(calls.some((call) =>
-        String(call.input) === '/api/cms/content/entries/entry_1' &&
+        String(call.input) === '/admin/api/cms/content/entries/entry_1' &&
         call.init?.method === 'DELETE'
       )).toBe(true)
     })
@@ -1092,7 +1231,7 @@ describe('ContentPage', () => {
 
     await waitFor(() => {
       expect(calls.some((call) =>
-        String(call.input) === '/api/cms/content/collections/products' &&
+        String(call.input) === '/admin/api/cms/content/collections/products' &&
         call.init?.method === 'DELETE'
       )).toBe(true)
     })
@@ -1168,7 +1307,7 @@ describe('ContentPage', () => {
     await screen.findByText('Draft saved')
 
     const calls = (globalThis as typeof globalThis & { __contentFetchCalls?: FetchCall[] }).__contentFetchCalls ?? []
-    const saveCalls = calls.filter((call) => String(call.input) === '/api/cms/content/entries/entry_1' && call.init?.method === 'PUT')
+    const saveCalls = calls.filter((call) => String(call.input) === '/admin/api/cms/content/entries/entry_1' && call.init?.method === 'PUT')
     expect(saveCalls.at(-1)?.init?.body).toBe(JSON.stringify({
       title: 'Untitled',
       slug: 'untitled',
@@ -1212,7 +1351,7 @@ describe('ContentPage', () => {
     await screen.findByText('Draft saved')
 
     const calls = (globalThis as typeof globalThis & { __contentFetchCalls?: FetchCall[] }).__contentFetchCalls ?? []
-    const saveCalls = calls.filter((call) => String(call.input) === '/api/cms/content/entries/entry_1' && call.init?.method === 'PUT')
+    const saveCalls = calls.filter((call) => String(call.input) === '/admin/api/cms/content/entries/entry_1' && call.init?.method === 'PUT')
     expect(saveCalls.at(-1)?.init?.body).toBe(JSON.stringify({
       title: 'Untitled',
       slug: 'untitled',
@@ -1412,7 +1551,7 @@ describe('ContentPage', () => {
     await screen.findByText('Unpublished')
 
     const calls = (globalThis as typeof globalThis & { __contentFetchCalls?: FetchCall[] }).__contentFetchCalls ?? []
-    const saveCalls = calls.filter((call) => String(call.input) === '/api/cms/content/entries/entry_1' && call.init?.method === 'PUT')
+    const saveCalls = calls.filter((call) => String(call.input) === '/admin/api/cms/content/entries/entry_1' && call.init?.method === 'PUT')
     expect(saveCalls.at(-1)?.init?.body).toBe(JSON.stringify({
       title: 'My first post',
       slug: 'updated-slug',
@@ -1422,7 +1561,7 @@ describe('ContentPage', () => {
       seoDescription: '',
     }))
     expect(calls.some((call) =>
-      String(call.input) === '/api/cms/content/entries/entry_1/status' &&
+      String(call.input) === '/admin/api/cms/content/entries/entry_1/status' &&
       call.init?.method === 'PATCH' &&
       call.init?.body === JSON.stringify({ status: 'unpublished' })
     )).toBe(true)
@@ -1432,7 +1571,7 @@ describe('ContentPage', () => {
     const baseFetch = globalThis.fetch
     globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
-      if (url === '/api/cms/content/collections/posts/entries' && init?.method === 'GET') {
+      if (url === '/admin/api/cms/content/collections/posts/entries' && init?.method === 'GET') {
         return json({
           entries: [{
             id: 'entry_1',

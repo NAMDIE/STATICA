@@ -20,9 +20,9 @@
  */
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import type { DbClient } from '../../cms/db/client'
-import { requireCapability } from '../../cms/authz'
-import { createAuditEvent } from '../../cms/auditRepository'
+import type { DbClient } from '../../db/client'
+import { requireCapability } from '../../auth/authz'
+import { createAuditEvent } from '../../repositories/audit'
 import {
   createPluginRecord,
   deletePluginRecord,
@@ -34,7 +34,7 @@ import {
   setPluginLifecycleStatus,
   setPluginEnabled,
   updatePluginRecord,
-} from '../../cms/pluginRepository'
+} from '../../repositories/plugins'
 import {
   collectEnabledAdminPages,
   findPluginResource,
@@ -50,14 +50,14 @@ import type {
   PluginResource,
   ServerPluginLifecycleHook,
 } from '@core/plugin-sdk'
-import { readPluginPackage } from '../../cms/pluginPackage'
+import { readPluginPackage } from '../../plugins/package'
 import {
   activateInstalledServerPlugins,
   handleServerPluginRuntimeRequest,
   loadServerPluginModule,
   runServerPluginLifecycleHook,
   serverPluginRuntime,
-} from '../../cms/serverPluginRuntime'
+} from '../../plugins/runtime'
 import { badRequest, jsonResponse, methodNotAllowed, readJsonObject } from '../../http'
 import { requestAuditContext, type CmsHandlerOptions } from './shared'
 import { nanoid } from 'nanoid'

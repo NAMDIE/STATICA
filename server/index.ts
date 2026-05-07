@@ -1,10 +1,10 @@
-import { createDbClient } from './cms/db'
-import { runMigrations } from './cms/db/runMigrations'
+import { createDbClient } from './db'
+import { runMigrations } from './db/runMigrations'
 import { readServerConfig } from './config'
 
 await import('./domEnvironment')
 const { handleServerRequest } = await import('./router')
-const { activateInstalledServerPlugins } = await import('./cms/serverPluginRuntime')
+const { activateInstalledServerPlugins } = await import('./plugins/runtime')
 
 const config = readServerConfig()
 const { db, migrations } = createDbClient(config.databaseUrl)

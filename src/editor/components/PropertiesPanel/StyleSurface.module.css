@@ -8,6 +8,7 @@
     min-height: 0;
     display: grid;
     grid-template-columns: minmax(0, 1fr) 32px;
+    padding-top: 15px;
     padding-bottom: 30px;
     gap: 0;
     overflow-y: auto;

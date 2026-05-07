@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
-import type { DbResult } from '../../../server/cms/db'
+import type { DbResult } from '../../../server/db'
 import { handleServerRequest } from '../../../server/router'
-import type { PublishedPageSnapshot } from '../../../server/cms/publishRepository'
+import type { PublishedPageSnapshot } from '../../../server/repositories/publish'
 import { makePage, makeSite } from '../publisher/helpers'
 import { createFakeDb } from './dbTestFake'
 

@@ -70,7 +70,7 @@ describe('Workflow Tools example plugin', () => {
 
     const result = await pluginRuntime.runCommand('workflow.requestApproval')
 
-    expect(calls[0]?.input).toBe('/api/cms/plugins/acme.workflow/resources/approvals/records')
+    expect(calls[0]?.input).toBe('/admin/api/cms/plugins/acme.workflow/resources/approvals/records')
     expect(JSON.parse(String(calls[0]?.init?.body))).toMatchObject({
       data: {
         'page-title': 'Home',

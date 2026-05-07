@@ -15,14 +15,14 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { nanoid } from 'nanoid'
-import type { DbClient } from '../../cms/db/client'
-import { requireCapability } from '../../cms/authz'
+import type { DbClient } from '../../db/client'
+import { requireCapability } from '../../auth/authz'
 import {
   createMediaAsset,
   deleteMediaAsset,
   listMediaAssets,
   renameMediaAsset,
-} from '../../cms/mediaRepository'
+} from '../../repositories/media'
 import { badRequest, jsonResponse, methodNotAllowed, readJsonObject } from '../../http'
 import { readString, type CmsHandlerOptions } from './shared'
 

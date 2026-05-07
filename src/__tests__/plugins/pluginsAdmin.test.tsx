@@ -100,16 +100,16 @@ describe('PluginsPage', () => {
     globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       calls.push({ input, init })
       const url = String(input)
-      if (url === '/api/cms/plugins' && init?.method === 'GET') {
+      if (url === '/admin/api/cms/plugins' && init?.method === 'GET') {
         return json({
           plugins: [pluginRow(true)],
           adminPages: [{ pluginId: 'local.map', pluginName: 'Map Studio', ...mapManifest.adminPages[0] }],
         })
       }
-      if (url === '/api/cms/plugins/local.map' && init?.method === 'PATCH') {
+      if (url === '/admin/api/cms/plugins/local.map' && init?.method === 'PATCH') {
         return json({ plugin: pluginRow(false), adminPages: [] })
       }
-      if (url === '/api/cms/plugins/local.map' && init?.method === 'DELETE') {
+      if (url === '/admin/api/cms/plugins/local.map' && init?.method === 'DELETE') {
         return json({ ok: true })
       }
       return json({ error: `Unhandled ${url}` }, 500)
@@ -127,7 +127,7 @@ describe('PluginsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /disable map studio/i }))
     await waitFor(() => {
       expect(calls.some((call) =>
-        String(call.input) === '/api/cms/plugins/local.map' &&
+        String(call.input) === '/admin/api/cms/plugins/local.map' &&
         call.init?.method === 'PATCH' &&
         call.init.body === JSON.stringify({ enabled: false })
       )).toBe(true)
@@ -136,7 +136,7 @@ describe('PluginsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /remove map studio/i }))
     await waitFor(() => {
       expect(calls.some((call) =>
-        String(call.input) === '/api/cms/plugins/local.map' &&
+        String(call.input) === '/admin/api/cms/plugins/local.map' &&
         call.init?.method === 'DELETE'
       )).toBe(true)
     })
@@ -147,10 +147,10 @@ describe('PluginsPage', () => {
     globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       calls.push({ input, init })
       const url = String(input)
-      if (url === '/api/cms/plugins' && init?.method === 'GET') {
+      if (url === '/admin/api/cms/plugins' && init?.method === 'GET') {
         return json({ plugins: [], adminPages: [] })
       }
-      if (url === '/api/cms/plugins' && init?.method === 'POST') {
+      if (url === '/admin/api/cms/plugins' && init?.method === 'POST') {
         return json({ plugin: pluginRow(true), adminPages: [] }, 201)
       }
       return json({ error: `Unhandled ${url}` }, 500)
@@ -173,7 +173,7 @@ describe('PluginsPage', () => {
 
     await waitFor(() => {
       const installCall = calls.find((call) =>
-        String(call.input) === '/api/cms/plugins' &&
+        String(call.input) === '/admin/api/cms/plugins' &&
         call.init?.method === 'POST'
       )
       expect(installCall).toBeDefined()
@@ -198,10 +198,10 @@ describe('PluginsPage', () => {
     globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       calls.push({ input, init })
       const url = String(input)
-      if (url === '/api/cms/plugins' && init?.method === 'GET') {
+      if (url === '/admin/api/cms/plugins' && init?.method === 'GET') {
         return json({ plugins: [], adminPages: [] })
       }
-      if (url === '/api/cms/plugins' && init?.method === 'POST') {
+      if (url === '/admin/api/cms/plugins' && init?.method === 'POST') {
         return json({ plugin: pluginRow(true), adminPages: [] }, 201)
       }
       return json({ error: `Unhandled ${url}` }, 500)
@@ -225,13 +225,13 @@ describe('PluginsPage', () => {
     expect(screen.getByText('Add controls to the editor toolbar')).toBeDefined()
     expect(screen.getByText('Register editor commands')).toBeDefined()
     expect(screen.getByText('Allows the plugin to mutate editor store state through a host transaction.')).toBeDefined()
-    expect(calls.some((call) => String(call.input) === '/api/cms/plugins' && call.init?.method === 'POST')).toBe(false)
+    expect(calls.some((call) => String(call.input) === '/admin/api/cms/plugins' && call.init?.method === 'POST')).toBe(false)
 
     fireEvent.click(screen.getByRole('button', { name: /approve and install/i }))
 
     await waitFor(() => {
       const installCall = calls.find((call) =>
-        String(call.input) === '/api/cms/plugins' &&
+        String(call.input) === '/admin/api/cms/plugins' &&
         call.init?.method === 'POST'
       )
       expect(installCall).toBeDefined()
@@ -245,7 +245,7 @@ describe('PluginsPage', () => {
   it('shows lifecycle error diagnostics for failed plugin hooks', async () => {
     globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
-      if (url === '/api/cms/plugins' && init?.method === 'GET') {
+      if (url === '/admin/api/cms/plugins' && init?.method === 'GET') {
         return json({
           plugins: [pluginRow(true, {
             lifecycleStatus: 'error',

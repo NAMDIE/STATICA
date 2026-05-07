@@ -3,7 +3,7 @@
  * modules register in `src/modules/base/index.ts`.
  *
  * Imported once from `src/admin/AdminEntry.tsx` (admin chunk) and from
- * `server/cms/publicRenderer.ts` (server) so the registry is populated
+ * `server/publish/publicRenderer.ts` (server) so the registry is populated
  * before any loop renders.
  */
 

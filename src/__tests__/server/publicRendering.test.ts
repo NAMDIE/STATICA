@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
-import type { DbClient, DbResult } from '../../../server/cms/db'
-import type { PublishedPageSnapshot } from '../../../server/cms/publishRepository'
-import { renderPublishedSnapshot } from '../../../server/cms/publicRenderer'
+import type { DbClient, DbResult } from '../../../server/db'
+import type { PublishedPageSnapshot } from '../../../server/repositories/publish'
+import { renderPublishedSnapshot } from '../../../server/publish/publicRenderer'
 import { handleServerRequest } from '../../../server/router'
 
 function snapshot(text: string): PublishedPageSnapshot {
@@ -80,7 +80,7 @@ function makeFakeDb(
     if (normalized.includes('count(*) as count from site')) {
       return { rows: [{ count: 1 } as unknown as Row], rowCount: 1 }
     }
-    if (normalized.includes('count(*) as count from admin_users')) {
+    if (normalized.includes('count(*) as count') && normalized.includes('from users')) {
       return { rows: [{ count: 1 } as unknown as Row], rowCount: 1 }
     }
     return { rows: [], rowCount: 0 }

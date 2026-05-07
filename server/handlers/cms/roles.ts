@@ -7,16 +7,16 @@
  *   DELETE /admin/api/cms/roles/:id  — delete a custom role (built-ins
  *                                       reject inside the repository)
  */
-import type { DbClient } from '../../cms/db/client'
-import { requireCapability } from '../../cms/authz'
-import { createAuditEvent } from '../../cms/auditRepository'
+import type { DbClient } from '../../db/client'
+import { requireCapability } from '../../auth/authz'
+import { createAuditEvent } from '../../repositories/audit'
 import {
   createCustomRole,
   deleteCustomRole,
   listRoles,
   updateCustomRole,
-} from '../../cms/rolesRepository'
-import { normalizeCapabilities } from '../../cms/capabilities'
+} from '../../repositories/roles'
+import { normalizeCapabilities } from '../../auth/capabilities'
 import { Type, type Static } from '@core/utils/typeboxHelpers'
 import { badRequest, jsonResponse, methodNotAllowed } from '../../http'
 import {

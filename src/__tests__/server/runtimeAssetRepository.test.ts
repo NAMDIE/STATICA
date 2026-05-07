@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'bun:test'
-import type { DbClient, DbResult } from '../../../server/cms/db'
+import type { DbClient, DbResult } from '../../../server/db'
 import {
   getPublishedRuntimeAsset,
   savePublishedRuntimeAssets,
-} from '../../../server/cms/runtimeAssetRepository'
+} from '../../../server/repositories/runtimeAsset'
 
 function makeFakeDb() {
   const rows: Record<string, unknown>[] = []

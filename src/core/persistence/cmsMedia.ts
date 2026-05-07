@@ -12,7 +12,7 @@ type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Respo
 
 export async function listCmsMediaAssets(
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<CmsMediaAsset[]> {
   const res = await fetchImpl(`${basePath}/media`, {
     method: 'GET',
@@ -31,7 +31,7 @@ export async function listCmsMediaAssets(
 export async function uploadCmsMediaAsset(
   file: File,
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<CmsMediaAsset> {
   const body = new FormData()
   body.set('file', file)
@@ -52,7 +52,7 @@ export async function renameCmsMediaAsset(
   assetId: string,
   filename: string,
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<CmsMediaAsset> {
   const res = await fetchImpl(`${basePath}/media/${encodeURIComponent(assetId)}`, {
     method: 'PATCH',
@@ -70,7 +70,7 @@ export async function renameCmsMediaAsset(
 export async function deleteCmsMediaAsset(
   assetId: string,
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<void> {
   const res = await fetchImpl(`${basePath}/media/${encodeURIComponent(assetId)}`, {
     method: 'DELETE',

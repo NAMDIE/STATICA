@@ -412,7 +412,7 @@ export interface RenderContext {
   cssMap: Map<string, string>
   /**
    * Pre-fetched loop data, keyed by loop nodeId. Populated by
-   * `server/cms/loopPrefetch.ts` before `publishPage()` is called.
+   * `server/publish/loopPrefetch.ts` before `publishPage()` is called.
    * Loops without an entry here render empty.
    */
   loopData?: Map<string, ResolvedLoopRenderData>

@@ -4,7 +4,7 @@
  * Every column in the Postgres schema whose declared type is `jsonb` must have
  * a name ending in `_json`. This convention is not merely cosmetic:
  *
- *   - The SQLite adapter (`server/cms/db/sqlite.ts`) auto-parses column values
+ *   - The SQLite adapter (`server/db/sqlite.ts`) auto-parses column values
  *     whose keys end in `_json` (see `parseJsonColumns`). Columns that store
  *     JSON but lack the suffix will be returned as raw strings instead of
  *     parsed objects under SQLite, causing silent data-shape divergence.
@@ -16,14 +16,14 @@
  *   2. Every such column appears in the corresponding `migrations-sqlite.ts`
  *      migration declared as `text` (SQLite's JSON storage type).
  *
- * @see server/cms/db/sqlite.ts — parseJsonColumns (auto-parse by _json suffix)
- * @see server/cms/db/migrations-pg.ts — Postgres schema source of truth
- * @see server/cms/db/migrations-sqlite.ts — SQLite dialect translations
+ * @see server/db/sqlite.ts — parseJsonColumns (auto-parse by _json suffix)
+ * @see server/db/migrations-pg.ts — Postgres schema source of truth
+ * @see server/db/migrations-sqlite.ts — SQLite dialect translations
  */
 
 import { describe, test, expect } from 'bun:test'
-import { migrations as pgMigrations } from '../../../server/cms/db/migrations-pg'
-import { migrations as sqliteMigrations } from '../../../server/cms/db/migrations-sqlite'
+import { migrations as pgMigrations } from '../../../server/db/migrations-pg'
+import { migrations as sqliteMigrations } from '../../../server/db/migrations-sqlite'
 
 // ---------------------------------------------------------------------------
 // Helpers

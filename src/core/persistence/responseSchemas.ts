@@ -43,6 +43,7 @@ export const ErrorEnvelopeSchema = Type.Object(
 export const CmsSetupStatusSchema = Type.Object({
   hasSite: Type.Boolean(),
   hasAdmin: Type.Boolean(),
+  hasOwner: Type.Optional(Type.Boolean()),
   needsSetup: Type.Boolean(),
 })
 
@@ -58,6 +59,7 @@ export const CmsMediaAssetSchema = Type.Object({
   mimeType: Type.String(),
   sizeBytes: Type.Number(),
   publicPath: Type.String(),
+  uploadedByUserId: Type.Union([Type.String(), Type.Null()]),
   createdAt: Type.String(),
 })
 

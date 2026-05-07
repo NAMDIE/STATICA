@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import { zipSync, strToU8 } from 'fflate'
-import { readPluginPackage } from '../../../server/cms/pluginPackage'
+import { readPluginPackage } from '../../../server/plugins/package'
 
 function pluginZip(files: Record<string, string>): File {
   const zipped = zipSync(Object.fromEntries(

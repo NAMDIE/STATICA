@@ -69,8 +69,28 @@
     overflow: hidden;
 }
 
+/*  `position: relative` + `z-index: 1` make this the containing block AND
+    stacking context for the `::after` fade, so the gradient renders above
+    the scrolling StyleSurface that follows. Bottom padding is intentionally
+    zero — the fade itself acts as the visual separator and lets the first
+    rows of content peek up to (and dim below) the picker as users scroll. */
 .headerClassPicker {
-    padding: 10px 14px 12px;
+    position: relative;
+    z-index: 1;
+    padding: 10px 14px 0;
+}
+
+/*  Soft fade just below the ClassPicker — mirrors the bottom search bar's
+    gradient so content scrolling up under the picker fades out instead of
+    snapping to a hard color edge. */
+.headerClassPicker::after {
+    content: '';
+    position: absolute;
+    inset-inline: 0;
+    top: 100%;
+    height: 16px;
+    pointer-events: none;
+    background: linear-gradient(180deg, var(--editor-bg) 0%, transparent);
 }
 
 .headerNodeTitle {

@@ -2,7 +2,7 @@
  * Site CSS bundle — type definitions for the three external CSS files served
  * at `/_pb/css/<filename>` for every published page.
  *
- * The IMPLEMENTATION (`buildSiteCssBundle`) lives in `server/cms/siteCssBundle.ts`
+ * The IMPLEMENTATION (`buildSiteCssBundle`) lives in `server/publish/siteCssBundle.ts`
  * because it depends on `node:crypto` for content hashing. Only the type shape
  * lives in `src/core/publisher/` so that `publishPage()` can accept a bundle
  * without dragging server-only code into the editor build.

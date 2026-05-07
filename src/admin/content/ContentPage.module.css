@@ -159,10 +159,27 @@
     accent-color: var(--editor-accent);
 }
 
-.entryTitle {
+.entryRow {
+    min-height: 38px;
+}
+
+.entryTitleStack {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+}
+
+.entryTitle,
+.entryAuthor {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.entryAuthor {
+    color: var(--editor-text-muted);
+    font-size: 10px;
+    line-height: 1.15;
 }
 
 .entriesSkeletonRow {
@@ -238,6 +255,7 @@
 
 .field span,
 .metaBlock span,
+.authorBlock > span,
 .featuredMediaField > span {
     color: var(--editor-text-muted);
     font-size: 11px;
@@ -245,6 +263,7 @@
 }
 
 .metaBlock,
+.authorBlock,
 .featuredMediaField {
     display: grid;
     gap: 6px;
@@ -255,6 +274,43 @@
     color: var(--editor-text);
     font-size: 12px;
     font-weight: 700;
+}
+
+.authorRow {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 8px;
+}
+
+.authorRow > div {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.authorRow strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--editor-text);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.authorRoleBadge {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    min-height: 20px;
+    padding: 0 8px;
+    border-radius: 8px;
+    background: linear-gradient(0deg, var(--editor-surface-3), transparent);
+    color: var(--editor-text-secondary);
+    font-size: 11px;
+    font-weight: 620;
+    line-height: 1;
+    white-space: nowrap;
 }
 
 .featuredMediaCard {

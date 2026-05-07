@@ -4,10 +4,12 @@ import {
   createCmsContentEntry,
   deleteCmsContentCollection,
   deleteCmsContentEntry,
+  listCmsContentAuthors,
   listCmsContentCollections,
   listCmsContentEntries,
   publishCmsContentEntry,
   saveCmsContentEntryDraft,
+  updateCmsContentEntryAuthor,
   updateCmsContentEntryCollection,
   updateCmsContentCollection,
   updateCmsContentEntryStatus,
@@ -17,6 +19,7 @@ import type {
   ContentCollection,
   ContentEntry,
   ContentEntryStatus,
+  ContentUserReference,
   CreateContentCollectionInput,
   UpdateContentCollectionInput,
 } from '@core/content/schemas'
@@ -25,6 +28,8 @@ import { updateEntryList } from '../utils/contentEntryUtils'
 export function useContentWorkspace() {
   const [collections, setCollections] = useState<ContentCollection[]>([])
   const [entries, setEntries] = useState<ContentEntry[]>([])
+  const [authors, setAuthors] = useState<ContentUserReference[]>([])
+  const [authorsLoading, setAuthorsLoading] = useState(true)
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null)
   const [selectedEntry, setSelectedEntry] = useState<ContentEntry | null>(null)
   const [loading, setLoading] = useState(true)
@@ -37,6 +42,27 @@ export function useContentWorkspace() {
   const selectEntry = useCallback((entry: ContentEntry | null) => {
     setSelectedEntry(entry)
     useEditorStore.getState().setPropertiesPanel({ collapsed: false })
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadAuthors() {
+      setAuthorsLoading(true)
+      try {
+        const nextAuthors = await listCmsContentAuthors()
+        if (!cancelled) setAuthors(nextAuthors)
+      } catch (_err) {
+        // Author reassignment is optional; keep the editor usable if this
+        // auxiliary candidate list is unavailable.
+        if (!cancelled) setAuthors([])
+      } finally {
+        if (!cancelled) setAuthorsLoading(false)
+      }
+    }
+
+    void loadAuthors()
+    return () => { cancelled = true }
   }, [])
 
   const updateSelectedEntry = useCallback((entry: ContentEntry) => {
@@ -125,6 +151,34 @@ export function useContentWorkspace() {
     selectEntry(entry)
     return entry
   }, [entries.length, selectEntry, selectedCollection])
+
+  const duplicateEntry = useCallback(async (entry: ContentEntry) => {
+    setError(null)
+    // Pick a unique slug within the same collection. We re-list against the
+    // current `entries` state which is the freshest local snapshot — the
+    // server is authoritative for true uniqueness, but contention on slug
+    // generation here is virtually nil for the editor flow and the server
+    // returns a typed slug_conflict error if a parallel session collides.
+    const existingSlugs = new Set(entries.map((candidate) => candidate.slug))
+    const baseSlug = `${entry.slug}-copy`
+    let slug = baseSlug
+    let suffix = 2
+    while (existingSlugs.has(slug)) {
+      slug = `${baseSlug}-${suffix}`
+      suffix += 1
+    }
+    const duplicated = await createCmsContentEntry(entry.collectionId, {
+      title: `${entry.title} (copy)`,
+      slug,
+      bodyMarkdown: entry.bodyMarkdown,
+      featuredMediaId: entry.featuredMediaId,
+      seoTitle: entry.seoTitle,
+      seoDescription: entry.seoDescription,
+    })
+    setEntries((current) => updateEntryList(current, duplicated))
+    selectEntry(duplicated)
+    return duplicated
+  }, [entries, selectEntry])
 
   const createCollection = useCallback(async (input: CreateContentCollectionInput) => {
     setError(null)
@@ -220,6 +274,38 @@ export function useContentWorkspace() {
     return updatedEntry
   }, [selectEntry, selectedEntry?.id])
 
+  const updateEntryAuthor = useCallback(async (
+    entry: ContentEntry,
+    authorUserId: string,
+  ) => {
+    if (entry.authorUserId === authorUserId) return entry
+    setError(null)
+    const updatedEntry = await updateCmsContentEntryAuthor(entry.id, authorUserId)
+    setEntries((current) => updateEntryList(current, updatedEntry))
+    if (selectedEntry?.id === entry.id) selectEntry(updatedEntry)
+    return updatedEntry
+  }, [selectEntry, selectedEntry?.id])
+
+  const moveEntryToCollection = useCallback(async (
+    entry: ContentEntry,
+    collectionId: string,
+  ) => {
+    if (entry.collectionId === collectionId) return entry
+    setError(null)
+    const updatedEntry = await updateCmsContentEntryCollection(entry.id, collectionId)
+    // Active collection view: the moved entry no longer belongs here.
+    if (entry.collectionId === selectedCollectionId) {
+      setEntries((current) => current.filter((candidate) => candidate.id !== entry.id))
+    }
+    // Active collection view: it may already be the destination if the user
+    // is viewing it. In that case the entry should appear in the list.
+    if (collectionId === selectedCollectionId) {
+      setEntries((current) => updateEntryList(current, updatedEntry))
+    }
+    if (selectedEntry?.id === entry.id) selectEntry(updatedEntry)
+    return updatedEntry
+  }, [selectEntry, selectedCollectionId, selectedEntry?.id])
+
   const moveSelectedEntryToCollection = useCallback(async (collectionId: string) => {
     if (!selectedEntry || selectedEntry.collectionId === collectionId) return selectedEntry
     setError(null)
@@ -234,6 +320,8 @@ export function useContentWorkspace() {
   return {
     collections,
     entries,
+    authors,
+    authorsLoading,
     selectedCollection,
     selectedCollectionId,
     selectedEntry,
@@ -244,6 +332,7 @@ export function useContentWorkspace() {
     selectEntry,
     updateSelectedEntry,
     createUntitledEntry,
+    duplicateEntry,
     createCollection,
     updateCollection,
     deleteCollection,
@@ -251,6 +340,8 @@ export function useContentWorkspace() {
     deleteEntry,
     publishEntry,
     updateEntryStatus,
+    updateEntryAuthor,
+    moveEntryToCollection,
     moveSelectedEntryToCollection,
   }
 }

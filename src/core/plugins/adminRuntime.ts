@@ -35,7 +35,7 @@ function appEntrypointUrl(assetPath: string, entrypoint: string): string {
 
 function runtimePath(pluginId: string, path: string): string {
   const normalized = path.trim().replace(/^\/+/g, '')
-  return `/api/cms/plugins/${encodeURIComponent(pluginId)}/runtime/${normalized}`
+  return `/admin/api/cms/plugins/${encodeURIComponent(pluginId)}/runtime/${normalized}`
 }
 
 function createAdminPluginApi(pluginId: string, fetchImpl: FetchLike): PluginAdminAppApi {

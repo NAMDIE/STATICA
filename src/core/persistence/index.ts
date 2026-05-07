@@ -13,10 +13,12 @@ export {
   createCmsContentEntry,
   deleteCmsContentCollection,
   deleteCmsContentEntry,
+  listCmsContentAuthors,
   listCmsContentCollections,
   listCmsContentEntries,
   publishCmsContentEntry,
   saveCmsContentEntryDraft,
+  updateCmsContentEntryAuthor,
   updateCmsContentCollection,
   updateCmsContentEntryCollection,
   updateCmsContentEntryStatus,
@@ -36,6 +38,18 @@ export {
   loadCmsPluginResource,
   updateCmsPluginResourceRecord,
 } from './cmsPluginRecords'
+export {
+  createCmsRole,
+  createCmsUser,
+  deleteCmsRole,
+  deleteCmsUser,
+  listCmsAuditEvents,
+  listCmsRoles,
+  listCmsUsers,
+  updateCmsRole,
+  updateCmsUser,
+} from './cmsUsers'
+export type { CmsAuditEvent, CmsRole } from './cmsUsers'
 export type {
   CmsPluginsPayload,
   InstalledPlugin,
@@ -44,5 +58,6 @@ export type {
   PluginRecord,
   PluginResource,
 } from '../plugin-sdk'
-export { getCmsSetupStatus, loginCms, probeCmsSession, setupCms } from './cmsAuth'
+export { getCmsSetupStatus, getCurrentCmsUser, loginCms, probeCmsSession, setupCms } from './cmsAuth'
+export type { CmsCurrentUser } from './cmsAuth'
 // usePersistence moved to src/editor/hooks/usePersistence.ts (Constraint #179 — no React in core)

@@ -1,0 +1,234 @@
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import type { DbClient } from '../db/client'
+import {
+  createPluginRecord,
+  deletePluginRecord,
+  listInstalledPlugins,
+  listPluginRecords,
+  updatePluginRecord,
+} from '../repositories/plugins'
+import {
+  findPluginResource,
+  validatePluginRecordData,
+} from '@core/plugins/manifest'
+import type {
+  PluginManifest,
+  RouteMethod,
+  ServerPluginApi,
+  ServerPluginLifecycleHook,
+  ServerPluginModule,
+  ServerPluginRouteHandler,
+} from '@core/plugin-sdk'
+import { assertPluginPermission } from '@core/plugin-sdk'
+import { jsonResponse, readJsonObject } from '../http'
+import { nanoid } from 'nanoid'
+import { isCoreCapability, type CoreCapability } from '../auth/capabilities'
+import { requireCapability } from '../auth/authz'
+
+interface ServerPluginRoute {
+  pluginId: string
+  method: RouteMethod
+  path: string
+  capability: CoreCapability | null
+  handler: ServerPluginRouteHandler
+}
+
+class ServerPluginRuntime {
+  private routes = new Map<string, ServerPluginRoute>()
+
+  reset(): void {
+    this.routes.clear()
+  }
+
+  registerRoute(route: ServerPluginRoute): void {
+    this.routes.set(this.routeKey(route.pluginId, route.method, route.path), route)
+  }
+
+  unregisterPlugin(pluginId: string): void {
+    for (const key of this.routes.keys()) {
+      if (key.startsWith(`${pluginId}:`)) this.routes.delete(key)
+    }
+  }
+
+  findRoute(pluginId: string, method: string, path: string): ServerPluginRoute | null {
+    return this.routes.get(this.routeKey(pluginId, method.toUpperCase(), normalizeRoutePath(path))) ?? null
+  }
+
+  private routeKey(pluginId: string, method: string, path: string): string {
+    return `${pluginId}:${method}:${normalizeRoutePath(path)}`
+  }
+}
+
+export const serverPluginRuntime = new ServerPluginRuntime()
+
+function normalizeRoutePath(path: string): string {
+  const trimmed = path.trim()
+  if (!trimmed || trimmed === '/') return '/'
+  return `/${trimmed.replace(/^\/+|\/+$/g, '')}`
+}
+
+function createServerPluginApi(
+  manifest: PluginManifest,
+  db: DbClient,
+): ServerPluginApi {
+  function register(
+    method: RouteMethod,
+    path: string,
+    capability: string,
+    handler: ServerPluginRouteHandler,
+  ) {
+    assertPluginPermission(manifest, 'cms.routes')
+    if (!isCoreCapability(capability)) {
+      throw new Error(`Unknown plugin route capability: ${capability}`)
+    }
+    serverPluginRuntime.registerRoute({
+      pluginId: manifest.id,
+      method,
+      path: normalizeRoutePath(path),
+      capability,
+      handler,
+    })
+  }
+
+  function registerPublic(method: RouteMethod, path: string, handler: ServerPluginRouteHandler) {
+    assertPluginPermission(manifest, 'cms.routes')
+    serverPluginRuntime.registerRoute({
+      pluginId: manifest.id,
+      method,
+      path: normalizeRoutePath(path),
+      capability: null,
+      handler,
+    })
+  }
+
+  return {
+    plugin: {
+      id: manifest.id,
+      version: manifest.version,
+      permissions: manifest.grantedPermissions ?? [],
+      log: (...args) => {
+        console.info(`[plugin:${manifest.id}]`, ...args)
+      },
+    },
+    cms: {
+      routes: {
+        get: (path, capability, handler) => register('GET', path, capability, handler),
+        post: (path, capability, handler) => register('POST', path, capability, handler),
+        patch: (path, capability, handler) => register('PATCH', path, capability, handler),
+        delete: (path, capability, handler) => register('DELETE', path, capability, handler),
+        getPublic: (path, handler) => registerPublic('GET', path, handler),
+      },
+      storage: {
+        collection(resourceId) {
+          assertPluginPermission(manifest, 'cms.storage')
+          const resource = findPluginResource(manifest, resourceId)
+          return {
+            list: () => listPluginRecords(db, manifest.id, resourceId),
+            create: (data) => createPluginRecord(db, {
+              id: nanoid(),
+              pluginId: manifest.id,
+              resourceId,
+              data: resource ? validatePluginRecordData(resource, data) : data,
+            }),
+            update: (recordId, data) => updatePluginRecord(db, {
+              id: recordId,
+              pluginId: manifest.id,
+              resourceId,
+              data: resource ? validatePluginRecordData(resource, data) : data,
+            }),
+            delete: (recordId) => deletePluginRecord(db, {
+              id: recordId,
+              pluginId: manifest.id,
+              resourceId,
+            }),
+          }
+        },
+      },
+    },
+  }
+}
+
+export async function activateServerPlugin(
+  manifest: PluginManifest,
+  mod: ServerPluginModule,
+  db: DbClient,
+): Promise<void> {
+  await runServerPluginLifecycleHook(manifest, mod, db, 'activate')
+}
+
+export async function runServerPluginLifecycleHook(
+  manifest: PluginManifest,
+  mod: ServerPluginModule,
+  db: DbClient,
+  hook: ServerPluginLifecycleHook,
+): Promise<void> {
+  const handler = mod[hook]
+  if (!handler) return
+  await handler(createServerPluginApi(manifest, db))
+}
+
+export async function loadServerPluginModule(
+  manifest: PluginManifest,
+  uploadsDir?: string,
+): Promise<ServerPluginModule | null> {
+  if (!uploadsDir || !manifest.assetBasePath || !manifest.entrypoints?.server) return null
+  const relativeBase = manifest.assetBasePath.replace(/^\/uploads\/?/, '')
+  const entryPath = join(uploadsDir, relativeBase, manifest.entrypoints.server)
+  return await import(`${pathToFileURL(entryPath).href}?v=${Date.now()}`) as ServerPluginModule
+}
+
+export async function handleServerPluginRuntimeRequest(
+  req: Request,
+  db: DbClient,
+): Promise<Response | null> {
+  const url = new URL(req.url)
+  const match = url.pathname.match(/^\/admin\/api\/cms\/plugins\/([^/]+)\/runtime(\/.*)?$/)
+  if (!match) return null
+
+  const pluginId = decodeURIComponent(match[1])
+  const routePath = normalizeRoutePath(decodeURIComponent(match[2] ?? '/'))
+  const route = serverPluginRuntime.findRoute(pluginId, req.method, routePath)
+  if (!route) return jsonResponse({ error: 'Plugin route not found' }, { status: 404 })
+
+  const user = route.capability ? await requireCapability(req, db, route.capability) : null
+  if (user instanceof Response) return user
+
+  const body: Record<string, unknown> = req.method !== 'GET'
+    ? await readJsonObject(req)
+    : {}
+
+  const result = await route.handler({
+    req,
+    db,
+    body,
+    user: user
+      ? {
+        id: user.id,
+        email: user.email,
+        capabilities: user.capabilities,
+      }
+      : null,
+  })
+  if (result instanceof Response) return result
+  return jsonResponse(result ?? { ok: true })
+}
+
+export async function activateInstalledServerPlugins(
+  db: DbClient,
+  uploadsDir?: string,
+): Promise<void> {
+  if (!uploadsDir) return
+  serverPluginRuntime.reset()
+  const plugins = await listInstalledPlugins(db)
+  for (const plugin of plugins) {
+    const { manifest } = plugin
+    if (!plugin.enabled || !manifest.assetBasePath || !manifest.entrypoints?.server) continue
+    const mod = await loadServerPluginModule(manifest, uploadsDir)
+    if (!mod) continue
+    await activateServerPlugin({
+      ...manifest,
+      grantedPermissions: plugin.grantedPermissions,
+    }, mod, db)
+  }
+}

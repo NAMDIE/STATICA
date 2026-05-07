@@ -6,7 +6,7 @@ export function activate(api) {
   api.plugin.log('Template plugin activated')
   const items = api.cms.storage.collection('items')
 
-  api.cms.routes.get('/status', async () => {
+  api.cms.routes.get('/status', 'plugins.manage', async () => {
     const records = await items.list()
     return {
       ok: true,

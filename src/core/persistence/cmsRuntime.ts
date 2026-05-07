@@ -38,7 +38,7 @@ export interface CmsRuntimePreviewInput {
 export async function resolveCmsRuntimeDependencies(
   packageJson: SitePackageJson,
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<SiteDependencyLock> {
   const res = await fetchImpl(`${basePath}/runtime/dependencies/resolve`, {
     method: 'POST',
@@ -58,7 +58,7 @@ export async function resolveCmsRuntimeDependencies(
 export async function buildCmsRuntimePreview(
   input: CmsRuntimePreviewInput,
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<CmsRuntimePreviewResult> {
   const res = await fetchImpl(`${basePath}/runtime/preview`, {
     method: 'POST',

@@ -4,7 +4,7 @@ import {
   inspectPageClass,
   inspectPageNode,
   searchPageNodes,
-} from '../../../server/agentTools'
+} from '../../../server/handlers/agent/tools'
 import type { PageContext } from '@core/agent/types'
 
 function makeContext(): PageContext {

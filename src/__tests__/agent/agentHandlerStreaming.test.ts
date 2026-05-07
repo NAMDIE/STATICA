@@ -3,7 +3,7 @@ import {
   buildAgentQueryOptions,
   createAgentSdkStreamState,
   getServerStreamEventsFromSdkMessage,
-} from '../../../server/agentHandler'
+} from '../../../server/handlers/agent'
 
 describe('agent handler SDK streaming', () => {
   it('forwards SDK session IDs so the browser can resume follow-up turns', () => {

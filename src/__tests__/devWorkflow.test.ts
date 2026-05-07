@@ -39,7 +39,7 @@ describe('development workflow', () => {
   it('Vite proxies CMS API and uploaded media to the local Bun server', () => {
     const viteConfig = readSiteFile('vite.config.ts')
 
-    expect(viteConfig).toContain("'/api/cms'")
+    expect(viteConfig).toContain("'/admin/api/cms'")
     expect(viteConfig).toContain("'/uploads'")
     expect(viteConfig).toContain("target: 'http://localhost:3001'")
     expect(viteConfig).toContain('changeOrigin: true')

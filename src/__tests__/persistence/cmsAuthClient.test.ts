@@ -17,7 +17,7 @@ describe('CMS auth client', () => {
 
     expect(status).toEqual({ hasSite: false, hasAdmin: false, needsSetup: true })
     expect(calls[0]).toMatchObject({
-      input: '/api/cms/setup/status',
+      input: '/admin/api/cms/setup/status',
       init: { method: 'GET', credentials: 'include' },
     })
   })
@@ -34,7 +34,7 @@ describe('CMS auth client', () => {
       return new Response(JSON.stringify({ ok: true }), { status: 201 })
     })
 
-    expect(calls[0].input).toBe('/api/cms/setup')
+    expect(calls[0].input).toBe('/admin/api/cms/setup')
     expect(calls[0].init).toMatchObject({
       method: 'POST',
       credentials: 'include',
@@ -64,22 +64,33 @@ describe('CMS auth client', () => {
     })
 
     expect(calls[0]).toMatchObject({
-      input: '/api/cms/login',
+      input: '/admin/api/cms/login',
       init: { method: 'POST', credentials: 'include' },
     })
     expect(calls[1]).toMatchObject({
-      input: '/api/cms/logout',
+      input: '/admin/api/cms/logout',
       init: { method: 'POST', credentials: 'include' },
     })
   })
 
-  it('treats a missing draft site as an authenticated empty CMS site', async () => {
+  it('probes the current-user endpoint for authenticated sessions', async () => {
+    const calls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = []
+
     await expect(probeCmsSession(async () =>
-      new Response(JSON.stringify({ error: 'draft site not found' }), { status: 404 }),
+      new Response(JSON.stringify({ user: { id: 'user_1' } }), { status: 200 }),
     )).resolves.toBe(true)
 
     await expect(probeCmsSession(async () =>
       new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 }),
     )).resolves.toBe(false)
+
+    await probeCmsSession(async (input, init) => {
+      calls.push({ input, init })
+      return new Response(JSON.stringify({ user: { id: 'user_1' } }), { status: 200 })
+    })
+    expect(calls[0]).toMatchObject({
+      input: '/admin/api/cms/me',
+      init: { method: 'GET', credentials: 'include' },
+    })
   })
 })

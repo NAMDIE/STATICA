@@ -10,10 +10,10 @@
  *                                          published snapshot (gated by
  *                                          `site.read`).
  */
-import type { DbClient } from '../../cms/db/client'
-import { requireCapability } from '../../cms/authz'
-import { createAuditEvent } from '../../cms/auditRepository'
-import { getDraftPublishStatus, publishDraftSite } from '../../cms/publishRepository'
+import type { DbClient } from '../../db/client'
+import { requireCapability } from '../../auth/authz'
+import { createAuditEvent } from '../../repositories/audit'
+import { getDraftPublishStatus, publishDraftSite } from '../../repositories/publish'
 import { jsonResponse, methodNotAllowed } from '../../http'
 import { requestAuditContext } from './shared'
 

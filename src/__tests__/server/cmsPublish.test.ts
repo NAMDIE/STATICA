@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'bun:test'
 import type { SiteDocument } from '@core/page-tree/schemas'
 import { normalizeSiteRuntimeConfig } from '@core/site-runtime'
-import type { DbResult } from '../../../server/cms/db'
-import { saveDraftSite } from '../../../server/cms/siteRepository'
+import type { DbResult } from '../../../server/db'
+import { saveDraftSite } from '../../../server/repositories/site'
 import {
   getDraftPublishStatus,
   getPublishedPageBySlug,
   publishDraftSite,
-} from '../../../server/cms/publishRepository'
+} from '../../../server/repositories/publish'
 import { createFakeDb } from './dbTestFake'
 
 function createPublishFakeDb() {
@@ -73,7 +73,7 @@ function createPublishFakeDb() {
         page_id: params[1],
         version: params[2],
         snapshot_json: params[3],
-        published_by: params[4],
+        published_by_user_id: params[4],
       })
       return { rows: [], rowCount: 1 }
     }
@@ -89,10 +89,11 @@ function createPublishFakeDb() {
       return { rows: [], rowCount: 1 }
     }
     if (sql.startsWith('update pages set active_version_id')) {
-      const page = state.pages.find((p) => p.id === params[1])
+      const page = state.pages.find((p) => p.id === params[2])
       if (page) {
         page.active_version_id = params[0]
         page.status = 'published'
+        page.updated_by_user_id = params[1]
       }
       return { rows: [], rowCount: page ? 1 : 0 }
     }

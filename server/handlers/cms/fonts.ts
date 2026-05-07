@@ -11,9 +11,9 @@
  * work; the metadata is persisted with the rest of the site settings via
  * `PUT /admin/api/cms/site`. All endpoints are gated by `site.edit`.
  */
-import type { DbClient } from '../../cms/db/client'
-import { requireCapability } from '../../cms/authz'
-import { estimateGoogleFont, FontInstallError, installGoogleFont, uninstallFontFamily } from '../../cms/fontsRepository'
+import type { DbClient } from '../../db/client'
+import { requireCapability } from '../../auth/authz'
+import { estimateGoogleFont, FontInstallError, installGoogleFont, uninstallFontFamily } from '../../repositories/fonts'
 import { listGoogleFonts } from '@core/fonts/googleDirectory'
 import { badRequest, jsonResponse, methodNotAllowed, readJsonObject } from '../../http'
 import { readString, type CmsHandlerOptions } from './shared'

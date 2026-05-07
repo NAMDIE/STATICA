@@ -50,7 +50,7 @@ describe('CmsAdapter', () => {
 
     expect(loaded?.id).toBe('project_1')
     expect(calls[0]).toMatchObject({
-      input: '/api/cms/site',
+      input: '/admin/api/cms/site',
       init: { method: 'GET', credentials: 'include' },
     })
   })
@@ -64,7 +64,7 @@ describe('CmsAdapter', () => {
 
     await adapter.saveSite(site())
 
-    expect(calls[0].input).toBe('/api/cms/site')
+    expect(calls[0].input).toBe('/admin/api/cms/site')
     expect(calls[0].init).toMatchObject({
       method: 'PUT',
       credentials: 'include',

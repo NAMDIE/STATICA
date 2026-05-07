@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { expectedOrigin, isStateChangingMethod, originAllowed, clientIp } from '../../../server/cms/security'
+import { expectedOrigin, isStateChangingMethod, originAllowed, clientIp } from '../../../server/auth/security'
 
 /**
  * Build a Request whose headers contain Fetch-spec "forbidden header names"
@@ -33,7 +33,7 @@ describe('isStateChangingMethod', () => {
 
 describe('expectedOrigin', () => {
   it('uses X-Forwarded-Proto + X-Forwarded-Host when set (Caddy in front)', () => {
-    const req = makeReq('http://app:3001/api/cms/login', {
+    const req = makeReq('http://app:3001/admin/api/cms/login', {
       method: 'POST',
       headers: {
         'x-forwarded-proto': 'https',
@@ -44,7 +44,7 @@ describe('expectedOrigin', () => {
   })
 
   it('falls back to Host header when no X-Forwarded-Host is present', () => {
-    const req = makeReq('http://internal:3001/api/cms/login', {
+    const req = makeReq('http://internal:3001/admin/api/cms/login', {
       method: 'POST',
       headers: { host: 'cms.example.com', 'x-forwarded-proto': 'https' },
     })
@@ -52,19 +52,19 @@ describe('expectedOrigin', () => {
   })
 
   it('falls back to the request URL when no proxy headers are present', () => {
-    const req = makeReq('http://localhost:3001/api/cms/login', { method: 'POST' })
+    const req = makeReq('http://localhost:3001/admin/api/cms/login', { method: 'POST' })
     expect(expectedOrigin(req)).toBe('http://localhost:3001')
   })
 })
 
 describe('originAllowed', () => {
   it('allows requests with no Origin header (curl, server-to-server)', () => {
-    const req = makeReq('http://localhost:3001/api/cms/login', { method: 'POST' })
+    const req = makeReq('http://localhost:3001/admin/api/cms/login', { method: 'POST' })
     expect(originAllowed(req)).toBe(true)
   })
 
   it('allows requests whose Origin matches the expected origin (same-origin)', () => {
-    const req = makeReq('http://localhost:3001/api/cms/login', {
+    const req = makeReq('http://localhost:3001/admin/api/cms/login', {
       method: 'POST',
       headers: { origin: 'http://localhost:3001' },
     })
@@ -72,7 +72,7 @@ describe('originAllowed', () => {
   })
 
   it('allows requests from the localhost dev origin (Vite at :5173)', () => {
-    const req = makeReq('http://localhost:3001/api/cms/login', {
+    const req = makeReq('http://localhost:3001/admin/api/cms/login', {
       method: 'POST',
       headers: { origin: 'http://localhost:5173' },
     })
@@ -80,7 +80,7 @@ describe('originAllowed', () => {
   })
 
   it('rejects requests from a foreign origin', () => {
-    const req = makeReq('http://localhost:3001/api/cms/login', {
+    const req = makeReq('http://localhost:3001/admin/api/cms/login', {
       method: 'POST',
       headers: { origin: 'https://evil.example.com' },
     })
@@ -88,7 +88,7 @@ describe('originAllowed', () => {
   })
 
   it('uses X-Forwarded headers to compute expected origin behind a TLS proxy', () => {
-    const req = makeReq('http://app:3001/api/cms/login', {
+    const req = makeReq('http://app:3001/admin/api/cms/login', {
       method: 'POST',
       headers: {
         'x-forwarded-proto': 'https',
@@ -100,7 +100,7 @@ describe('originAllowed', () => {
   })
 
   it('rejects an Origin that uses HTTP when the site is HTTPS-only', () => {
-    const req = makeReq('http://app:3001/api/cms/login', {
+    const req = makeReq('http://app:3001/admin/api/cms/login', {
       method: 'POST',
       headers: {
         'x-forwarded-proto': 'https',
@@ -114,20 +114,20 @@ describe('originAllowed', () => {
 
 describe('clientIp', () => {
   it('reads the first entry of X-Forwarded-For (client → proxy chain)', () => {
-    const req = makeReq('http://app:3001/api/cms/login', {
+    const req = makeReq('http://app:3001/admin/api/cms/login', {
       method: 'POST',
       headers: { 'x-forwarded-for': '203.0.113.7, 10.0.0.1' },
     })
     expect(clientIp(req)).toBe('203.0.113.7')
   })
 
-  it('returns "unknown" when no XFF header is present', () => {
-    const req = makeReq('http://localhost:3001/api/cms/login', { method: 'POST' })
-    expect(clientIp(req)).toBe('unknown')
+  it('returns null when no XFF header is present', () => {
+    const req = makeReq('http://localhost:3001/admin/api/cms/login', { method: 'POST' })
+    expect(clientIp(req)).toBeNull()
   })
 
   it('trims whitespace around XFF entries', () => {
-    const req = makeReq('http://app:3001/api/cms/login', {
+    const req = makeReq('http://app:3001/admin/api/cms/login', {
       method: 'POST',
       headers: { 'x-forwarded-for': '  192.0.2.5  , 10.0.0.1' },
     })

@@ -7,13 +7,20 @@ import { VideoIcon } from 'pixel-art-icons/icons/video'
 import type { CmsMediaAsset } from '@core/persistence'
 import { useEditorStore } from '@core/editor-store/store'
 import { contentCollectionHasField } from '@core/content/fields'
-import type { ContentCollection, ContentEntry, ContentEntryStatus } from '@core/content/schemas'
+import type {
+  ContentCollection,
+  ContentEntry,
+  ContentEntryStatus,
+  ContentUserReference,
+} from '@core/content/schemas'
 import propertiesStyles from '@editor/components/PropertiesPanel/PropertiesPanel.module.css'
 import { PanelHeader } from '@editor/components/shared/PanelHeader'
 import styles from '../../ContentPage.module.css'
 
 interface ContentSettingsPanelProps {
   selectedEntry: ContentEntry | null
+  authors: ContentUserReference[]
+  authorsLoading: boolean
   collections: ContentCollection[]
   selectedCollection: ContentCollection | null
   loading: boolean
@@ -30,6 +37,7 @@ interface ContentSettingsPanelProps {
   featuredMediaId: string | null
   featuredMediaAsset: CmsMediaAsset | null
   onCollectionChange: (collectionId: string) => void
+  onAuthorChange: (authorUserId: string) => void
   onSlugChange: (value: string) => void
   onSeoTitleChange: (value: string) => void
   onSeoDescriptionChange: (value: string) => void
@@ -38,8 +46,30 @@ interface ContentSettingsPanelProps {
   onClearFeaturedMedia: () => void
 }
 
+function contentAuthor(entry: ContentEntry): ContentEntry['author'] {
+  return entry.author ?? entry.createdBy ?? entry.updatedBy ?? null
+}
+
+function contentAuthorLabel(entry: ContentEntry): string {
+  const user = contentAuthor(entry)
+  if (user?.displayName) return user.displayName
+  if (user?.email) return user.email
+  return 'Unknown user'
+}
+
+function contentAuthorRoleLabel(entry: ContentEntry): string | null {
+  const author = contentAuthor(entry)
+  return author?.roleName ?? author?.roleSlug ?? null
+}
+
+function authorOptionLabel(author: ContentUserReference): string {
+  return author.displayName || author.email || 'Unknown user'
+}
+
 export function ContentSettingsPanel({
   selectedEntry,
+  authors,
+  authorsLoading,
   collections,
   selectedCollection,
   loading,
@@ -56,6 +86,7 @@ export function ContentSettingsPanel({
   featuredMediaId,
   featuredMediaAsset,
   onCollectionChange,
+  onAuthorChange,
   onSlugChange,
   onSeoTitleChange,
   onSeoDescriptionChange,
@@ -66,6 +97,11 @@ export function ContentSettingsPanel({
   const setPropertiesPanel = useEditorStore((s) => s.setPropertiesPanel)
   const seoEnabled = contentCollectionHasField(selectedCollection, 'seo')
   const featuredMediaEnabled = contentCollectionHasField(selectedCollection, 'featuredMedia')
+  const authorRoleLabel = selectedEntry ? contentAuthorRoleLabel(selectedEntry) : null
+  const selectedAuthor = selectedEntry ? contentAuthor(selectedEntry) : null
+  const authorOptions = selectedAuthor && !authors.some((author) => author.id === selectedAuthor.id)
+    ? [selectedAuthor, ...authors]
+    : authors
 
   return (
     <aside
@@ -156,6 +192,30 @@ export function ContentSettingsPanel({
               <span>Public URL</span>
               <strong>{publicPath || 'Not available'}</strong>
             </div>
+            {selectedEntry && (
+              <div className={styles.authorBlock} aria-label="Content author">
+                <span>Author</span>
+                <div className={styles.authorRow}>
+                  {authorOptions.length > 0 ? (
+                    <Select
+                      aria-label="Author"
+                      value={selectedEntry.authorUserId ?? selectedAuthor?.id ?? ''}
+                      disabled={authorsLoading}
+                      onChange={(event) => onAuthorChange(event.target.value)}
+                      options={authorOptions.map((author) => ({
+                        value: author.id,
+                        label: authorOptionLabel(author),
+                      }))}
+                    />
+                  ) : (
+                    <strong>{contentAuthorLabel(selectedEntry)}</strong>
+                  )}
+                  {authorRoleLabel && (
+                    <span className={styles.authorRoleBadge}>{authorRoleLabel}</span>
+                  )}
+                </div>
+              </div>
+            )}
             {featuredMediaEnabled && (
               <div className={styles.featuredMediaField}>
                 <span>Featured media</span>

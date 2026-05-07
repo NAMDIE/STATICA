@@ -42,11 +42,11 @@ describe('CMS plugin records client', () => {
 
     expect(records[0].data.title).toBe('Invisible Cities')
     expect(calls[0]).toMatchObject({
-      input: '/api/cms/plugins/acme.books/resources/books/records',
+      input: '/admin/api/cms/plugins/acme.books/resources/books/records',
       init: { method: 'GET', credentials: 'include' },
     })
     expect(calls[1]).toMatchObject({
-      input: '/api/cms/plugins/acme.books/resources/books/records',
+      input: '/admin/api/cms/plugins/acme.books/resources/books/records',
       init: {
         method: 'POST',
         credentials: 'include',
@@ -82,7 +82,7 @@ describe('CMS plugin records client', () => {
 
     expect(updated.data.title).toBe('Solaris')
     expect(calls[0]).toMatchObject({
-      input: '/api/cms/plugins/acme.books/resources/books/records/record_1',
+      input: '/admin/api/cms/plugins/acme.books/resources/books/records/record_1',
       init: {
         method: 'PATCH',
         credentials: 'include',
@@ -91,7 +91,7 @@ describe('CMS plugin records client', () => {
     })
     expect(calls[0].init?.body).toBe(JSON.stringify({ data: { title: 'Solaris' } }))
     expect(calls[1]).toMatchObject({
-      input: '/api/cms/plugins/acme.books/resources/books/records/record_1',
+      input: '/admin/api/cms/plugins/acme.books/resources/books/records/record_1',
       init: { method: 'DELETE', credentials: 'include' },
     })
   })

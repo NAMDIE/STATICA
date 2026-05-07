@@ -236,6 +236,11 @@ export interface ServerPluginRouteContext {
   req: Request
   db: unknown
   body: Record<string, unknown>
+  user: {
+    id: string
+    email: string
+    capabilities: string[]
+  } | null
 }
 
 export type ServerPluginRouteHandler = (
@@ -251,10 +256,11 @@ export interface ServerPluginApi {
   }
   cms: {
     routes: {
-      get: (path: string, handler: ServerPluginRouteHandler) => void
-      post: (path: string, handler: ServerPluginRouteHandler) => void
-      patch: (path: string, handler: ServerPluginRouteHandler) => void
-      delete: (path: string, handler: ServerPluginRouteHandler) => void
+      get: (path: string, capability: string, handler: ServerPluginRouteHandler) => void
+      post: (path: string, capability: string, handler: ServerPluginRouteHandler) => void
+      patch: (path: string, capability: string, handler: ServerPluginRouteHandler) => void
+      delete: (path: string, capability: string, handler: ServerPluginRouteHandler) => void
+      getPublic: (path: string, handler: ServerPluginRouteHandler) => void
     }
     storage: {
       collection: (resourceId: string) => {

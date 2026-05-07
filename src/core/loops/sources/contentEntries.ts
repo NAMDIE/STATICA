@@ -38,8 +38,19 @@ interface PublishedEntryRow {
   featured_media_path: string | null
   seo_title: string
   seo_description: string
+  author_user_id: string | null
+  author_display_name: string | null
+  author_role_slug: string | null
+  author_role_name: string | null
+  created_by_user_id: string | null
+  updated_by_user_id: string | null
+  published_by_user_id: string | null
+  published_by_display_name: string | null
+  published_by_role_slug: string | null
+  published_by_role_name: string | null
   published_at: Date | string
   created_at: Date | string
+  updated_at: Date | string
 }
 
 type OrderColumn = 'publishedAt' | 'createdAt' | 'updatedAt' | 'title'
@@ -72,6 +83,20 @@ function rowToLoopItem(row: PublishedEntryRow): LoopItem {
       collectionId: row.collection_id,
       collectionSlug: row.collection_slug,
       collectionRouteBase,
+      authorUserId: row.author_user_id,
+      authorId: row.author_user_id,
+      authorName: row.author_display_name,
+      authorRoleSlug: row.author_role_slug,
+      authorRoleName: row.author_role_name,
+      createdByUserId: row.created_by_user_id,
+      createdById: row.created_by_user_id,
+      updatedByUserId: row.updated_by_user_id,
+      updatedById: row.updated_by_user_id,
+      publishedByUserId: row.published_by_user_id,
+      publishedById: row.published_by_user_id,
+      publishedByName: row.published_by_display_name,
+      publishedByRoleSlug: row.published_by_role_slug,
+      publishedByRoleName: row.published_by_role_name,
       title: row.title,
       slug: row.slug,
       body: row.body_markdown,
@@ -87,6 +112,7 @@ function rowToLoopItem(row: PublishedEntryRow): LoopItem {
       seoDescription: row.seo_description,
       publishedAt: toIsoString(row.published_at),
       createdAt: toIsoString(row.created_at),
+      updatedAt: toIsoString(row.updated_at),
       permalink,
     },
   }
@@ -125,12 +151,27 @@ async function fetchPage(
              media_assets.public_path as featured_media_path,
              content_entry_versions.seo_title,
              content_entry_versions.seo_description,
+             content_entries.author_user_id,
+             author_users.display_name as author_display_name,
+             author_roles.slug as author_role_slug,
+             author_roles.name as author_role_name,
+             content_entries.created_by_user_id,
+             content_entries.updated_by_user_id,
+             content_entry_versions.published_by_user_id,
+             publisher_users.display_name as published_by_display_name,
+             publisher_roles.slug as published_by_role_slug,
+             publisher_roles.name as published_by_role_name,
              content_entry_versions.published_at,
-             content_entry_versions.created_at
+             content_entry_versions.created_at,
+             content_entries.updated_at
       from content_entries
       join content_collections on content_collections.id = content_entries.collection_id
       join content_entry_versions on content_entry_versions.id = content_entries.active_version_id
       left join media_assets on media_assets.id = content_entry_versions.featured_media_id
+      left join users author_users on author_users.id = content_entries.author_user_id
+      left join roles author_roles on author_roles.id = author_users.role_id
+      left join users publisher_users on publisher_users.id = content_entry_versions.published_by_user_id
+      left join roles publisher_roles on publisher_roles.id = publisher_users.role_id
       where content_entries.collection_id = ${collectionId}
         and content_entries.status = 'published'
         and content_entries.deleted_at is null
@@ -155,12 +196,27 @@ async function fetchPage(
              media_assets.public_path as featured_media_path,
              content_entry_versions.seo_title,
              content_entry_versions.seo_description,
+             content_entries.author_user_id,
+             author_users.display_name as author_display_name,
+             author_roles.slug as author_role_slug,
+             author_roles.name as author_role_name,
+             content_entries.created_by_user_id,
+             content_entries.updated_by_user_id,
+             content_entry_versions.published_by_user_id,
+             publisher_users.display_name as published_by_display_name,
+             publisher_roles.slug as published_by_role_slug,
+             publisher_roles.name as published_by_role_name,
              content_entry_versions.published_at,
-             content_entry_versions.created_at
+             content_entry_versions.created_at,
+             content_entries.updated_at
       from content_entries
       join content_collections on content_collections.id = content_entries.collection_id
       join content_entry_versions on content_entry_versions.id = content_entries.active_version_id
       left join media_assets on media_assets.id = content_entry_versions.featured_media_id
+      left join users author_users on author_users.id = content_entries.author_user_id
+      left join roles author_roles on author_roles.id = author_users.role_id
+      left join users publisher_users on publisher_users.id = content_entry_versions.published_by_user_id
+      left join roles publisher_roles on publisher_roles.id = publisher_users.role_id
       where content_entries.collection_id = ${collectionId}
         and content_entries.status = 'published'
         and content_entries.deleted_at is null
@@ -185,12 +241,27 @@ async function fetchPage(
              media_assets.public_path as featured_media_path,
              content_entry_versions.seo_title,
              content_entry_versions.seo_description,
+             content_entries.author_user_id,
+             author_users.display_name as author_display_name,
+             author_roles.slug as author_role_slug,
+             author_roles.name as author_role_name,
+             content_entries.created_by_user_id,
+             content_entries.updated_by_user_id,
+             content_entry_versions.published_by_user_id,
+             publisher_users.display_name as published_by_display_name,
+             publisher_roles.slug as published_by_role_slug,
+             publisher_roles.name as published_by_role_name,
              content_entry_versions.published_at,
-             content_entry_versions.created_at
+             content_entry_versions.created_at,
+             content_entries.updated_at
       from content_entries
       join content_collections on content_collections.id = content_entries.collection_id
       join content_entry_versions on content_entry_versions.id = content_entries.active_version_id
       left join media_assets on media_assets.id = content_entry_versions.featured_media_id
+      left join users author_users on author_users.id = content_entries.author_user_id
+      left join roles author_roles on author_roles.id = author_users.role_id
+      left join users publisher_users on publisher_users.id = content_entry_versions.published_by_user_id
+      left join roles publisher_roles on publisher_roles.id = publisher_users.role_id
       where content_entries.collection_id = ${collectionId}
         and content_entries.status = 'published'
         and content_entries.deleted_at is null
@@ -215,12 +286,27 @@ async function fetchPage(
              media_assets.public_path as featured_media_path,
              content_entry_versions.seo_title,
              content_entry_versions.seo_description,
+             content_entries.author_user_id,
+             author_users.display_name as author_display_name,
+             author_roles.slug as author_role_slug,
+             author_roles.name as author_role_name,
+             content_entries.created_by_user_id,
+             content_entries.updated_by_user_id,
+             content_entry_versions.published_by_user_id,
+             publisher_users.display_name as published_by_display_name,
+             publisher_roles.slug as published_by_role_slug,
+             publisher_roles.name as published_by_role_name,
              content_entry_versions.published_at,
-             content_entry_versions.created_at
+             content_entry_versions.created_at,
+             content_entries.updated_at
       from content_entries
       join content_collections on content_collections.id = content_entries.collection_id
       join content_entry_versions on content_entry_versions.id = content_entries.active_version_id
       left join media_assets on media_assets.id = content_entry_versions.featured_media_id
+      left join users author_users on author_users.id = content_entries.author_user_id
+      left join roles author_roles on author_roles.id = author_users.role_id
+      left join users publisher_users on publisher_users.id = content_entry_versions.published_by_user_id
+      left join roles publisher_roles on publisher_roles.id = publisher_users.role_id
       where content_entries.collection_id = ${collectionId}
         and content_entries.status = 'published'
         and content_entries.deleted_at is null
@@ -245,12 +331,27 @@ async function fetchPage(
              media_assets.public_path as featured_media_path,
              content_entry_versions.seo_title,
              content_entry_versions.seo_description,
+             content_entries.author_user_id,
+             author_users.display_name as author_display_name,
+             author_roles.slug as author_role_slug,
+             author_roles.name as author_role_name,
+             content_entries.created_by_user_id,
+             content_entries.updated_by_user_id,
+             content_entry_versions.published_by_user_id,
+             publisher_users.display_name as published_by_display_name,
+             publisher_roles.slug as published_by_role_slug,
+             publisher_roles.name as published_by_role_name,
              content_entry_versions.published_at,
-             content_entry_versions.created_at
+             content_entry_versions.created_at,
+             content_entries.updated_at
       from content_entries
       join content_collections on content_collections.id = content_entries.collection_id
       join content_entry_versions on content_entry_versions.id = content_entries.active_version_id
       left join media_assets on media_assets.id = content_entry_versions.featured_media_id
+      left join users author_users on author_users.id = content_entries.author_user_id
+      left join roles author_roles on author_roles.id = author_users.role_id
+      left join users publisher_users on publisher_users.id = content_entry_versions.published_by_user_id
+      left join roles publisher_roles on publisher_roles.id = publisher_users.role_id
       where content_entries.collection_id = ${collectionId}
         and content_entries.status = 'published'
         and content_entries.deleted_at is null
@@ -275,12 +376,27 @@ async function fetchPage(
              media_assets.public_path as featured_media_path,
              content_entry_versions.seo_title,
              content_entry_versions.seo_description,
+             content_entries.author_user_id,
+             author_users.display_name as author_display_name,
+             author_roles.slug as author_role_slug,
+             author_roles.name as author_role_name,
+             content_entries.created_by_user_id,
+             content_entries.updated_by_user_id,
+             content_entry_versions.published_by_user_id,
+             publisher_users.display_name as published_by_display_name,
+             publisher_roles.slug as published_by_role_slug,
+             publisher_roles.name as published_by_role_name,
              content_entry_versions.published_at,
-             content_entry_versions.created_at
+             content_entry_versions.created_at,
+             content_entries.updated_at
       from content_entries
       join content_collections on content_collections.id = content_entries.collection_id
       join content_entry_versions on content_entry_versions.id = content_entries.active_version_id
       left join media_assets on media_assets.id = content_entry_versions.featured_media_id
+      left join users author_users on author_users.id = content_entries.author_user_id
+      left join roles author_roles on author_roles.id = author_users.role_id
+      left join users publisher_users on publisher_users.id = content_entry_versions.published_by_user_id
+      left join roles publisher_roles on publisher_roles.id = publisher_users.role_id
       where content_entries.collection_id = ${collectionId}
         and content_entries.status = 'published'
         and content_entries.deleted_at is null
@@ -306,12 +422,27 @@ async function fetchPage(
              media_assets.public_path as featured_media_path,
              content_entry_versions.seo_title,
              content_entry_versions.seo_description,
+             content_entries.author_user_id,
+             author_users.display_name as author_display_name,
+             author_roles.slug as author_role_slug,
+             author_roles.name as author_role_name,
+             content_entries.created_by_user_id,
+             content_entries.updated_by_user_id,
+             content_entry_versions.published_by_user_id,
+             publisher_users.display_name as published_by_display_name,
+             publisher_roles.slug as published_by_role_slug,
+             publisher_roles.name as published_by_role_name,
              content_entry_versions.published_at,
-             content_entry_versions.created_at
+             content_entry_versions.created_at,
+             content_entries.updated_at
       from content_entries
       join content_collections on content_collections.id = content_entries.collection_id
       join content_entry_versions on content_entry_versions.id = content_entries.active_version_id
       left join media_assets on media_assets.id = content_entry_versions.featured_media_id
+      left join users author_users on author_users.id = content_entries.author_user_id
+      left join roles author_roles on author_roles.id = author_users.role_id
+      left join users publisher_users on publisher_users.id = content_entry_versions.published_by_user_id
+      left join roles publisher_roles on publisher_roles.id = publisher_users.role_id
       where content_entries.collection_id = ${collectionId}
         and content_entries.status = 'published'
         and content_entries.deleted_at is null
@@ -335,12 +466,27 @@ async function fetchPage(
            media_assets.public_path as featured_media_path,
            content_entry_versions.seo_title,
            content_entry_versions.seo_description,
+           content_entries.author_user_id,
+           author_users.display_name as author_display_name,
+             author_roles.slug as author_role_slug,
+             author_roles.name as author_role_name,
+           content_entries.created_by_user_id,
+           content_entries.updated_by_user_id,
+           content_entry_versions.published_by_user_id,
+           publisher_users.display_name as published_by_display_name,
+             publisher_roles.slug as published_by_role_slug,
+             publisher_roles.name as published_by_role_name,
            content_entry_versions.published_at,
-           content_entry_versions.created_at
+           content_entry_versions.created_at,
+           content_entries.updated_at
     from content_entries
     join content_collections on content_collections.id = content_entries.collection_id
     join content_entry_versions on content_entry_versions.id = content_entries.active_version_id
     left join media_assets on media_assets.id = content_entry_versions.featured_media_id
+    left join users author_users on author_users.id = content_entries.author_user_id
+      left join roles author_roles on author_roles.id = author_users.role_id
+    left join users publisher_users on publisher_users.id = content_entry_versions.published_by_user_id
+      left join roles publisher_roles on publisher_roles.id = publisher_users.role_id
     where content_entries.collection_id = ${collectionId}
       and content_entries.status = 'published'
       and content_entries.deleted_at is null
@@ -378,6 +524,9 @@ export const ContentEntriesSource: LoopEntitySource = {
   fields: [
     { id: 'title', label: 'Title' },
     { id: 'slug', label: 'Slug' },
+    { id: 'authorName', label: 'Author' },
+    { id: 'authorRoleName', label: 'Author role' },
+    { id: 'authorUserId', label: 'Author ID' },
     { id: 'body', label: 'Body' },
     { id: 'bodyMarkdown', label: 'Body (raw markdown)' },
     { id: 'featuredMedia', label: 'Featured media', format: 'media' },
@@ -386,7 +535,11 @@ export const ContentEntriesSource: LoopEntitySource = {
     { id: 'seoDescription', label: 'SEO description' },
     { id: 'permalink', label: 'Permalink', format: 'url' },
     { id: 'publishedAt', label: 'Published date' },
+    { id: 'publishedByName', label: 'Published by' },
+    { id: 'publishedByRoleName', label: 'Publisher role' },
+    { id: 'publishedByUserId', label: 'Published by ID' },
     { id: 'createdAt', label: 'Created date' },
+    { id: 'updatedAt', label: 'Updated date' },
   ],
 
   async fetch(ctx): Promise<LoopFetchResult> {

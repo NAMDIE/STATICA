@@ -4,6 +4,7 @@ import type {
   ContentEntry,
   ContentEntryDraftInput,
   ContentEntryStatus,
+  ContentUserReference,
   CreateContentCollectionInput,
   CreateContentEntryInput,
   UpdateContentEntryCollectionInput,
@@ -35,6 +36,11 @@ const EntriesListEnvelope = Type.Object(
   { additionalProperties: true },
 )
 
+const AuthorsListEnvelope = Type.Object(
+  { authors: Type.Optional(Type.Array(Type.Unknown())) },
+  { additionalProperties: true },
+)
+
 const CollectionEnvelope = Type.Object(
   { collection: Type.Optional(Type.Unknown()) },
   { additionalProperties: true },
@@ -49,7 +55,7 @@ const EntryEnvelope = Type.Object(
 
 export async function listCmsContentCollections(
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<ContentCollection[]> {
   const res = await fetchImpl(`${basePath}/content/collections`, {
     method: 'GET',
@@ -62,7 +68,7 @@ export async function listCmsContentCollections(
 export async function listCmsContentEntries(
   collectionId: string,
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<ContentEntry[]> {
   const res = await fetchImpl(`${basePath}/content/collections/${encodeURIComponent(collectionId)}/entries`, {
     method: 'GET',
@@ -72,10 +78,22 @@ export async function listCmsContentEntries(
   return (body.entries ?? []) as ContentEntry[]
 }
 
+export async function listCmsContentAuthors(
+  fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
+  basePath = '/admin/api/cms',
+): Promise<ContentUserReference[]> {
+  const res = await fetchImpl(`${basePath}/content/authors`, {
+    method: 'GET',
+    credentials: 'include',
+  })
+  const body = await readEnvelope(res, AuthorsListEnvelope, `CMS content authors failed with ${res.status}`)
+  return (body.authors ?? []) as ContentUserReference[]
+}
+
 export async function createCmsContentCollection(
   input: CreateContentCollectionInput,
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<ContentCollection> {
   const res = await fetchImpl(`${basePath}/content/collections`, {
     method: 'POST',
@@ -92,7 +110,7 @@ export async function updateCmsContentCollection(
   collectionId: string,
   input: UpdateContentCollectionInput,
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<ContentCollection> {
   const res = await fetchImpl(`${basePath}/content/collections/${encodeURIComponent(collectionId)}`, {
     method: 'PATCH',
@@ -108,7 +126,7 @@ export async function updateCmsContentCollection(
 export async function deleteCmsContentCollection(
   collectionId: string,
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<ContentCollection> {
   const res = await fetchImpl(`${basePath}/content/collections/${encodeURIComponent(collectionId)}`, {
     method: 'DELETE',
@@ -123,7 +141,7 @@ export async function createCmsContentEntry(
   collectionId: string,
   input: CreateContentEntryInput,
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<ContentEntry> {
   const res = await fetchImpl(`${basePath}/content/collections/${encodeURIComponent(collectionId)}/entries`, {
     method: 'POST',
@@ -140,7 +158,7 @@ export async function saveCmsContentEntryDraft(
   entryId: string,
   input: ContentEntryDraftInput,
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<ContentEntry> {
   const res = await fetchImpl(`${basePath}/content/entries/${encodeURIComponent(entryId)}`, {
     method: 'PUT',
@@ -156,7 +174,7 @@ export async function saveCmsContentEntryDraft(
 export async function deleteCmsContentEntry(
   entryId: string,
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<ContentEntry> {
   const res = await fetchImpl(`${basePath}/content/entries/${encodeURIComponent(entryId)}`, {
     method: 'DELETE',
@@ -170,7 +188,7 @@ export async function deleteCmsContentEntry(
 export async function publishCmsContentEntry(
   entryId: string,
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<ContentEntry> {
   const res = await fetchImpl(`${basePath}/content/entries/${encodeURIComponent(entryId)}/publish`, {
     method: 'POST',
@@ -185,7 +203,7 @@ export async function updateCmsContentEntryStatus(
   entryId: string,
   status: Exclude<ContentEntryStatus, 'published'>,
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<ContentEntry> {
   const res = await fetchImpl(`${basePath}/content/entries/${encodeURIComponent(entryId)}/status`, {
     method: 'PATCH',
@@ -198,11 +216,28 @@ export async function updateCmsContentEntryStatus(
   return body.entry as ContentEntry
 }
 
+export async function updateCmsContentEntryAuthor(
+  entryId: string,
+  authorUserId: string,
+  fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
+  basePath = '/admin/api/cms',
+): Promise<ContentEntry> {
+  const res = await fetchImpl(`${basePath}/content/entries/${encodeURIComponent(entryId)}/author`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ authorUserId }),
+  })
+  const body = await readEnvelope(res, EntryEnvelope, `CMS content entry author update failed with ${res.status}`)
+  if (!body.entry) throw new Error('CMS content entry author response was missing entry')
+  return body.entry as ContentEntry
+}
+
 export async function updateCmsContentEntryCollection(
   entryId: string,
   collectionId: string,
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<ContentEntry> {
   const input: UpdateContentEntryCollectionInput = { collectionId }
   const res = await fetchImpl(`${basePath}/content/entries/${encodeURIComponent(entryId)}/collection`, {

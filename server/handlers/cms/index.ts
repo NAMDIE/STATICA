@@ -26,9 +26,9 @@
  * dispatched directly by the top-level router, not through this entry
  * point — its prefix is outside `/admin/api/cms/`.
  */
-import type { DbClient } from '../../cms/db/client'
+import type { DbClient } from '../../db/client'
 import { jsonResponse } from '../../http'
-import { isStateChangingMethod, originAllowed } from '../../cms/security'
+import { isStateChangingMethod, originAllowed } from '../../auth/security'
 import type { CmsHandlerOptions } from './shared'
 import { handleSetupRoutes } from './setup'
 import { handleAuthRoutes } from './auth'

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
-import { SESSION_COOKIE_NAME, hashSessionToken } from '../../../server/cms/auth'
-import type { DbClient, DbResult } from '../../../server/cms/db'
-import { handleCmsRequest } from '../../../server/cms/handlers'
+import { SESSION_COOKIE_NAME, hashSessionToken } from '../../../server/auth/tokens'
+import type { DbClient, DbResult } from '../../../server/db'
+import { handleCmsRequest } from '../../../server/handlers/cms'
 
 function makeFakeDb() {
   const admins: Record<string, unknown>[] = [
@@ -24,12 +24,34 @@ function makeFakeDb() {
     const sql = strings.reduce<string>((acc, str, i) => (i === 0 ? str : `${acc}$${i}${str}`), '')
     const normalized = sql.replace(/\s+/g, ' ').trim().toLowerCase()
 
-    // findAdminBySessionHash — values[0]=idHash
-    if (normalized.includes('select admin_users.id, admin_users.email')) {
+    if (normalized.includes('from sessions') && normalized.includes('join users')) {
       const session = sessions.find((s) => String(s.id_hash) === String(values[0]))
       if (!session) return { rows: [], rowCount: 0 }
-      const admin = admins.find((a) => a.id === session.admin_user_id)
-      return { rows: admin ? [admin as Row] : [], rowCount: admin ? 1 : 0 }
+      const admin = admins.find((a) => a.id === session.user_id)
+      return {
+        rows: admin ? [{
+          ...admin,
+          email_normalized: admin.email,
+          display_name: 'Owner',
+          status: 'active',
+          role_id: 'owner',
+          last_login_at: null,
+          updated_at: admin.created_at,
+          deleted_at: null,
+          role_slug: 'owner',
+          role_name: 'Owner',
+          role_description: '',
+          role_is_system: true,
+          role_capabilities_json: ['plugins.manage'],
+        } as Row] : [],
+        rowCount: admin ? 1 : 0,
+      }
+    }
+    if (normalized.includes('update sessions') && normalized.includes('last_seen_at')) {
+      return { rows: [], rowCount: 1 }
+    }
+    if (normalized.includes('insert into audit_events')) {
+      return { rows: [], rowCount: 1 }
     }
     // getInstalledPlugin — values[0]=id (check with id = $1 to distinguish from list)
     if (normalized.includes('select id, name, version, enabled') && normalized.includes('where id = $1')) {
@@ -124,7 +146,7 @@ async function createCookie(db: ReturnType<typeof makeFakeDb>): Promise<string> 
   const token = 'valid-session-token'
   db.sessions.push({
     id_hash: await hashSessionToken(token),
-    admin_user_id: 'admin_1',
+    user_id: 'admin_1',
     expires_at: new Date('2030-01-01').toISOString(),
   })
   return `${SESSION_COOKIE_NAME}=${token}`
@@ -181,7 +203,7 @@ const booksPlugin = {
 describe('CMS plugin resource handlers', () => {
   it('requires an admin session for plugin record access', async () => {
     const res = await handleCmsRequest(
-      cmsRequest('http://localhost/api/cms/plugins/acme.books/resources/books/records'),
+      cmsRequest('http://localhost/admin/api/cms/plugins/acme.books/resources/books/records'),
       makeFakeDb(),
     )
 
@@ -192,7 +214,7 @@ describe('CMS plugin resource handlers', () => {
     const db = makeFakeDb()
     const cookie = await createCookie(db)
 
-    const install = await handleCmsRequest(cmsRequest('http://localhost/api/cms/plugins', {
+    const install = await handleCmsRequest(cmsRequest('http://localhost/admin/api/cms/plugins', {
       method: 'POST',
       headers: { cookie, 'content-type': 'application/json' },
       body: JSON.stringify(booksPlugin),
@@ -200,7 +222,7 @@ describe('CMS plugin resource handlers', () => {
     expect(install.status).toBe(201)
 
     const create = await handleCmsRequest(cmsRequest(
-      'http://localhost/api/cms/plugins/acme.books/resources/books/records',
+      'http://localhost/admin/api/cms/plugins/acme.books/resources/books/records',
       {
         method: 'POST',
         headers: { cookie, 'content-type': 'application/json' },
@@ -212,7 +234,7 @@ describe('CMS plugin resource handlers', () => {
     expect(createdBody.record.data).toEqual({ title: 'Invisible Cities', author: 'Italo Calvino' })
 
     const list = await handleCmsRequest(cmsRequest(
-      'http://localhost/api/cms/plugins/acme.books/resources/books/records',
+      'http://localhost/admin/api/cms/plugins/acme.books/resources/books/records',
       { headers: { cookie } },
     ), db)
     expect(list.status).toBe(200)
@@ -222,7 +244,7 @@ describe('CMS plugin resource handlers', () => {
     })
 
     const update = await handleCmsRequest(cmsRequest(
-      `http://localhost/api/cms/plugins/acme.books/resources/books/records/${createdBody.record.id}`,
+      `http://localhost/admin/api/cms/plugins/acme.books/resources/books/records/${createdBody.record.id}`,
       {
         method: 'PATCH',
         headers: { cookie, 'content-type': 'application/json' },
@@ -235,7 +257,7 @@ describe('CMS plugin resource handlers', () => {
     })
 
     const remove = await handleCmsRequest(cmsRequest(
-      `http://localhost/api/cms/plugins/acme.books/resources/books/records/${createdBody.record.id}`,
+      `http://localhost/admin/api/cms/plugins/acme.books/resources/books/records/${createdBody.record.id}`,
       { method: 'DELETE', headers: { cookie } },
     ), db)
     expect(remove.status).toBe(200)
@@ -247,14 +269,14 @@ describe('CMS plugin resource handlers', () => {
     const db = makeFakeDb()
     const cookie = await createCookie(db)
 
-    await handleCmsRequest(cmsRequest('http://localhost/api/cms/plugins', {
+    await handleCmsRequest(cmsRequest('http://localhost/admin/api/cms/plugins', {
       method: 'POST',
       headers: { cookie, 'content-type': 'application/json' },
       body: JSON.stringify(booksPlugin),
     }), db)
 
     const res = await handleCmsRequest(cmsRequest(
-      'http://localhost/api/cms/plugins/acme.books/resources/books/records',
+      'http://localhost/admin/api/cms/plugins/acme.books/resources/books/records',
       {
         method: 'POST',
         headers: { cookie, 'content-type': 'application/json' },

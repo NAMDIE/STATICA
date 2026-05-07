@@ -188,9 +188,9 @@ describe('SiteExplorerPanel', () => {
     globalThis.fetch = (async () =>
       new Response(JSON.stringify({
         assets: [
-          { id: 'media-image', filename: 'logo.svg', mimeType: 'image/svg+xml', sizeBytes: 12, publicPath: '/uploads/logo.svg', createdAt: '2026-01-03T00:00:00.000Z' },
-          { id: 'media-video', filename: 'intro.mp4', mimeType: 'video/mp4', sizeBytes: 24, publicPath: '/uploads/intro.mp4', createdAt: '2026-01-03T00:00:00.000Z' },
-          { id: 'media-other', filename: 'catalog.pdf', mimeType: 'application/pdf', sizeBytes: 36, publicPath: '/uploads/catalog.pdf', createdAt: '2026-01-03T00:00:00.000Z' },
+          { id: 'media-image', filename: 'logo.svg', mimeType: 'image/svg+xml', sizeBytes: 12, publicPath: '/uploads/logo.svg', uploadedByUserId: null, createdAt: '2026-01-03T00:00:00.000Z' },
+          { id: 'media-video', filename: 'intro.mp4', mimeType: 'video/mp4', sizeBytes: 24, publicPath: '/uploads/intro.mp4', uploadedByUserId: null, createdAt: '2026-01-03T00:00:00.000Z' },
+          { id: 'media-other', filename: 'catalog.pdf', mimeType: 'application/pdf', sizeBytes: 36, publicPath: '/uploads/catalog.pdf', uploadedByUserId: null, createdAt: '2026-01-03T00:00:00.000Z' },
         ],
       }), { status: 200 })) as typeof fetch
 
@@ -219,9 +219,9 @@ describe('SiteExplorerPanel', () => {
     globalThis.fetch = (async () =>
       new Response(JSON.stringify({
         assets: [
-          { id: 'media-image', filename: 'logo.svg', mimeType: 'image/svg+xml', sizeBytes: 12, publicPath: '/uploads/logo.svg', createdAt: '2026-01-03T00:00:00.000Z' },
-          { id: 'media-video', filename: 'intro.mp4', mimeType: 'video/mp4', sizeBytes: 24, publicPath: '/uploads/intro.mp4', createdAt: '2026-01-03T00:00:00.000Z' },
-          { id: 'media-other', filename: 'catalog.pdf', mimeType: 'application/pdf', sizeBytes: 36, publicPath: '/uploads/catalog.pdf', createdAt: '2026-01-03T00:00:00.000Z' },
+          { id: 'media-image', filename: 'logo.svg', mimeType: 'image/svg+xml', sizeBytes: 12, publicPath: '/uploads/logo.svg', uploadedByUserId: null, createdAt: '2026-01-03T00:00:00.000Z' },
+          { id: 'media-video', filename: 'intro.mp4', mimeType: 'video/mp4', sizeBytes: 24, publicPath: '/uploads/intro.mp4', uploadedByUserId: null, createdAt: '2026-01-03T00:00:00.000Z' },
+          { id: 'media-other', filename: 'catalog.pdf', mimeType: 'application/pdf', sizeBytes: 36, publicPath: '/uploads/catalog.pdf', uploadedByUserId: null, createdAt: '2026-01-03T00:00:00.000Z' },
         ],
       }), { status: 200 })) as typeof fetch
 
@@ -276,6 +276,7 @@ describe('SiteExplorerPanel', () => {
           mimeType: 'image/png',
           sizeBytes: 12,
           publicPath: '/uploads/hero.png',
+          uploadedByUserId: null,
           createdAt: '2026-01-03T00:00:00.000Z',
         }],
       }), { status: 200 })) as typeof fetch
@@ -346,6 +347,7 @@ describe('SiteExplorerPanel', () => {
             mimeType: 'image/png',
             sizeBytes: 12,
             publicPath: '/uploads/hero.png',
+            uploadedByUserId: null,
             createdAt: '2026-01-03T00:00:00.000Z',
           },
           {
@@ -354,6 +356,7 @@ describe('SiteExplorerPanel', () => {
             mimeType: 'video/mp4',
             sizeBytes: 24,
             publicPath: '/uploads/intro.mp4',
+            uploadedByUserId: null,
             createdAt: '2026-01-03T00:00:00.000Z',
           },
         ],
@@ -400,6 +403,7 @@ describe('SiteExplorerPanel', () => {
           mimeType: 'image/png',
           sizeBytes: 12,
           publicPath: '/uploads/hero.png',
+          uploadedByUserId: null,
           createdAt: '2026-01-03T00:00:00.000Z',
         }],
       }), { status: 200 })) as typeof fetch
@@ -725,6 +729,7 @@ describe('SiteExplorerPanel', () => {
             mimeType: 'image/png',
             sizeBytes: 12,
             publicPath: '/uploads/hero.png',
+            uploadedByUserId: null,
             createdAt: '2026-01-03T00:00:00.000Z',
           },
         }), { status: 200 })
@@ -739,6 +744,7 @@ describe('SiteExplorerPanel', () => {
           mimeType: 'image/png',
           sizeBytes: 12,
           publicPath: '/uploads/hero.png',
+          uploadedByUserId: null,
           createdAt: '2026-01-03T00:00:00.000Z',
         }],
       }), { status: 200 })
@@ -758,7 +764,7 @@ describe('SiteExplorerPanel', () => {
       fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
 
       expect(await screen.findByRole('button', { name: /open media hero renamed\.png/i })).toBeDefined()
-      expect(calls.some((call) => call.input === '/api/cms/media/media-1' && call.init?.method === 'PATCH')).toBe(true)
+      expect(calls.some((call) => call.input === '/admin/api/cms/media/media-1' && call.init?.method === 'PATCH')).toBe(true)
 
       fireEvent.contextMenu(screen.getByRole('button', { name: /open media hero renamed\.png/i }), {
         clientX: 120,
@@ -769,7 +775,7 @@ describe('SiteExplorerPanel', () => {
       await waitFor(() => {
         expect(screen.queryByRole('button', { name: /open media hero renamed\.png/i })).toBeNull()
       })
-      expect(calls.some((call) => call.input === '/api/cms/media/media-1' && call.init?.method === 'DELETE')).toBe(true)
+      expect(calls.some((call) => call.input === '/admin/api/cms/media/media-1' && call.init?.method === 'DELETE')).toBe(true)
     } finally {
       globalThis.fetch = originalFetch
     }

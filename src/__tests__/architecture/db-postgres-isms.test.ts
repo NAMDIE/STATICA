@@ -5,9 +5,9 @@
  * issues DB queries) may use Postgres-specific SQL syntax or types, EXCEPT
  * the two migration files which are explicitly allowlisted:
  *
- *   - `server/cms/db/migrations-pg.ts`     — the Postgres dialect migration file;
+ *   - `server/db/migrations-pg.ts`     — the Postgres dialect migration file;
  *                                            this is its entire job.
- *   - `server/cms/db/migrations-sqlite.ts` — the SQLite dialect translation; its
+ *   - `server/db/migrations-sqlite.ts` — the SQLite dialect translation; its
  *                                            JSDoc and inline comments document the
  *                                            PG→SQLite type mappings (e.g. "jsonb → text",
  *                                            "distinct on → window function") and are
@@ -28,9 +28,9 @@
  * This gate ensures the repository layer is portable across both the Postgres
  * adapter (production) and the SQLite adapter (embedded / tests).
  *
- * @see server/cms/db/migrations-pg.ts   — Postgres dialect migrations
- * @see server/cms/db/migrations-sqlite.ts — SQLite dialect translations
- * @see server/cms/db/sqlite.ts          — why _json suffix matters (parseJsonColumns)
+ * @see server/db/migrations-pg.ts   — Postgres dialect migrations
+ * @see server/db/migrations-sqlite.ts — SQLite dialect translations
+ * @see server/db/sqlite.ts          — why _json suffix matters (parseJsonColumns)
  */
 
 import { describe, test, expect } from 'bun:test'
@@ -61,11 +61,11 @@ function walk(dir: string, out: string[] = []): string[] {
 
 const ALLOWLISTED = new Set([
   // Postgres migration file: PG DDL types and syntax are its entire purpose.
-  join(PROJECT_ROOT, 'server/cms/db/migrations-pg.ts'),
+  join(PROJECT_ROOT, 'server/db/migrations-pg.ts'),
   // SQLite migration file: its JSDoc/inline comments document the PG-to-SQLite
   // type translation table (e.g. "jsonb → text", "distinct on (…) → window
   // function subquery"). Those comment-only mentions are not live SQL.
-  join(PROJECT_ROOT, 'server/cms/db/migrations-sqlite.ts'),
+  join(PROJECT_ROOT, 'server/db/migrations-sqlite.ts'),
 ])
 
 // ---------------------------------------------------------------------------
@@ -127,7 +127,7 @@ const FORBIDDEN_PATTERNS: ForbiddenPattern[] = [
 // ---------------------------------------------------------------------------
 
 interface Violation {
-  /** Relative path from project root, e.g. `server/cms/repositories.ts`. */
+  /** Relative path from project root, e.g. `server/repositories/setup.ts`. */
   file: string
   /** 1-based line number. */
   line: number
@@ -209,8 +209,8 @@ describe('Postgres-ism isolation — server/cms/ repository files', () => {
         `Violations:\n` +
         lines.join('\n') +
         `\n\nAllowlisted files (PG syntax is acceptable there):\n` +
-        `  server/cms/db/migrations-pg.ts\n` +
-        `  server/cms/db/migrations-sqlite.ts`,
+        `  server/db/migrations-pg.ts\n` +
+        `  server/db/migrations-sqlite.ts`,
     )
   })
 })

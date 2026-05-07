@@ -5,7 +5,7 @@
  * Imported once inside `src/admin/AdminEntry.tsx` (the lazy admin chunk) so
  * the base modules + their dependencies (publisher, sanitize, page-tree
  * schemas) stay out of the eager entry bundle and don't ship to the login /
- * setup screens. Server uses the same module via `server/cms/publicRenderer.ts`.
+ * setup screens. Server uses the same module via `server/publish/publicRenderer.ts`.
  *
  * Order matters only for module IDs that reference each other — keep alphabetical.
  */

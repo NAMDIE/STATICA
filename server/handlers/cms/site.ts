@@ -9,9 +9,9 @@
  *                              so a malformed payload can never poison the
  *                              persistence layer.
  */
-import type { DbClient } from '../../cms/db/client'
-import { requireCapability } from '../../cms/authz'
-import { loadDraftSite, saveDraftSite } from '../../cms/siteRepository'
+import type { DbClient } from '../../db/client'
+import { requireCapability } from '../../auth/authz'
+import { loadDraftSite, saveDraftSite } from '../../repositories/site'
 import { validateSite, SiteValidationError } from '@core/persistence/validate'
 import { badRequest, jsonResponse, methodNotAllowed, readJsonObject } from '../../http'
 

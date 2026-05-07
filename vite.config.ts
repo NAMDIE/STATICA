@@ -169,7 +169,7 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/api/cms': {
+      '/admin/api/cms': {
         target: 'http://localhost:3001',
         changeOrigin: true,
       },

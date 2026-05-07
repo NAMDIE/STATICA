@@ -39,7 +39,7 @@ describe('PluginPageRenderer resource pages', () => {
       calls.push({ input, init })
       const url = String(input)
 
-      if (url === '/api/cms/plugins/acme.books/resources/books/records' && init?.method === 'GET') {
+      if (url === '/admin/api/cms/plugins/acme.books/resources/books/records' && init?.method === 'GET') {
         return json({
           resource: {
             id: 'books',
@@ -62,7 +62,7 @@ describe('PluginPageRenderer resource pages', () => {
         })
       }
 
-      if (url === '/api/cms/plugins/acme.books/resources/books/records' && init?.method === 'POST') {
+      if (url === '/admin/api/cms/plugins/acme.books/resources/books/records' && init?.method === 'POST') {
         return json({
           record: {
             id: 'record_2',
@@ -88,7 +88,7 @@ describe('PluginPageRenderer resource pages', () => {
 
     await waitFor(() => {
       expect(calls.some((call) =>
-        String(call.input) === '/api/cms/plugins/acme.books/resources/books/records' &&
+        String(call.input) === '/admin/api/cms/plugins/acme.books/resources/books/records' &&
         call.init?.method === 'POST' &&
         call.init.body === JSON.stringify({
           data: {
@@ -151,7 +151,7 @@ describe('PluginPageRenderer resource pages', () => {
     )
 
     expect(await screen.findByText('Approvals: 1')).toBeDefined()
-    expect(calls[0]?.input).toBe('/api/cms/plugins/acme.workflow/resources/approvals/records')
+    expect(calls[0]?.input).toBe('/admin/api/cms/plugins/acme.workflow/resources/approvals/records')
   })
 
   it('keeps stale async admin app renders from duplicating the visible plugin UI', async () => {

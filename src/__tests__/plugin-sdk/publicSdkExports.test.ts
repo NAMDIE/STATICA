@@ -60,7 +60,7 @@ describe('public plugin SDK exports', () => {
     const compatibilityReexports = [
       'src/core/plugins/runtime.ts',
       'src/core/plugins/adminRuntime.ts',
-      'server/cms/serverPluginRuntime.ts',
+      'server/plugins/runtime.ts',
     ]
 
     const offenders: string[] = []

@@ -1,0 +1,290 @@
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { MemoryRouter } from '../../admin/lib/router'
+import { UsersPage } from '../../admin/users/UsersPage'
+import { useEditorStore } from '@core/editor-store/store'
+import { makeSite } from '../fixtures'
+
+const originalFetch = globalThis.fetch
+const now = '2026-05-07T10:00:00.000Z'
+
+const roles = [
+  {
+    id: 'owner',
+    slug: 'owner',
+    name: 'Owner',
+    description: 'Permanent first-site owner with full system access.',
+    isSystem: true,
+    capabilities: ['site.read', 'site.edit', 'users.manage', 'roles.manage', 'audit.read'],
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
+    id: 'admin',
+    slug: 'admin',
+    name: 'Admin',
+    description: 'Full admin access.',
+    isSystem: true,
+    capabilities: ['site.read', 'site.edit', 'plugins.manage', 'users.manage', 'roles.manage', 'audit.read'],
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
+    id: 'viewer',
+    slug: 'viewer',
+    name: 'Viewer',
+    description: 'Read-only admin access.',
+    isSystem: true,
+    capabilities: ['site.read'],
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
+    id: 'custom-ops',
+    slug: 'custom-ops',
+    name: 'Ops',
+    description: 'Can manage plugins and media.',
+    isSystem: false,
+    capabilities: ['site.read', 'plugins.manage', 'media.manage'],
+    createdAt: now,
+    updatedAt: now,
+  },
+]
+
+const users = [
+  {
+    id: 'owner_1',
+    email: 'hello@davidbabinec.com',
+    displayName: 'hello@davidbabinec.com',
+    status: 'active',
+    role: roles[0],
+    capabilities: roles[0].capabilities,
+    lastLoginAt: null,
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
+    id: 'user_1',
+    email: 'test@test.com',
+    displayName: 'Tester One',
+    status: 'active',
+    role: roles[2],
+    capabilities: roles[2].capabilities,
+    lastLoginAt: null,
+    createdAt: now,
+    updatedAt: now,
+  },
+]
+
+const auditEvents = [
+  {
+    id: 'audit_1',
+    actorUserId: 'owner_1',
+    action: 'user.create',
+    targetType: 'user',
+    targetId: 'user_1',
+    metadata: { roleId: 'viewer' },
+    ipAddress: '127.0.0.1',
+    userAgent: 'Test Browser',
+    createdAt: now,
+  },
+  {
+    id: 'audit_2',
+    actorUserId: null,
+    action: 'login.failure',
+    targetType: 'user',
+    targetId: null,
+    metadata: { email: 'missing@example.com' },
+    ipAddress: 'unknown',
+    userAgent: 'Test Browser',
+    createdAt: now,
+  },
+]
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  })
+}
+
+function setupEditorState() {
+  const site = makeSite({ name: 'Users Test Site' })
+  useEditorStore.setState({
+    site,
+    activePageId: site.pages[0].id,
+    selectedNodeId: null,
+    selectedNodeIds: [],
+    hoveredNodeId: null,
+    activeBreakpointId: 'desktop',
+    domTreePanel: { collapsed: false, x: 0, y: 0, width: 280 },
+    propertiesPanel: { collapsed: false, x: 0, y: 0, width: 360 },
+    propertiesPanelMode: 'docked',
+    leftSidebarWidth: 320,
+    focusedPanel: 'canvas',
+    siteExplorerPanelOpen: false,
+    mediaExplorerPanelOpen: false,
+    codeEditorPanelOpen: false,
+    activeEditorFileId: null,
+    activeMediaAssetPreview: null,
+    dependenciesPanelOpen: false,
+    isAgentOpen: false,
+    isAgentStreaming: false,
+    agentMessages: [],
+    agentError: null,
+    _historyPast: [],
+    _historyFuture: [],
+    canUndo: false,
+    canRedo: false,
+    hasUnsavedChanges: false,
+  } as Parameters<typeof useEditorStore.setState>[0])
+}
+
+beforeEach(() => {
+  localStorage.clear()
+  setupEditorState()
+  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input)
+    if (url === '/admin/api/cms/users' && init?.method === 'GET') return json({ users })
+    if (url === '/admin/api/cms/roles' && init?.method === 'GET') return json({ roles })
+    if (url === '/admin/api/cms/audit' && init?.method === 'GET') return json({ events: auditEvents })
+    return json({ error: `Unhandled ${url}` }, 500)
+  }
+})
+
+afterEach(() => {
+  globalThis.fetch = originalFetch
+  cleanup()
+})
+
+describe('UsersPage', () => {
+  it('locks the owner row and exposes edit/reset actions for regular users', async () => {
+    render(
+      <MemoryRouter>
+        <UsersPage />
+      </MemoryRouter>,
+    )
+
+    expect(screen.queryByRole('heading', { name: 'Create User' })).toBeNull()
+    const usersTable = await screen.findByRole('table', { name: 'Users' })
+    expect(usersTable.getAttribute('data-density')).toBe('compact')
+
+    const ownerRow = await screen.findByLabelText('User hello@davidbabinec.com')
+    expect(within(ownerRow).queryByRole('button', { name: /suspend/i })).toBeNull()
+    expect(within(ownerRow).queryByRole('button', { name: /delete/i })).toBeNull()
+    expect(within(ownerRow).queryByRole('button', { name: /reset/i })).toBeNull()
+    expect(within(ownerRow).queryByRole('button', { name: /actions/i })).toBeNull()
+    expect(within(ownerRow).queryByRole('combobox')).toBeNull()
+    expect(within(ownerRow).getByText('Owner account')).toBeDefined()
+    expect(within(ownerRow).getByText('Owner account').getAttribute('data-accent')).toBeTruthy()
+
+    const userRow = screen.getByLabelText('User test@test.com')
+    expect(within(userRow).getByText('Active').getAttribute('data-accent')).toBeTruthy()
+    expect(within(userRow).getByText('Viewer').getAttribute('data-accent')).toBeTruthy()
+    expect(within(userRow).queryByRole('button', { name: /edit tester one/i })).toBeNull()
+    expect(within(userRow).queryByRole('button', { name: /reset password for tester one/i })).toBeNull()
+    expect(within(userRow).queryByRole('button', { name: /suspend tester one/i })).toBeNull()
+    expect(within(userRow).queryByRole('button', { name: /delete tester one/i })).toBeNull()
+
+    fireEvent.click(within(userRow).getByRole('button', { name: /actions for tester one/i }))
+    const userMenu = screen.getByRole('menu', { name: 'User actions for Tester One' })
+    expect(within(userMenu).getByRole('menuitem', { name: 'Edit' })).toBeDefined()
+    expect(within(userMenu).getByRole('menuitem', { name: 'Reset password' })).toBeDefined()
+    expect(within(userMenu).getByRole('menuitem', { name: 'Suspend' })).toBeDefined()
+    expect(within(userMenu).getByRole('menuitem', { name: 'Delete' })).toBeDefined()
+
+    fireEvent.click(within(userMenu).getByRole('menuitem', { name: 'Edit' }))
+    const editDialog = screen.getByRole('dialog', { name: 'Edit User' })
+    expect(within(editDialog).getByDisplayValue('test@test.com')).toBeDefined()
+
+    fireEvent.click(within(editDialog).getByRole('button', { name: 'Close dialog' }))
+    fireEvent.click(within(userRow).getByRole('button', { name: /actions for tester one/i }))
+    const resetMenu = screen.getByRole('menu', { name: 'User actions for Tester One' })
+    fireEvent.click(within(resetMenu).getByRole('menuitem', { name: 'Reset password' }))
+    const resetDialog = screen.getByRole('dialog', { name: 'Reset Password' })
+    expect(within(resetDialog).getByLabelText('New password')).toBeDefined()
+
+    fireEvent.click(within(resetDialog).getByRole('button', { name: 'Close dialog' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create User' }))
+    const createDialog = screen.getByRole('dialog', { name: 'Create User' })
+    expect(within(createDialog).getByLabelText('Email')).toBeDefined()
+  })
+
+  it('renders roles as a compact table and keeps full capability details in a dialog', async () => {
+    render(
+      <MemoryRouter>
+        <UsersPage />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Roles' }))
+
+    expect(screen.queryByRole('heading', { name: 'Create Role' })).toBeNull()
+    const rolesTable = await screen.findByRole('table', { name: 'Roles' })
+    expect(rolesTable.getAttribute('data-density')).toBe('compact')
+
+    const adminRole = await screen.findByLabelText('Role Admin')
+    expect(within(adminRole).getByText('Admin')).toBeDefined()
+    expect(within(adminRole).queryByText('admin')).toBeNull()
+    expect(within(adminRole).getByText('Full admin access.')).toBeDefined()
+    expect(within(adminRole).getByText('6 capabilities')).toBeDefined()
+    expect(within(adminRole).queryByText('Plugins')).toBeNull()
+    expect(within(adminRole).queryByText('Users & Roles')).toBeNull()
+    expect(within(adminRole).queryByText('plugins.manage')).toBeNull()
+    expect(within(adminRole).queryByText('users.manage')).toBeNull()
+    expect(within(adminRole).getByText('System role').getAttribute('data-accent')).toBeTruthy()
+    expect(within(adminRole).queryByRole('button', { name: /edit/i })).toBeNull()
+    expect(within(adminRole).queryByRole('button', { name: /delete/i })).toBeNull()
+    expect(within(adminRole).queryByRole('button', { name: /view admin/i })).toBeNull()
+    fireEvent.click(within(adminRole).getByRole('button', { name: /actions for admin/i }))
+    const adminMenu = screen.getByRole('menu', { name: 'Role actions for Admin' })
+    expect(within(adminMenu).getByRole('menuitem', { name: 'View' })).toBeDefined()
+    expect(within(adminMenu).queryByRole('menuitem', { name: 'Edit' })).toBeNull()
+    expect(within(adminMenu).queryByRole('menuitem', { name: 'Delete' })).toBeNull()
+
+    const customRole = screen.getByLabelText('Role Ops')
+    expect(within(customRole).getByText('Can manage plugins and media.')).toBeDefined()
+    expect(within(customRole).getByText('3 capabilities')).toBeDefined()
+    expect(within(customRole).queryByText('plugins.manage')).toBeNull()
+    expect(within(customRole).queryByRole('button', { name: /view ops/i })).toBeNull()
+    expect(within(customRole).queryByRole('button', { name: /edit ops/i })).toBeNull()
+    expect(within(customRole).queryByRole('button', { name: /delete ops/i })).toBeNull()
+    fireEvent.click(within(customRole).getByRole('button', { name: /actions for ops/i }))
+    const customRoleMenu = screen.getByRole('menu', { name: 'Role actions for Ops' })
+    expect(within(customRoleMenu).getByRole('menuitem', { name: 'View' })).toBeDefined()
+    expect(within(customRoleMenu).getByRole('menuitem', { name: 'Edit' })).toBeDefined()
+    expect(within(customRoleMenu).getByRole('menuitem', { name: 'Delete' })).toBeDefined()
+
+    fireEvent.click(within(adminMenu).getByRole('menuitem', { name: 'View' }))
+    const viewRoleDialog = screen.getByRole('dialog', { name: 'View Role' })
+    expect(within(viewRoleDialog).getByText('plugins.manage')).toBeDefined()
+    expect(within(viewRoleDialog).getByText('users.manage')).toBeDefined()
+    expect(within(viewRoleDialog).queryByRole('button', { name: /save role/i })).toBeNull()
+
+    fireEvent.click(within(viewRoleDialog).getByRole('button', { name: 'Close dialog' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create Role' }))
+    const createRoleDialog = screen.getByRole('dialog', { name: 'Create Role' })
+    expect(within(createRoleDialog).getByText('Site')).toBeDefined()
+    expect(within(createRoleDialog).getByRole('button', { name: 'Select all Site capabilities' })).toBeDefined()
+  })
+
+  it('renders audit events as human-readable activity rows', async () => {
+    render(
+      <MemoryRouter>
+        <UsersPage />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Audit' }))
+
+    const auditTable = await screen.findByRole('table', { name: 'Audit events' })
+    expect(auditTable.getAttribute('data-density')).toBe('compact')
+    expect(screen.getByText('Tester One was created')).toBeDefined()
+    expect(screen.getByText('by hello@davidbabinec.com')).toBeDefined()
+    expect(screen.getByText('Role: Viewer').getAttribute('data-accent')).toBeTruthy()
+    expect(screen.getByText('IP: 127.0.0.1').getAttribute('data-accent')).toBeTruthy()
+    expect(screen.getByText('Failed login for missing@example.com')).toBeDefined()
+    expect(screen.queryByText('IP: unknown')).toBeNull()
+    expect(screen.queryByText('user.create')).toBeNull()
+  })
+})

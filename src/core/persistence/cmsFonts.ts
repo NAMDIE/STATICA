@@ -28,7 +28,7 @@ const defaultFetch: FetchLike = (input, init) => globalThis.fetch(input, init)
 
 export async function listCmsGoogleFonts(
   fetchImpl: FetchLike = defaultFetch,
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<GoogleFontFamilyDto[]> {
   const res = await fetchImpl(`${basePath}/fonts/google`, {
     method: 'GET',
@@ -56,7 +56,7 @@ export interface InstallGoogleFontRequest {
 export async function estimateCmsGoogleFont(
   request: InstallGoogleFontRequest,
   fetchImpl: FetchLike = defaultFetch,
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
   init?: { signal?: AbortSignal },
 ): Promise<CmsFontEstimateDto> {
   const res = await fetchImpl(`${basePath}/fonts/estimate`, {
@@ -75,7 +75,7 @@ export async function estimateCmsGoogleFont(
 export async function installCmsGoogleFont(
   request: InstallGoogleFontRequest,
   fetchImpl: FetchLike = defaultFetch,
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<FontEntry> {
   const res = await fetchImpl(`${basePath}/fonts/install`, {
     method: 'POST',
@@ -97,7 +97,7 @@ export async function installCmsGoogleFont(
 export async function deleteCmsFontFamily(
   family: string,
   fetchImpl: FetchLike = defaultFetch,
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<void> {
   const res = await fetchImpl(`${basePath}/fonts/family/${encodeURIComponent(family)}`, {
     method: 'DELETE',

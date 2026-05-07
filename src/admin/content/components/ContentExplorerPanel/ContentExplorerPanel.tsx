@@ -4,9 +4,12 @@ import { EmptyState } from '@ui/components/EmptyState'
 import { cn } from '@ui/cn'
 import { BookOpenIcon } from 'pixel-art-icons/icons/book-open'
 import { BookPlusIcon } from 'pixel-art-icons/icons/book-plus'
+import { CopyIcon } from 'pixel-art-icons/icons/copy'
+import { Copy2Icon } from 'pixel-art-icons/icons/copy-2'
 import { ExternalLinkIcon } from 'pixel-art-icons/icons/external-link'
 import { FilePlusIcon } from 'pixel-art-icons/icons/file-plus'
 import { FileTextIcon } from 'pixel-art-icons/icons/file-text'
+import { MoveIcon } from 'pixel-art-icons/icons/move'
 import { Settings2Icon } from 'pixel-art-icons/icons/settings-2'
 import { UploadIcon } from 'pixel-art-icons/icons/upload'
 import type { ContentCollection, ContentEntry, UpdateContentCollectionInput } from '@core/content/schemas'
@@ -49,6 +52,8 @@ interface ContentExplorerPanelProps {
   onPublishEntry: (entry: ContentEntry) => void | Promise<void>
   onConvertEntryToDraft: (entry: ContentEntry) => void | Promise<void>
   onDeleteEntry: (entry: ContentEntry) => void | Promise<void>
+  onDuplicateEntry: (entry: ContentEntry) => void | Promise<void>
+  onMoveEntryToCollection: (entry: ContentEntry, collectionId: string) => void | Promise<void>
   onClose: () => void
 }
 
@@ -58,6 +63,12 @@ function keyboardMenuPosition(element: HTMLElement) {
     x: rect.left + Math.min(rect.width - 8, 24),
     y: rect.top + Math.min(rect.height - 8, 24),
   }
+}
+
+function entryAuthorLabel(entry: ContentEntry): string {
+  if (entry.author?.displayName) return entry.author.displayName
+  if (entry.author?.email) return entry.author.email
+  return 'Unknown author'
 }
 
 export function ContentExplorerPanel({
@@ -78,6 +89,8 @@ export function ContentExplorerPanel({
   onPublishEntry,
   onConvertEntryToDraft,
   onDeleteEntry,
+  onDuplicateEntry,
+  onMoveEntryToCollection,
   onClose,
 }: ContentExplorerPanelProps) {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
@@ -104,6 +117,38 @@ export function ContentExplorerPanel({
     setContextMenu({ ...keyboardMenuPosition(event.currentTarget), target })
   }
 
+  async function copyEntryUrl(entry: ContentEntry) {
+    const collection = collectionForEntry(entry)
+    if (!collection) return
+    const url = `${window.location.origin}${publicContentPath(collection.routeBase, entry.slug)}`
+    try {
+      await navigator.clipboard.writeText(url)
+    } catch (err) {
+      console.error('[ContentExplorerPanel] copy entry URL error:', err)
+    }
+  }
+
+  function moveSubmenuItem(target: ContentExplorerContextTarget): ExplorerContextMenuItem | null {
+    if (target.kind !== 'entry') return null
+    const others = collections.filter((collection) => collection.id !== target.entry.collectionId)
+    if (others.length === 0) return null
+    return {
+      kind: 'submenu',
+      label: 'Move to collection',
+      icon: <MoveIcon size={13} />,
+      width: 220,
+      items: others.map((collection) => ({
+        kind: 'action',
+        label: collection.name,
+        icon: <BookOpenIcon size={13} />,
+        action: () => {
+          void onMoveEntryToCollection(target.entry, collection.id)
+          setContextMenu(null)
+        },
+      })),
+    }
+  }
+
   function extraMenuItems(target: ContentExplorerContextTarget): ExplorerContextMenuItem[] {
     if (target.kind === 'collection') {
       return [{
@@ -116,19 +161,19 @@ export function ContentExplorerPanel({
       }]
     }
 
+    const items: ExplorerContextMenuItem[] = []
+
     if (target.entry.status !== 'published') {
-      return [{
+      items.push({
         label: 'Publish',
         icon: <UploadIcon size={13} />,
         action: () => {
           void onPublishEntry(target.entry)
           setContextMenu(null)
         },
-      }]
-    }
-
-    return [
-      {
+      })
+    } else {
+      items.push({
         label: 'Open in new tab',
         icon: <ExternalLinkIcon size={13} />,
         action: () => {
@@ -138,16 +183,38 @@ export function ContentExplorerPanel({
           }
           setContextMenu(null)
         },
-      },
-      {
+      })
+      items.push({
+        label: 'Copy URL',
+        icon: <Copy2Icon size={13} />,
+        action: () => {
+          void copyEntryUrl(target.entry)
+          setContextMenu(null)
+        },
+      })
+      items.push({
         label: 'Convert to draft',
         icon: <FileTextIcon size={13} />,
         action: () => {
           void onConvertEntryToDraft(target.entry)
           setContextMenu(null)
         },
+      })
+    }
+
+    items.push({
+      label: 'Duplicate',
+      icon: <CopyIcon size={13} />,
+      action: () => {
+        void onDuplicateEntry(target.entry)
+        setContextMenu(null)
       },
-    ]
+    })
+
+    const moveItem = moveSubmenuItem(target)
+    if (moveItem) items.push(moveItem)
+
+    return items
   }
 
   function renameDialogTitle(target: ContentExplorerContextTarget): string {
@@ -265,6 +332,7 @@ export function ContentExplorerPanel({
                     type="button"
                     className={cn(
                       explorerStyles.row,
+                      styles.entryRow,
                       entry.id === selectedEntryId && explorerStyles.rowActive,
                     )}
                     onClick={() => onSelectEntry(entry)}
@@ -272,7 +340,10 @@ export function ContentExplorerPanel({
                     onKeyDown={(event) => openKeyboardContextMenu({ kind: 'entry', entry }, event)}
                   >
                     <FileTextIcon size={14} aria-hidden="true" />
-                    <span className={styles.entryTitle}>{entry.title}</span>
+                    <span className={styles.entryTitleStack}>
+                      <span className={styles.entryTitle}>{entry.title}</span>
+                      <span className={styles.entryAuthor} aria-hidden="true">{entryAuthorLabel(entry)}</span>
+                    </span>
                     <span className={explorerStyles.rowMeta}>{entry.status}</span>
                   </button>
                 ))}

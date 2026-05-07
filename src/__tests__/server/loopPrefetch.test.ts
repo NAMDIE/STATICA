@@ -4,8 +4,13 @@
  */
 
 import { describe, expect, it } from 'bun:test'
-import { collectLoopNodes, prefetchLoopData, readLoopProps } from '../../../server/cms/loopPrefetch'
-import type { DbResult } from '../../../server/cms/db'
+import {
+  collectLoopNodes,
+  prefetchLoopData,
+  publishedContentEntryToLoopItem,
+  readLoopProps,
+} from '../../../server/publish/loopPrefetch'
+import type { DbResult } from '../../../server/db'
 import { createFakeDb } from './dbTestFake'
 import { makePage, makeSite } from '../publisher/helpers'
 
@@ -13,6 +18,43 @@ import { makePage, makeSite } from '../publisher/helpers'
 import '@core/loops/sources'
 
 describe('loopPrefetch', () => {
+  it('maps published content authorship into loop fields with display names and roles', () => {
+    const item = publishedContentEntryToLoopItem({
+      id: 'version_1',
+      entryId: 'entry_1',
+      collectionId: 'posts',
+      collectionSlug: 'posts',
+      collectionRouteBase: '/posts',
+      versionNumber: 1,
+      title: 'Published post',
+      slug: 'published-post',
+      bodyMarkdown: 'Body',
+      featuredMediaId: null,
+      featuredMediaPath: null,
+      seoTitle: '',
+      seoDescription: '',
+      authorUserId: 'author_1',
+      authorName: 'Author Name',
+      authorRoleSlug: 'editor',
+      authorRoleName: 'Editor',
+      publishedByUserId: 'publisher_1',
+      publishedByName: 'Publisher Name',
+      publishedByRoleSlug: 'admin',
+      publishedByRoleName: 'Admin',
+      publishedAt: '2026-05-01T10:02:00.000Z',
+      createdAt: '2026-05-01T10:02:00.000Z',
+    })
+
+    expect(item.fields).toMatchObject({
+      authorName: 'Author Name',
+      authorRoleName: 'Editor',
+      authorRoleSlug: 'editor',
+      publishedByName: 'Publisher Name',
+      publishedByRoleName: 'Admin',
+      publishedByRoleSlug: 'admin',
+    })
+  })
+
   it('readLoopProps coerces missing/invalid props into safe defaults', () => {
     const props = readLoopProps({
       id: 'l',

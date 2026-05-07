@@ -10,11 +10,11 @@
  * creation backdoor.
  */
 import { nanoid } from 'nanoid'
-import type { DbClient } from '../../cms/db/client'
-import { hashPassword } from '../../cms/auth'
-import { createSite, getSetupStatus } from '../../cms/repositories'
-import { createUser } from '../../cms/usersRepository'
-import { createAuditEvent } from '../../cms/auditRepository'
+import type { DbClient } from '../../db/client'
+import { hashPassword } from '../../auth/tokens'
+import { createSite, getSetupStatus } from '../../repositories/setup'
+import { createUser } from '../../repositories/users'
+import { createAuditEvent } from '../../repositories/audit'
 import { createNode } from '@core/page-tree/mutations'
 import type { Page } from '@core/page-tree/schemas'
 import { badRequest, jsonResponse, methodNotAllowed, readJsonObject } from '../../http'

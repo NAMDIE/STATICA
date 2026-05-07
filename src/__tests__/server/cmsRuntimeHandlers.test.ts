@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
-import { SESSION_COOKIE_NAME } from '../../../server/cms/auth'
-import type { DbClient, DbResult } from '../../../server/cms/db'
-import { handleCmsRequest } from '../../../server/cms/handlers'
+import { SESSION_COOKIE_NAME } from '../../../server/auth/tokens'
+import type { DbClient, DbResult } from '../../../server/db'
+import { handleCmsRequest } from '../../../server/handlers/cms'
 import type { SiteDocument } from '@core/page-tree/schemas'
 
 function makeFakeDb(): DbClient {
@@ -11,17 +11,31 @@ function makeFakeDb(): DbClient {
   ): Promise<DbResult<Row>> => {
     const sql = strings.reduce<string>((acc, str, i) => (i === 0 ? str : `${acc}$${i}${str}`), '')
     const normalized = sql.replace(/\s+/g, ' ').trim().toLowerCase()
-    // findAdminBySessionHash — return a hardcoded admin regardless of session hash
-    if (normalized.includes('select admin_users.id')) {
+    if (normalized.includes('from sessions') && normalized.includes('join users')) {
       return {
         rows: [{
           id: 'admin_1',
           email: 'owner@example.com',
+          email_normalized: 'owner@example.com',
+          display_name: 'Owner',
           password_hash: 'hash',
+          status: 'active',
+          role_id: 'owner',
+          last_login_at: null,
           created_at: new Date('2026-01-01').toISOString(),
+          updated_at: new Date('2026-01-01').toISOString(),
+          deleted_at: null,
+          role_slug: 'owner',
+          role_name: 'Owner',
+          role_description: '',
+          role_is_system: true,
+          role_capabilities_json: ['runtime.manage', 'site.edit'],
         } as Row],
         rowCount: 1,
       }
+    }
+    if (normalized.includes('update sessions') && normalized.includes('last_seen_at')) {
+      return { rows: [], rowCount: 1 }
     }
     throw new Error(`Unhandled SQL: ${sql}`)
   }
@@ -85,7 +99,7 @@ function site(): SiteDocument {
 describe('CMS runtime handlers', () => {
   it('resolves an empty runtime dependency manifest', async () => {
     const res = await handleCmsRequest(runtimeRequest(
-      'http://localhost/api/cms/runtime/dependencies/resolve',
+      'http://localhost/admin/api/cms/runtime/dependencies/resolve',
       { packageJson: { dependencies: {}, devDependencies: {} } },
     ), makeFakeDb())
 
@@ -97,7 +111,7 @@ describe('CMS runtime handlers', () => {
 
   it('builds a runtime preview document for a provided site and page', async () => {
     const res = await handleCmsRequest(runtimeRequest(
-      'http://localhost/api/cms/runtime/preview',
+      'http://localhost/admin/api/cms/runtime/preview',
       { site: site(), pageId: 'page_1' },
     ), makeFakeDb())
 

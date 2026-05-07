@@ -50,7 +50,7 @@ function renderControl(
 function installMediaFetchStub(assets: CmsMediaAsset[]): () => void {
   const originalFetch = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
-    if (String(input).endsWith('/api/cms/media')) {
+    if (String(input).endsWith('/admin/api/cms/media')) {
       return new Response(JSON.stringify({ assets }), { status: 200 })
     }
     throw new Error(`Unexpected fetch: ${String(input)}`)
@@ -67,6 +67,7 @@ const mediaAssets: CmsMediaAsset[] = [
     mimeType: 'image/png',
     sizeBytes: 1234,
     publicPath: '/uploads/hero.png',
+    uploadedByUserId: null,
     createdAt: '2026-01-01T00:00:00.000Z',
   },
   {
@@ -75,6 +76,7 @@ const mediaAssets: CmsMediaAsset[] = [
     mimeType: 'video/mp4',
     sizeBytes: 4321,
     publicPath: '/uploads/intro.mp4',
+    uploadedByUserId: null,
     createdAt: '2026-01-02T00:00:00.000Z',
   },
 ]

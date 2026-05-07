@@ -45,10 +45,10 @@ api.plugin.version
 api.plugin.permissions
 api.plugin.log('message')
 
-api.cms.routes.get('/status', handler)
-api.cms.routes.post('/action', handler)
-api.cms.routes.patch('/item', handler)
-api.cms.routes.delete('/item', handler)
+api.cms.routes.get('/status', 'plugins.manage', handler)
+api.cms.routes.post('/action', 'plugins.manage', handler)
+api.cms.routes.patch('/item', 'plugins.manage', handler)
+api.cms.routes.delete('/item', 'plugins.manage', handler)
 
 const collection = api.cms.storage.collection('resource-id')
 await collection.list()
@@ -57,7 +57,7 @@ await collection.update(recordId, { status: 'approved' })
 await collection.delete(recordId)
 ```
 
-Route handlers are mounted under `/api/cms/plugins/:pluginId/runtime/*` and run behind the admin session check. A plugin must have `cms.routes` granted before registering routes and `cms.storage` granted before using plugin-owned records.
+Route handlers are mounted under `/admin/api/cms/plugins/:pluginId/runtime/*` and run behind the admin session check. A plugin must have `cms.routes` granted before registering routes and `cms.storage` granted before using plugin-owned records.
 
 ## Lifecycle State
 

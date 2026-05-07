@@ -13,6 +13,7 @@ import { ContentPage } from './content/ContentPage'
 import { PluginPage } from './plugins/PluginPage'
 import { PluginsPage } from './plugins/PluginsPage'
 import { SitePage } from './site/SitePage'
+import { UsersPage } from './users/UsersPage'
 import { AppLoadingScreen } from './AppLoadingScreen'
 import type { AdminWorkspace } from './workspace'
 import styles from './AdminEntry.module.css'
@@ -108,6 +109,7 @@ export default function AdminEntry({ section = 'site' }: AdminEntryProps) {
   if (phase === 'editor') {
     if (section === 'content') return <ContentPage />
     if (section === 'plugins') return <PluginsPage />
+    if (section === 'users') return <UsersPage />
     if (section === 'pluginPage') return <PluginPage />
     return <SitePage />
   }

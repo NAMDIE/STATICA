@@ -11,7 +11,7 @@ type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Respo
 
 export async function publishCmsDraft(
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<CmsPublishResult> {
   const res = await fetchImpl(`${basePath}/publish`, {
     method: 'POST',
@@ -25,7 +25,7 @@ export async function publishCmsDraft(
 
 export async function getCmsPublishStatus(
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
-  basePath = '/api/cms',
+  basePath = '/admin/api/cms',
 ): Promise<CmsPublishStatus> {
   const res = await fetchImpl(`${basePath}/publish/status`, {
     method: 'GET',

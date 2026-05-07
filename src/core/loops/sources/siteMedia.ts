@@ -17,6 +17,7 @@ interface MediaRow {
   mime_type: string
   size_bytes: number | string
   public_path: string
+  uploaded_by_user_id: string | null
   created_at: Date | string
 }
 
@@ -35,6 +36,8 @@ function rowToLoopItem(row: MediaRow): LoopItem {
       path: row.public_path,
       url: row.public_path,
       src: row.public_path,
+      uploadedByUserId: row.uploaded_by_user_id,
+      uploadedById: row.uploaded_by_user_id,
       createdAt: toIsoString(row.created_at),
     },
   }
@@ -71,7 +74,7 @@ async function fetchMediaPage(
   if (orderBy === 'filename' && direction === 'asc') {
     if (mimePrefix) {
       const { rows } = await db<MediaRow>`
-        select id, filename, mime_type, size_bytes, public_path, created_at
+        select id, filename, mime_type, size_bytes, public_path, uploaded_by_user_id, created_at
         from media_assets
         where deleted_at is null and mime_type like ${mimePrefix + '%'}
         order by filename asc, id asc
@@ -80,7 +83,7 @@ async function fetchMediaPage(
       return rows
     }
     const { rows } = await db<MediaRow>`
-      select id, filename, mime_type, size_bytes, public_path, created_at
+      select id, filename, mime_type, size_bytes, public_path, uploaded_by_user_id, created_at
       from media_assets
       where deleted_at is null
       order by filename asc, id asc
@@ -91,7 +94,7 @@ async function fetchMediaPage(
   if (orderBy === 'filename' && direction === 'desc') {
     if (mimePrefix) {
       const { rows } = await db<MediaRow>`
-        select id, filename, mime_type, size_bytes, public_path, created_at
+        select id, filename, mime_type, size_bytes, public_path, uploaded_by_user_id, created_at
         from media_assets
         where deleted_at is null and mime_type like ${mimePrefix + '%'}
         order by filename desc, id desc
@@ -100,7 +103,7 @@ async function fetchMediaPage(
       return rows
     }
     const { rows } = await db<MediaRow>`
-      select id, filename, mime_type, size_bytes, public_path, created_at
+      select id, filename, mime_type, size_bytes, public_path, uploaded_by_user_id, created_at
       from media_assets
       where deleted_at is null
       order by filename desc, id desc
@@ -112,7 +115,7 @@ async function fetchMediaPage(
   if (direction === 'asc') {
     if (mimePrefix) {
       const { rows } = await db<MediaRow>`
-        select id, filename, mime_type, size_bytes, public_path, created_at
+        select id, filename, mime_type, size_bytes, public_path, uploaded_by_user_id, created_at
         from media_assets
         where deleted_at is null and mime_type like ${mimePrefix + '%'}
         order by created_at asc, id asc
@@ -121,7 +124,7 @@ async function fetchMediaPage(
       return rows
     }
     const { rows } = await db<MediaRow>`
-      select id, filename, mime_type, size_bytes, public_path, created_at
+      select id, filename, mime_type, size_bytes, public_path, uploaded_by_user_id, created_at
       from media_assets
       where deleted_at is null
       order by created_at asc, id asc
@@ -131,7 +134,7 @@ async function fetchMediaPage(
   }
   if (mimePrefix) {
     const { rows } = await db<MediaRow>`
-      select id, filename, mime_type, size_bytes, public_path, created_at
+      select id, filename, mime_type, size_bytes, public_path, uploaded_by_user_id, created_at
       from media_assets
       where deleted_at is null and mime_type like ${mimePrefix + '%'}
       order by created_at desc, id desc
@@ -140,7 +143,7 @@ async function fetchMediaPage(
     return rows
   }
   const { rows } = await db<MediaRow>`
-    select id, filename, mime_type, size_bytes, public_path, created_at
+    select id, filename, mime_type, size_bytes, public_path, uploaded_by_user_id, created_at
     from media_assets
     where deleted_at is null
     order by created_at desc, id desc
@@ -178,6 +181,7 @@ export const SiteMediaSource: LoopEntitySource = {
     { id: 'url', label: 'URL', format: 'url' },
     { id: 'src', label: 'Source URL', format: 'media' },
     { id: 'mimeType', label: 'MIME type' },
+    { id: 'uploadedByUserId', label: 'Uploader ID' },
     { id: 'createdAt', label: 'Upload date' },
   ],
 

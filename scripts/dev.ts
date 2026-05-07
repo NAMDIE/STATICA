@@ -27,7 +27,7 @@
 
 import { mkdir } from 'node:fs/promises'
 import { dirname } from 'node:path'
-import { isSqliteUrl } from '../server/cms/db'
+import { isSqliteUrl } from '../server/db'
 
 const CMS_PORT = Number(process.env.PORT ?? '3001')
 const VITE_PORT = 5173

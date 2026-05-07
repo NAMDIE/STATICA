@@ -168,6 +168,12 @@ export const PageSchema = Type.Object({
   slug: Type.String(),
   /** Display title e.g. "Home", "About Us" */
   title: Type.String(),
+  /** Owning user for admin/editor workflows; server-owned when persisted in CMS. */
+  ownerUserId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+  /** User who originally created this page; server-owned when persisted in CMS. */
+  createdByUserId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+  /** User who last saved this page draft; server-owned when persisted in CMS. */
+  updatedByUserId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
   /**
    * Optional CMS template configuration.
    * Missing means a normal static page.
@@ -807,6 +813,13 @@ function parsePage(raw: unknown, pageIndex: number): Page {
     id: r.id,
     slug: r.slug,
     title: r.title,
+    ...(typeof r.ownerUserId === 'string' || r.ownerUserId === null ? { ownerUserId: r.ownerUserId } : {}),
+    ...(typeof r.createdByUserId === 'string' || r.createdByUserId === null
+      ? { createdByUserId: r.createdByUserId }
+      : {}),
+    ...(typeof r.updatedByUserId === 'string' || r.updatedByUserId === null
+      ? { updatedByUserId: r.updatedByUserId }
+      : {}),
     nodes,
     rootNodeId: r.rootNodeId,
     ...(template !== null ? { template } : {}),

@@ -81,6 +81,8 @@ export const ContentCollectionSchema = Type.Object({
   singularLabel: Type.String(),
   pluralLabel: Type.String(),
   fields: Type.Optional(ContentCollectionFieldsSchema),
+  createdByUserId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+  updatedByUserId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
   /** ISO datetime string from DB */
   createdAt: Type.String(),
   /** ISO datetime string from DB */
@@ -120,6 +122,23 @@ export const UpdateContentCollectionInputSchema = Type.Object({
 export type UpdateContentCollectionInput = Static<typeof UpdateContentCollectionInputSchema>
 
 // ---------------------------------------------------------------------------
+// ContentUserReference
+// ---------------------------------------------------------------------------
+
+export const ContentUserReferenceSchema = Type.Object({
+  id: Type.String(),
+  email: Type.String(),
+  displayName: Type.String(),
+  roleSlug: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+  roleName: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+})
+
+export type ContentUserReference = Static<typeof ContentUserReferenceSchema>
+
+const NullableContentUserReferenceSchema = Type.Union([ContentUserReferenceSchema, Type.Null()])
+const NullableUserIdSchema = Type.Union([Type.String(), Type.Null()])
+
+// ---------------------------------------------------------------------------
 // ContentEntry
 // ---------------------------------------------------------------------------
 
@@ -133,6 +152,14 @@ export const ContentEntrySchema = Type.Object({
   featuredMediaId: Type.Union([Type.String(), Type.Null()]),
   seoTitle: Type.String(),
   seoDescription: Type.String(),
+  authorUserId: Type.Optional(NullableUserIdSchema),
+  createdByUserId: Type.Optional(NullableUserIdSchema),
+  updatedByUserId: Type.Optional(NullableUserIdSchema),
+  publishedByUserId: Type.Optional(NullableUserIdSchema),
+  author: Type.Optional(NullableContentUserReferenceSchema),
+  createdBy: Type.Optional(NullableContentUserReferenceSchema),
+  updatedBy: Type.Optional(NullableContentUserReferenceSchema),
+  publishedBy: Type.Optional(NullableContentUserReferenceSchema),
   /** ISO datetime string from DB */
   createdAt: Type.String(),
   /** ISO datetime string from DB */

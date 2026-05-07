@@ -2,11 +2,11 @@ import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'bun:test'
-import { resolveSiteDependencyLock } from '../../../server/cms/runtime/dependencyResolver'
+import { resolveSiteDependencyLock } from '../../../server/publish/runtime/dependencyResolver'
 import {
   ensureRuntimeDependencyCache,
   runtimeDependencyLockHash,
-} from '../../../server/cms/runtime/dependencyCache'
+} from '../../../server/publish/runtime/dependencyCache'
 import type { SiteDependencyLock } from '@core/site-runtime'
 
 function registryResponse(name: string) {

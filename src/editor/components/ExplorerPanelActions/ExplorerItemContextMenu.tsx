@@ -2,17 +2,41 @@ import { useEffect, useRef, type ReactNode } from 'react'
 import {
   ContextMenu,
   ContextMenuItem,
+  ContextMenuSubmenu,
 } from '@ui/components/ContextMenu'
 import { DeleteIcon } from 'pixel-art-icons/icons/delete'
 import { EditIcon } from 'pixel-art-icons/icons/edit'
 
-export interface ExplorerContextMenuItem {
+export interface ExplorerContextMenuAction {
+  kind?: 'action'
   label: string
   action: () => void
   icon: ReactNode
   danger?: boolean
   disabled?: boolean
 }
+
+export interface ExplorerContextMenuSubmenu {
+  kind: 'submenu'
+  label: string
+  icon: ReactNode
+  /**
+   * Submenu items rendered in the nested panel. Each item is a leaf action;
+   * nested submenus are intentionally not supported (one level deep is enough
+   * for explorer-style menus and keeps focus management simple).
+   */
+  items: ExplorerContextMenuAction[]
+  /**
+   * When the submenu has zero items, the trigger row is omitted entirely
+   * rather than rendered disabled. Defaults to true — set to false to keep
+   * the row visible (disabled) for affordance.
+   */
+  hideWhenEmpty?: boolean
+  /** Submenu panel width in px. Default: 200. */
+  width?: number
+}
+
+export type ExplorerContextMenuItem = ExplorerContextMenuAction | ExplorerContextMenuSubmenu
 
 interface ExplorerItemContextMenuProps {
   x: number
@@ -43,24 +67,55 @@ export function ExplorerItemContextMenu({
 
   const items: ExplorerContextMenuItem[] = [
     ...extraItems,
-    { label: 'Rename', action: onRename, icon: <EditIcon size={13} /> },
-    { label: 'Delete', action: onDelete, icon: <DeleteIcon size={13} />, danger: true, disabled: deleteDisabled },
+    { kind: 'action', label: 'Rename', action: onRename, icon: <EditIcon size={13} /> },
+    { kind: 'action', label: 'Delete', action: onDelete, icon: <DeleteIcon size={13} />, danger: true, disabled: deleteDisabled },
   ]
+
+  let firstActionAssigned = false
 
   return (
     <ContextMenu x={x} y={y} ariaLabel={ariaLabel} onClose={onClose}>
-      {items.map((item, i) => (
-        <ContextMenuItem
-          key={item.label}
-          ref={i === 0 ? firstItemRef : undefined}
-          danger={item.danger ?? false}
-          disabled={item.disabled}
-          onClick={item.action}
-        >
-          <span aria-hidden="true">{item.icon}</span>
-          {item.label}
-        </ContextMenuItem>
-      ))}
+      {items.map((item) => {
+        if (item.kind === 'submenu') {
+          if ((item.hideWhenEmpty ?? true) && item.items.length === 0) return null
+          return (
+            <ContextMenuSubmenu
+              key={item.label}
+              label={item.label}
+              icon={item.icon}
+              onClose={onClose}
+              width={item.width ?? 200}
+            >
+              {item.items.map((sub) => (
+                <ContextMenuItem
+                  key={sub.label}
+                  danger={sub.danger ?? false}
+                  disabled={sub.disabled}
+                  onClick={sub.action}
+                >
+                  <span aria-hidden="true">{sub.icon}</span>
+                  {sub.label}
+                </ContextMenuItem>
+              ))}
+            </ContextMenuSubmenu>
+          )
+        }
+
+        const isFirst = !firstActionAssigned
+        if (isFirst) firstActionAssigned = true
+        return (
+          <ContextMenuItem
+            key={item.label}
+            ref={isFirst ? firstItemRef : undefined}
+            danger={item.danger ?? false}
+            disabled={item.disabled}
+            onClick={item.action}
+          >
+            <span aria-hidden="true">{item.icon}</span>
+            {item.label}
+          </ContextMenuItem>
+        )
+      })}
     </ContextMenu>
   )
 }

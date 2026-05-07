@@ -16,29 +16,40 @@
  *   PATCH  /admin/api/cms/content/entries/:id/status     — flip between draft/unpublished
  *   PATCH  /admin/api/cms/content/entries/:id/collection — move an entry to a new collection
  */
-import type { DbClient } from '../../cms/db/client'
-import { requireCapability } from '../../cms/authz'
+import type { DbClient } from '../../db/client'
+import { requireCapability } from '../../auth/authz'
+import { createAuditEvent } from '../../repositories/audit'
 import {
   createContentCollection,
   createContentEntry,
   getContentEntry,
+  listContentAuthorOptions,
   listContentCollections,
   listContentEntries,
   publishContentEntry,
   saveContentEntryDraft,
   softDeleteContentCollection,
   softDeleteContentEntry,
+  updateContentEntryAuthor,
   updateContentCollection,
   updateContentEntryCollection,
   updateContentEntryStatus,
-} from '../../cms/contentRepository'
+} from '../../repositories/content'
+import { findUserById } from '../../repositories/users'
 import { normalizeContentCollectionFields } from '@core/content/fields'
 import { slugFromTitle } from '@core/utils/slug'
 import { badRequest, jsonResponse, methodNotAllowed, readJsonObject } from '../../http'
-import { readNullableString, readString } from './shared'
+import { readNullableString, readString, requestAuditContext } from './shared'
 
 export async function handleContentRoutes(req: Request, db: DbClient): Promise<Response | null> {
   const url = new URL(req.url)
+
+  if (url.pathname === '/admin/api/cms/content/authors') {
+    const user = await requireCapability(req, db, 'content.edit')
+    if (user instanceof Response) return user
+    if (req.method !== 'GET') return methodNotAllowed()
+    return jsonResponse({ authors: await listContentAuthorOptions(db) })
+  }
 
   if (url.pathname === '/admin/api/cms/content/collections') {
     const user = await requireCapability(req, db, 'content.edit')
@@ -217,6 +228,40 @@ export async function handleContentRoutes(req: Request, db: DbClient): Promise<R
     const entryId = decodeURIComponent(contentEntryStatusMatch[1])
     const entry = await updateContentEntryStatus(db, entryId, status, user.id)
     if (!entry) return jsonResponse({ error: 'Content entry not found' }, { status: 404 })
+    return jsonResponse({ entry })
+  }
+
+  const contentEntryAuthorMatch = url.pathname.match(/^\/admin\/api\/cms\/content\/entries\/([^/]+)\/author$/)
+  if (contentEntryAuthorMatch) {
+    const user = await requireCapability(req, db, 'content.edit')
+    if (user instanceof Response) return user
+    if (req.method !== 'PATCH') return methodNotAllowed()
+
+    const body = await readJsonObject(req)
+    const authorUserId = readString(body, 'authorUserId')
+    if (!authorUserId) return badRequest('Author is required')
+
+    const author = await findUserById(db, authorUserId)
+    if (!author || author.status !== 'active') return badRequest('Author must be an active user')
+
+    const entryId = decodeURIComponent(contentEntryAuthorMatch[1])
+    const currentEntry = await getContentEntry(db, entryId)
+    if (!currentEntry) return jsonResponse({ error: 'Content entry not found' }, { status: 404 })
+
+    const entry = await updateContentEntryAuthor(db, entryId, authorUserId, user.id)
+    if (!entry) return jsonResponse({ error: 'Content entry not found' }, { status: 404 })
+
+    await createAuditEvent(db, {
+      actorUserId: user.id,
+      action: 'content.author.assign',
+      targetType: 'content_entry',
+      targetId: entry.id,
+      metadata: {
+        previousAuthorUserId: currentEntry.authorUserId,
+        authorUserId,
+      },
+      ...requestAuditContext(req),
+    })
     return jsonResponse({ entry })
   }
 

@@ -9,19 +9,19 @@
  *   GET  /admin/api/cms/me     — return the authenticated user, role, and
  *                                 capabilities (used by the admin shell).
  */
-import type { DbClient } from '../../cms/db/client'
+import type { DbClient } from '../../db/client'
 import {
   createSessionToken,
   hashSessionToken,
   sessionExpiry,
   verifyPassword,
-} from '../../cms/auth'
-import { createSession, revokeSessionByHash } from '../../cms/sessionsRepository'
-import { findUserByEmail, markUserLoggedIn, toPublicUser } from '../../cms/usersRepository'
-import { requireAuthenticatedUser, getSessionHash } from '../../cms/authz'
-import { createAuditEvent } from '../../cms/auditRepository'
-import { loginRateLimit } from '../../cms/rateLimit'
-import { clientIp } from '../../cms/security'
+} from '../../auth/tokens'
+import { createSession, revokeSessionByHash } from '../../auth/sessions'
+import { findUserByEmail, markUserLoggedIn, toPublicUser } from '../../repositories/users'
+import { requireAuthenticatedUser, getSessionHash } from '../../auth/authz'
+import { createAuditEvent } from '../../repositories/audit'
+import { loginRateLimit } from '../../auth/rateLimit'
+import { clientIp } from '../../auth/security'
 import { jsonResponse, methodNotAllowed, readJsonObject, setCookieHeader } from '../../http'
 import { CMS_API_PREFIX, readString, requestAuditContext } from './shared'
 import { clearSessionCookie, getDummyPasswordHash, sessionCookie } from './session'

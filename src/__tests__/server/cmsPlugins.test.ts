@@ -3,9 +3,9 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { strToU8, zipSync } from 'fflate'
-import { SESSION_COOKIE_NAME, hashSessionToken } from '../../../server/cms/auth'
-import type { DbClient, DbResult } from '../../../server/cms/db'
-import { handleCmsRequest } from '../../../server/cms/handlers'
+import { SESSION_COOKIE_NAME, hashSessionToken } from '../../../server/auth/tokens'
+import type { DbClient, DbResult } from '../../../server/db'
+import { handleCmsRequest } from '../../../server/handlers/cms'
 
 function makeFakeDb() {
   const admins: Record<string, unknown>[] = [
@@ -28,12 +28,34 @@ function makeFakeDb() {
     const sql = strings.reduce<string>((acc, str, i) => (i === 0 ? str : `${acc}$${i}${str}`), '')
     const normalized = sql.replace(/\s+/g, ' ').trim().toLowerCase()
 
-    // findAdminBySessionHash — values[0]=idHash
-    if (normalized.includes('select admin_users.id, admin_users.email')) {
+    if (normalized.includes('from sessions') && normalized.includes('join users')) {
       const session = sessions.find((s) => String(s.id_hash) === String(values[0]))
       if (!session) return { rows: [], rowCount: 0 }
-      const admin = admins.find((a) => a.id === session.admin_user_id)
-      return { rows: admin ? [admin as Row] : [], rowCount: admin ? 1 : 0 }
+      const admin = admins.find((a) => a.id === session.user_id)
+      return {
+        rows: admin ? [{
+          ...admin,
+          email_normalized: admin.email,
+          display_name: 'Owner',
+          status: 'active',
+          role_id: 'owner',
+          last_login_at: null,
+          updated_at: admin.created_at,
+          deleted_at: null,
+          role_slug: 'owner',
+          role_name: 'Owner',
+          role_description: '',
+          role_is_system: true,
+          role_capabilities_json: ['plugins.manage'],
+        } as Row] : [],
+        rowCount: admin ? 1 : 0,
+      }
+    }
+    if (normalized.includes('update sessions') && normalized.includes('last_seen_at')) {
+      return { rows: [], rowCount: 1 }
+    }
+    if (normalized.includes('insert into audit_events')) {
+      return { rows: [], rowCount: 1 }
     }
     // listInstalledPlugins — no values
     if (normalized.includes('select id, name, version, enabled')) {
@@ -110,7 +132,7 @@ async function createCookie(db: ReturnType<typeof makeFakeDb>): Promise<string> 
   const token = 'valid-session-token'
   db.sessions.push({
     id_hash: await hashSessionToken(token),
-    admin_user_id: 'admin_1',
+    user_id: 'admin_1',
     expires_at: new Date('2030-01-01').toISOString(),
   })
   return `${SESSION_COOKIE_NAME}=${token}`
@@ -189,7 +211,7 @@ const mapManifest = {
 describe('CMS plugin handlers', () => {
   it('requires an admin session for plugin listing', async () => {
     const res = await handleCmsRequest(
-      cmsRequest('http://localhost/api/cms/plugins'),
+      cmsRequest('http://localhost/admin/api/cms/plugins'),
       makeFakeDb(),
     )
 
@@ -201,7 +223,7 @@ describe('CMS plugin handlers', () => {
     const cookie = await createCookie(db)
 
     const install = await handleCmsRequest(
-      cmsRequest('http://localhost/api/cms/plugins', {
+      cmsRequest('http://localhost/admin/api/cms/plugins', {
         method: 'POST',
         headers: { cookie, 'content-type': 'application/json' },
         body: JSON.stringify(mapManifest),
@@ -225,7 +247,7 @@ describe('CMS plugin handlers', () => {
     })
 
     const list = await handleCmsRequest(
-      cmsRequest('http://localhost/api/cms/plugins', {
+      cmsRequest('http://localhost/admin/api/cms/plugins', {
         headers: { cookie },
       }),
       db,
@@ -237,7 +259,7 @@ describe('CMS plugin handlers', () => {
     })
 
     const disable = await handleCmsRequest(
-      cmsRequest('http://localhost/api/cms/plugins/local.map', {
+      cmsRequest('http://localhost/admin/api/cms/plugins/local.map', {
         method: 'PATCH',
         headers: { cookie, 'content-type': 'application/json' },
         body: JSON.stringify({ enabled: false }),
@@ -252,7 +274,7 @@ describe('CMS plugin handlers', () => {
     })
 
     const remove = await handleCmsRequest(
-      cmsRequest('http://localhost/api/cms/plugins/local.map', {
+      cmsRequest('http://localhost/admin/api/cms/plugins/local.map', {
         method: 'DELETE',
         headers: { cookie },
       }),
@@ -268,7 +290,7 @@ describe('CMS plugin handlers', () => {
     const cookie = await createCookie(db)
 
     const res = await handleCmsRequest(
-      cmsRequest('http://localhost/api/cms/plugins', {
+      cmsRequest('http://localhost/admin/api/cms/plugins', {
         method: 'POST',
         headers: { cookie, 'content-type': 'application/json' },
         body: JSON.stringify({ ...mapManifest, id: '../bad' }),
@@ -295,7 +317,7 @@ describe('CMS plugin handlers', () => {
     }
 
     const denied = await handleCmsRequest(
-      cmsRequest('http://localhost/api/cms/plugins', {
+      cmsRequest('http://localhost/admin/api/cms/plugins', {
         method: 'POST',
         headers: { cookie, 'content-type': 'application/json' },
         body: JSON.stringify({ manifest: privilegedManifest, grantedPermissions: ['editor.toolbar'] }),
@@ -307,7 +329,7 @@ describe('CMS plugin handlers', () => {
     expect(db.plugins).toHaveLength(0)
 
     const accepted = await handleCmsRequest(
-      cmsRequest('http://localhost/api/cms/plugins', {
+      cmsRequest('http://localhost/admin/api/cms/plugins', {
         method: 'POST',
         headers: { cookie, 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -367,13 +389,13 @@ describe('CMS plugin handlers', () => {
       const formData = new FormData()
       formData.set('file', pluginZip({
         'plugin.json': JSON.stringify(manifest),
-        'server/index.js': 'export function activate(api) { api.cms.routes.get("/ping", () => ({ ok: true })) }',
+        'server/index.js': 'export function activate(api) { api.cms.routes.get("/ping", "plugins.manage", () => ({ ok: true })) }',
         'admin/dashboard.js': 'export function render({ root }) { root.textContent = "Workflow" }',
       }))
       formData.set('grantedPermissions', JSON.stringify(manifest.permissions))
 
       const install = await handleCmsRequest(
-        cmsFormRequest('http://localhost/api/cms/plugins/package', formData, { cookie }),
+        cmsFormRequest('http://localhost/admin/api/cms/plugins/package', formData, { cookie }),
         db,
         { uploadsDir },
       )
@@ -404,7 +426,7 @@ describe('CMS plugin handlers', () => {
       )).resolves.toContain('activate')
 
       const runtime = await handleCmsRequest(
-        cmsRequest('http://localhost/api/cms/plugins/acme.workflow/runtime/ping', {
+        cmsRequest('http://localhost/admin/api/cms/plugins/acme.workflow/runtime/ping', {
           headers: { cookie },
         }),
         db,
@@ -448,7 +470,7 @@ describe('CMS plugin handlers', () => {
       }
       export function activate(api) {
         mark(api, 'activate')
-        api.cms.routes.get('/ping', () => ({ ok: true, plugin: api.plugin.id }))
+        api.cms.routes.get('/ping', 'plugins.manage', () => ({ ok: true, plugin: api.plugin.id }))
       }
       export function deactivate(api) { mark(api, 'deactivate') }
       export function uninstall(api) { mark(api, 'uninstall') }
@@ -464,7 +486,7 @@ describe('CMS plugin handlers', () => {
       formData.set('grantedPermissions', JSON.stringify(manifest.permissions))
 
       const install = await handleCmsRequest(
-        cmsFormRequest('http://localhost/api/cms/plugins/package', formData, { cookie }),
+        cmsFormRequest('http://localhost/admin/api/cms/plugins/package', formData, { cookie }),
         db,
         { uploadsDir },
       )
@@ -474,7 +496,7 @@ describe('CMS plugin handlers', () => {
       expect(db.records).toHaveLength(1)
 
       const disable = await handleCmsRequest(
-        cmsRequest('http://localhost/api/cms/plugins/acme.lifecycle', {
+        cmsRequest('http://localhost/admin/api/cms/plugins/acme.lifecycle', {
           method: 'PATCH',
           headers: { cookie, 'content-type': 'application/json' },
           body: JSON.stringify({ enabled: false }),
@@ -488,7 +510,7 @@ describe('CMS plugin handlers', () => {
       })
 
       const enable = await handleCmsRequest(
-        cmsRequest('http://localhost/api/cms/plugins/acme.lifecycle', {
+        cmsRequest('http://localhost/admin/api/cms/plugins/acme.lifecycle', {
           method: 'PATCH',
           headers: { cookie, 'content-type': 'application/json' },
           body: JSON.stringify({ enabled: true }),
@@ -502,7 +524,7 @@ describe('CMS plugin handlers', () => {
       })
 
       const remove = await handleCmsRequest(
-        cmsRequest('http://localhost/api/cms/plugins/acme.lifecycle', {
+        cmsRequest('http://localhost/admin/api/cms/plugins/acme.lifecycle', {
           method: 'DELETE',
           headers: { cookie },
         }),
@@ -545,7 +567,7 @@ describe('CMS plugin handlers', () => {
       formData.set('grantedPermissions', JSON.stringify([]))
 
       const install = await handleCmsRequest(
-        cmsFormRequest('http://localhost/api/cms/plugins/package', formData, { cookie }),
+        cmsFormRequest('http://localhost/admin/api/cms/plugins/package', formData, { cookie }),
         db,
         { uploadsDir },
       )

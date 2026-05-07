@@ -63,11 +63,11 @@ describe('SQLite adapter smoke test', () => {
     const { db, cleanup } = await createTestDb()
     try {
       await db.transaction(async (tx) => {
-        await tx`insert into admin_users (id, email, password_hash) values (${'a1'}, ${'a@example.com'}, ${'hash1'})`
-        await tx`insert into admin_users (id, email, password_hash) values (${'a2'}, ${'b@example.com'}, ${'hash2'})`
+        await tx`insert into users (id, email, email_normalized, display_name, password_hash, role_id) values (${'a1'}, ${'a@example.com'}, ${'a@example.com'}, ${'A'}, ${'hash1'}, ${'viewer'})`
+        await tx`insert into users (id, email, email_normalized, display_name, password_hash, role_id) values (${'a2'}, ${'b@example.com'}, ${'b@example.com'}, ${'B'}, ${'hash2'}, ${'viewer'})`
       })
 
-      const { rows } = await db<{ count: number }>`select count(*) as count from admin_users`
+      const { rows } = await db<{ count: number }>`select count(*) as count from users`
       expect(rows[0]!.count).toBe(2)
     } finally {
       await cleanup()
@@ -78,14 +78,14 @@ describe('SQLite adapter smoke test', () => {
     const { db, cleanup } = await createTestDb()
     try {
       // Pre-existing row outside the tx so we can prove only the tx writes were rolled back.
-      await db`insert into admin_users (id, email, password_hash) values (${'pre'}, ${'pre@example.com'}, ${'hashp'})`
+      await db`insert into users (id, email, email_normalized, display_name, password_hash, role_id) values (${'pre'}, ${'pre@example.com'}, ${'pre@example.com'}, ${'Pre'}, ${'hashp'}, ${'viewer'})`
 
       const sentinel = new Error('rollback this tx')
       let caught: unknown = null
       try {
         await db.transaction(async (tx) => {
-          await tx`insert into admin_users (id, email, password_hash) values (${'tx1'}, ${'tx1@example.com'}, ${'hash1'})`
-          await tx`insert into admin_users (id, email, password_hash) values (${'tx2'}, ${'tx2@example.com'}, ${'hash2'})`
+          await tx`insert into users (id, email, email_normalized, display_name, password_hash, role_id) values (${'tx1'}, ${'tx1@example.com'}, ${'tx1@example.com'}, ${'Tx1'}, ${'hash1'}, ${'viewer'})`
+          await tx`insert into users (id, email, email_normalized, display_name, password_hash, role_id) values (${'tx2'}, ${'tx2@example.com'}, ${'tx2@example.com'}, ${'Tx2'}, ${'hash2'}, ${'viewer'})`
           throw sentinel
         })
       } catch (err) {
@@ -95,7 +95,7 @@ describe('SQLite adapter smoke test', () => {
       expect(caught).toBe(sentinel)
 
       // The pre-existing row survives; the two tx inserts were rolled back.
-      const { rows } = await db<{ id: string }>`select id from admin_users order by id`
+      const { rows } = await db<{ id: string }>`select id from users order by id`
       expect(rows.map((r) => r.id)).toEqual(['pre'])
     } finally {
       await cleanup()
@@ -105,12 +105,12 @@ describe('SQLite adapter smoke test', () => {
   test('foreign keys are enforced (PRAGMA foreign_keys = ON)', async () => {
     const { db, cleanup } = await createTestDb()
     try {
-      // sessions.admin_user_id has an FK to admin_users(id). Inserting a session
-      // for a non-existent admin must fail when foreign_keys is on.
+      // sessions.user_id has an FK to users(id). Inserting a session for a
+      // non-existent user must fail when foreign_keys is on.
       let caught: unknown = null
       try {
         await db`
-          insert into sessions (id_hash, admin_user_id, expires_at)
+          insert into sessions (id_hash, user_id, expires_at)
           values (${'sess1'}, ${'nonexistent-user'}, ${new Date(Date.now() + 60_000)})`
       } catch (err) {
         caught = err
@@ -129,14 +129,14 @@ describe('SQLite adapter smoke test', () => {
   test('BLOB round-trip for published_runtime_assets.content_bytes', async () => {
     const { db, cleanup } = await createTestDb()
     try {
-      // Set up the FK chain: admin → page → page_version → asset.
-      await db`insert into admin_users (id, email, password_hash) values (${'admin1'}, ${'a@example.com'}, ${'hash'})`
+      // Set up the FK chain: user → page → page_version → asset.
+      await db`insert into users (id, email, email_normalized, display_name, password_hash, role_id) values (${'user1'}, ${'a@example.com'}, ${'a@example.com'}, ${'A'}, ${'hash'}, ${'viewer'})`
       await db`
         insert into pages (id, title, slug, status, draft_document_json)
         values (${'p1'}, ${'Page'}, ${'page'}, ${'published'}, ${{ kind: 'page', tree: {} }})`
       await db`
-        insert into page_versions (id, page_id, version, snapshot_json, published_by)
-        values (${'pv1'}, ${'p1'}, ${1}, ${{ snapshot: true }}, ${'admin1'})`
+        insert into page_versions (id, page_id, version, snapshot_json, published_by_user_id)
+        values (${'pv1'}, ${'p1'}, ${1}, ${{ snapshot: true }}, ${'user1'})`
 
       const payload = new Uint8Array([0x00, 0xff, 0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0xfe, 0xed])
       await db`

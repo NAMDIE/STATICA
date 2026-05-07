@@ -4,7 +4,7 @@
  * Used by:
  *   - `src/core/templates/dynamicBindings.ts` to materialise `{{ body | html }}`
  *     bindings on template pages,
- *   - `server/cms/contentRenderer.ts` to render a standalone published content
+ *   - `server/publish/contentRenderer.ts` to render a standalone published content
  *     entry document.
  *
  * URL safety: all `href`/`src` values pass through `isSafeUrl` from the

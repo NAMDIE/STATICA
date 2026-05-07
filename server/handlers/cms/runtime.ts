@@ -14,11 +14,11 @@
  * Both endpoints accept the draft site in the request body rather than
  * loading the persisted draft — preview must reflect unsaved edits.
  */
-import type { DbClient } from '../../cms/db/client'
-import { requireCapability } from '../../cms/authz'
-import { resolveSiteDependencyLock } from '../../cms/runtime/dependencyResolver'
-import { ensureRuntimeDependencyCache } from '../../cms/runtime/dependencyCache'
-import { buildRuntimePreviewDocument } from '../../cms/runtime/previewRuntime'
+import type { DbClient } from '../../db/client'
+import { requireCapability } from '../../auth/authz'
+import { resolveSiteDependencyLock } from '../../publish/runtime/dependencyResolver'
+import { ensureRuntimeDependencyCache } from '../../publish/runtime/dependencyCache'
+import { buildRuntimePreviewDocument } from '../../publish/runtime/previewRuntime'
 import { validateSite, SiteValidationError } from '@core/persistence/validate'
 import { isSafePackageName } from '@core/site-dependencies/packageNames'
 import type { SitePackageJson } from '@core/site-dependencies/manifest'

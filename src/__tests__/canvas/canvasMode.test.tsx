@@ -192,7 +192,7 @@ describe('CanvasPreviewSurface', () => {
     buildCalls = 0
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString()
-      if (url.includes('/api/cms/runtime/preview')) {
+      if (url.includes('/admin/api/cms/runtime/preview')) {
         buildCalls += 1
         return new Response(JSON.stringify({
           html: '<!DOCTYPE html><html><body></body></html>',

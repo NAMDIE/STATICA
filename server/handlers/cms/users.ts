@@ -10,10 +10,10 @@
  * actor strip the last active owner of the role, suspend them, or delete
  * them — and where we refuse to assign the owner role to a new user.
  */
-import type { DbClient } from '../../cms/db/client'
-import { hashPassword } from '../../cms/auth'
-import { requireCapability } from '../../cms/authz'
-import { createAuditEvent } from '../../cms/auditRepository'
+import type { DbClient } from '../../db/client'
+import { hashPassword } from '../../auth/tokens'
+import { requireCapability } from '../../auth/authz'
+import { createAuditEvent } from '../../repositories/audit'
 import {
   countActiveOwners,
   createUser,
@@ -21,8 +21,8 @@ import {
   listUsers,
   softDeleteUser,
   updateUser,
-} from '../../cms/usersRepository'
-import type { UserStatus } from '../../cms/types'
+} from '../../repositories/users'
+import type { UserStatus } from '../../types'
 import { Type, type Static } from '@core/utils/typeboxHelpers'
 import { badRequest, jsonResponse, methodNotAllowed } from '../../http'
 import {

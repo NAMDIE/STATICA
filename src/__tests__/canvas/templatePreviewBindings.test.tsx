@@ -32,7 +32,7 @@ beforeEach(() => {
   } as Parameters<typeof useEditorStore.setState>[0])
 
   globalThis.fetch = (async (input: RequestInfo | URL) => {
-    if (String(input) === '/api/cms/content/collections/posts/entries') {
+    if (String(input) === '/admin/api/cms/content/collections/posts/entries') {
       return new Response(JSON.stringify({
         entries: [
           {
@@ -69,7 +69,7 @@ beforeEach(() => {
       }), { status: 200 })
     }
 
-    if (String(input) === '/api/cms/media') {
+    if (String(input) === '/admin/api/cms/media') {
       return new Response(JSON.stringify({
         assets: [
           {
@@ -78,6 +78,7 @@ beforeEach(() => {
             mimeType: 'image/png',
             sizeBytes: 1024,
             publicPath: '/uploads/template-cover.png',
+            uploadedByUserId: null,
             createdAt: '2026-05-01T09:00:00.000Z',
           },
         ],

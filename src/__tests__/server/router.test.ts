@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'bun:test'
 import { handleServerRequest } from '../../../server/router'
-import type { DbClient, DbResult } from '../../../server/cms/db'
+import type { DbClient, DbResult } from '../../../server/db'
 
 interface FakeDbCounts {
   site: number
-  adminUsers: number
+  owners: number
 }
 
-function makeFakeDb(counts: FakeDbCounts = { site: 0, adminUsers: 0 }): DbClient {
+function makeFakeDb(counts: FakeDbCounts = { site: 0, owners: 0 }): DbClient {
   const handle = async <Row = Record<string, unknown>>(
     strings: TemplateStringsArray,
     ...values: unknown[]
@@ -17,8 +17,8 @@ function makeFakeDb(counts: FakeDbCounts = { site: 0, adminUsers: 0 }): DbClient
     if (normalized.includes('count(*) as count from site')) {
       return { rows: [{ count: counts.site } as Row], rowCount: 1 }
     }
-    if (normalized.includes('count(*) as count from admin_users')) {
-      return { rows: [{ count: counts.adminUsers } as Row], rowCount: 1 }
+    if (normalized.includes('from users') && normalized.includes('role_id')) {
+      return { rows: [{ count: counts.owners } as Row], rowCount: 1 }
     }
     // Catch-all: unknown queries (e.g. publishRepository.getPublishedPageBySlug) return empty
     return { rows: [], rowCount: 0 }
@@ -38,7 +38,7 @@ describe('server router', () => {
   })
 
   it('routes cms setup status', async () => {
-    const res = await handleServerRequest(new Request('http://localhost/api/cms/setup/status'), { db: makeFakeDb() })
+    const res = await handleServerRequest(new Request('http://localhost/admin/api/cms/setup/status'), { db: makeFakeDb() })
     expect(res.status).toBe(200)
     expect(await res.json()).toMatchObject({ needsSetup: true })
   })
@@ -46,7 +46,7 @@ describe('server router', () => {
   it('redirects unmatched public routes to /admin on a fresh install', async () => {
     const res = await handleServerRequest(
       new Request('http://localhost/'),
-      { db: makeFakeDb({ site: 0, adminUsers: 0 }) },
+      { db: makeFakeDb({ site: 0, owners: 0 }) },
     )
     expect(res.status).toBe(302)
     expect(res.headers.get('location')).toBe('/admin')
@@ -55,7 +55,7 @@ describe('server router', () => {
   it('returns 404 for unknown routes once setup is complete', async () => {
     const res = await handleServerRequest(
       new Request('http://localhost/nope'),
-      { db: makeFakeDb({ site: 1, adminUsers: 1 }) },
+      { db: makeFakeDb({ site: 1, owners: 1 }) },
     )
     expect(res.status).toBe(404)
   })
