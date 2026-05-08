@@ -12,8 +12,12 @@ import type { IModuleRegistry, AnyModuleDefinition, ModuleDefinition } from './t
  * narrow→erased cast happens once at this boundary so user code never needs
  * to widen its types.
  */
+type RegistryListener = () => void
+
 class ModuleRegistry implements IModuleRegistry {
   private readonly _modules = new Map<string, AnyModuleDefinition>()
+  private readonly _listeners = new Set<RegistryListener>()
+  private _generation = 0
 
   /**
    * One controlled point of TProps→Record<string, unknown> erasure.
@@ -25,6 +29,33 @@ class ModuleRegistry implements IModuleRegistry {
     definition: ModuleDefinition<T>,
   ): AnyModuleDefinition {
     return definition as unknown as AnyModuleDefinition
+  }
+
+  /**
+   * Subscribe to registration changes. Used by the editor canvas to
+   * re-render when plugin module packs activate after the canvas has
+   * already mounted. Returns an unsubscribe function.
+   */
+  subscribe(listener: RegistryListener): () => void {
+    this._listeners.add(listener)
+    return () => {
+      this._listeners.delete(listener)
+    }
+  }
+
+  /**
+   * Monotonic counter that bumps on every register / unregister. Pair with
+   * `subscribe` (e.g. in `useSyncExternalStore`) so React-side consumers can
+   * cheaply detect registry changes without re-snapshotting the whole
+   * module list.
+   */
+  generation(): number {
+    return this._generation
+  }
+
+  private emitChange(): void {
+    this._generation += 1
+    for (const listener of this._listeners) listener()
   }
 
   register<T extends Record<string, unknown>>(definition: ModuleDefinition<T>): void {
@@ -41,6 +72,7 @@ class ModuleRegistry implements IModuleRegistry {
       )
     }
     this._modules.set(definition.id, this.erase(definition))
+    this.emitChange()
   }
 
   registerOrReplace<T extends Record<string, unknown>>(definition: ModuleDefinition<T>): void {
@@ -50,10 +82,11 @@ class ModuleRegistry implements IModuleRegistry {
       )
     }
     this._modules.set(definition.id, this.erase(definition))
+    this.emitChange()
   }
 
   unregister(id: string): void {
-    this._modules.delete(id)
+    if (this._modules.delete(id)) this.emitChange()
   }
 
   get(id: string): AnyModuleDefinition | undefined {

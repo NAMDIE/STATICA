@@ -14,6 +14,7 @@ import {
 } from '@core/plugins/manifest'
 import type {
   PluginManifest,
+  PluginModulesEntrypointModule,
   RouteMethod,
   ServerPluginApi,
   ServerPluginLifecycleHook,
@@ -21,10 +22,17 @@ import type {
   ServerPluginRouteHandler,
 } from '@core/plugin-sdk'
 import { assertPluginPermission } from '@core/plugin-sdk'
+import {
+  activatePluginModulePack,
+  resetPluginModulePacks,
+} from '@core/plugins/modulePackLoader'
 import { jsonResponse, readJsonObject } from '../http'
 import { nanoid } from 'nanoid'
 import { isCoreCapability, type CoreCapability } from '../auth/capabilities'
 import { requireCapability } from '../auth/authz'
+import { hookBus } from '@core/plugins/hookBus'
+import { loopSourceRegistry } from '@core/loops/registry'
+import type { LoopEntitySource as HostLoopEntitySource } from '@core/loops/types'
 
 interface ServerPluginRoute {
   pluginId: string
@@ -36,19 +44,37 @@ interface ServerPluginRoute {
 
 class ServerPluginRuntime {
   private routes = new Map<string, ServerPluginRoute>()
+  private loopSourcesByPlugin = new Map<string, Set<string>>()
 
   reset(): void {
     this.routes.clear()
+    for (const ids of this.loopSourcesByPlugin.values()) {
+      for (const id of ids) loopSourceRegistry.unregister(id)
+    }
+    this.loopSourcesByPlugin.clear()
   }
 
   registerRoute(route: ServerPluginRoute): void {
     this.routes.set(this.routeKey(route.pluginId, route.method, route.path), route)
   }
 
+  registerLoopSource(pluginId: string, source: HostLoopEntitySource): void {
+    loopSourceRegistry.registerOrReplace(source)
+    const ids = this.loopSourcesByPlugin.get(pluginId) ?? new Set<string>()
+    ids.add(source.id)
+    this.loopSourcesByPlugin.set(pluginId, ids)
+  }
+
   unregisterPlugin(pluginId: string): void {
     for (const key of this.routes.keys()) {
       if (key.startsWith(`${pluginId}:`)) this.routes.delete(key)
     }
+    const sourceIds = this.loopSourcesByPlugin.get(pluginId)
+    if (sourceIds) {
+      for (const id of sourceIds) loopSourceRegistry.unregister(id)
+      this.loopSourcesByPlugin.delete(pluginId)
+    }
+    hookBus.unregisterPlugin(pluginId)
   }
 
   findRoute(pluginId: string, method: string, path: string): ServerPluginRoute | null {
@@ -145,6 +171,38 @@ function createServerPluginApi(
           }
         },
       },
+      hooks: {
+        on(event, listener) {
+          assertPluginPermission(manifest, 'cms.hooks')
+          // Cast through unknown — the SDK types narrow per-event but at the
+          // runtime boundary every payload is `unknown` until the host fires
+          // it with the documented shape.
+          hookBus.on(manifest.id, event as string, listener as (p: unknown) => void | Promise<void>)
+        },
+        filter(name, handler) {
+          assertPluginPermission(manifest, 'cms.hooks')
+          hookBus.filter(
+            manifest.id,
+            name as string,
+            handler as (v: unknown, ctx: { pluginId: string }) => unknown | Promise<unknown>,
+          )
+        },
+        async emit(event, payload) {
+          assertPluginPermission(manifest, 'cms.hooks')
+          await hookBus.emit(event as string, payload)
+        },
+      },
+      loops: {
+        registerSource(source) {
+          assertPluginPermission(manifest, 'loops.register')
+          if (!source.id?.startsWith(`${manifest.id}.`)) {
+            throw new Error(
+              `Loop source id "${source.id}" must start with the plugin id "${manifest.id}.".`,
+            )
+          }
+          serverPluginRuntime.registerLoopSource(manifest.id, source as HostLoopEntitySource)
+        },
+      },
     },
   }
 }
@@ -193,6 +251,17 @@ export async function loadServerPluginModule(
   return await import(`${pathToFileURL(entryPath).href}?v=${Date.now()}`) as ServerPluginModule
 }
 
+export async function loadPluginModulePack(
+  manifest: PluginManifest,
+  uploadsDir?: string,
+): Promise<PluginModulesEntrypointModule | null> {
+  if (!uploadsDir || !manifest.assetBasePath || !manifest.entrypoints?.modules) return null
+  const relativeBase = manifest.assetBasePath.replace(/^\/uploads\/?/, '')
+  const entryPath = join(uploadsDir, relativeBase, manifest.entrypoints.modules)
+  assertPluginPathWithin(uploadsDir, entryPath)
+  return await import(`${pathToFileURL(entryPath).href}?v=${Date.now()}`) as PluginModulesEntrypointModule
+}
+
 export async function handleServerPluginRuntimeRequest(
   req: Request,
   db: DbClient,
@@ -235,15 +304,31 @@ export async function activateInstalledServerPlugins(
 ): Promise<void> {
   if (!uploadsDir) return
   serverPluginRuntime.reset()
+  resetPluginModulePacks()
+  hookBus.reset()
   const plugins = await listInstalledPlugins(db)
   for (const plugin of plugins) {
-    const { manifest } = plugin
-    if (!plugin.enabled || !manifest.assetBasePath || !manifest.entrypoints?.server) continue
-    const mod = await loadServerPluginModule(manifest, uploadsDir)
-    if (!mod) continue
-    await activateServerPlugin({
-      ...manifest,
+    if (!plugin.enabled) continue
+    const manifest: PluginManifest = {
+      ...plugin.manifest,
       grantedPermissions: plugin.grantedPermissions,
-    }, mod, db)
+    }
+    if (!manifest.assetBasePath) continue
+
+    // Module pack — register first so server plugin lifecycle hooks (and
+    // anything they call) can already resolve the new modules.
+    if (manifest.entrypoints?.modules && plugin.grantedPermissions.includes('modules.register')) {
+      try {
+        const pack = await loadPluginModulePack(manifest, uploadsDir)
+        if (pack) activatePluginModulePack(manifest, pack)
+      } catch (err) {
+        console.error(`[plugin:${manifest.id}] module pack load failed`, err)
+      }
+    }
+
+    if (manifest.entrypoints?.server) {
+      const mod = await loadServerPluginModule(manifest, uploadsDir)
+      if (mod) await activateServerPlugin(manifest, mod, db)
+    }
   }
 }

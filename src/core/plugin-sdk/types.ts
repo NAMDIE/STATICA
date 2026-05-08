@@ -1,22 +1,31 @@
-import type { EditorStore } from '../editor-store/types'
+import type { EditorStore } from '@site/store/types'
 
 export const PLUGIN_API_VERSION = 1
 export type PluginApiVersion = typeof PLUGIN_API_VERSION
 
 export const PLUGIN_PERMISSION_VALUES = [
-  'storage.records',
-  'cms.storage',
-  'cms.routes',
+  // Admin / nav
   'admin.navigation',
+  // Storage
+  'cms.storage',
+  // Server runtime
+  'cms.routes',
+  'cms.hooks',
+  // Editor surfaces
   'editor.toolbar',
   'editor.commands',
   'editor.canvas',
   'editor.panels',
   'editor.store.read',
   'editor.store.write',
+  // Builder extensions
   'modules.register',
   'loops.register',
-  'hooks.register',
+  'visualComponents.register',
+  // Frontend / published pages
+  'frontend.scripts',
+  'frontend.tracker',
+  // Reserved
   'unstable.internals',
 ] as const
 
@@ -42,6 +51,10 @@ export interface PluginEntrypoints {
   server?: string
   editor?: string
   admin?: string
+  /** Module pack — default-exports an array of PluginModuleDefinition. */
+  modules?: string
+  /** Bundle injected on every published page (frontend.scripts permission). */
+  frontend?: string
 }
 
 export type PluginResourceFieldType = 'text' | 'longtext' | 'number' | 'date' | 'boolean'
@@ -106,6 +119,16 @@ export interface PluginAdminPage {
   content: PluginPageContent
 }
 
+export interface PluginPackManifest {
+  /**
+   * Path inside the package zip (relative to plugin.json) of a JSON file
+   * with the shape `{ visualComponents?: VisualComponent[]; pages?: Page[];
+   * classes?: CSSClass[]; }`. The host imports these into the active site
+   * on plugin activation.
+   */
+  path: string
+}
+
 export interface PluginManifest {
   id: string
   name: string
@@ -118,6 +141,8 @@ export interface PluginManifest {
   assetBasePath?: string
   resources: PluginResource[]
   adminPages: PluginAdminPage[]
+  /** Optional Visual Component / template / class pack. */
+  pack?: PluginPackManifest
 }
 
 export interface InstalledPlugin {
@@ -247,6 +272,73 @@ export type ServerPluginRouteHandler = (
   context: ServerPluginRouteContext,
 ) => unknown | Promise<unknown>
 
+// ---------------------------------------------------------------------------
+// CMS server-side hook event surface
+// ---------------------------------------------------------------------------
+
+export interface CmsServerEvents {
+  'publish.before': { siteId: string; pageId?: string }
+  'publish.after': { siteId: string; pageId?: string }
+  'content.entry.created': { collectionId: string; entryId: string }
+  'content.entry.updated': { collectionId: string; entryId: string }
+  'content.entry.deleted': { collectionId: string; entryId: string }
+  'tracker.event': {
+    pluginId: string
+    eventName: string
+    payload: Record<string, unknown>
+    visitorId?: string
+    sessionId?: string
+    pagePath?: string
+    referrer?: string
+    receivedAt: string
+  }
+  // Plugin-defined events fall through.
+  [key: string]: Record<string, unknown>
+}
+
+export interface CmsServerFilters {
+  'publish.html': string
+  'publish.headers': Record<string, string>
+  // Plugin-defined filters fall through.
+  [key: string]: unknown
+}
+
+export interface ServerPluginHooksApi {
+  on: <K extends keyof CmsServerEvents | string>(
+    event: K,
+    listener: (
+      payload: K extends keyof CmsServerEvents ? CmsServerEvents[K] : Record<string, unknown>,
+    ) => void | Promise<void>,
+  ) => void
+  filter: <K extends keyof CmsServerFilters | string>(
+    name: K,
+    handler: (
+      value: K extends keyof CmsServerFilters ? CmsServerFilters[K] : unknown,
+      context: { pluginId: string },
+    ) =>
+      | (K extends keyof CmsServerFilters ? CmsServerFilters[K] : unknown)
+      | Promise<K extends keyof CmsServerFilters ? CmsServerFilters[K] : unknown>,
+  ) => void
+  emit: <K extends keyof CmsServerEvents | string>(
+    event: K,
+    payload: K extends keyof CmsServerEvents ? CmsServerEvents[K] : Record<string, unknown>,
+  ) => Promise<void>
+}
+
+// Forward-declared opaque type — full shape lives in `@core/loops/types`.
+// We keep it opaque on the SDK boundary so plugin authors aren't pulled
+// into the loops module dependency graph until they need it.
+export type LoopEntitySource = {
+  id: string
+  label: string
+  description?: string
+  filterSchema: Record<string, unknown>
+  orderByOptions: Array<{ id: string; label: string }>
+  fields: Array<{ id: string; label: string; description?: string; format?: 'plain' | 'html' | 'url' | 'media' }>
+  fetch: (ctx: unknown) => Promise<{ items: unknown[]; totalItems: number }>
+  preview: (ctx: unknown) => unknown[]
+}
+
 export interface ServerPluginApi {
   plugin: {
     id: string
@@ -262,6 +354,13 @@ export interface ServerPluginApi {
       delete: (path: string, capability: string, handler: ServerPluginRouteHandler) => void
       getPublic: (path: string, handler: ServerPluginRouteHandler) => void
     }
+    loops: {
+      /**
+       * Register a loop entity source. Source ID must be `<pluginId>.<name>`.
+       * The host enforces the namespace lock at registration time.
+       */
+      registerSource: (source: LoopEntitySource) => void
+    }
     storage: {
       collection: (resourceId: string) => {
         list: () => Promise<PluginRecord[]>
@@ -270,6 +369,7 @@ export interface ServerPluginApi {
         delete: (recordId: string) => Promise<boolean>
       }
     }
+    hooks: ServerPluginHooksApi
   }
 }
 

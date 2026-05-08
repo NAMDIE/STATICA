@@ -49,6 +49,12 @@ describe('CMS dynamic template routes', () => {
     }
 
     const db = makeTemplateRouteFakeDb([
+      (sql) => {
+        if (sql.startsWith('select id, name, version, enabled, lifecycle_status')) {
+          return { rows: [], rowCount: 0 }
+        }
+        return undefined
+      },
       (sql, params) => {
         if (!sql.startsWith('select page_versions.snapshot_json')) return undefined
 

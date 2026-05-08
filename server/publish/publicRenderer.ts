@@ -8,6 +8,8 @@ import { prefetchLoopData, publishedContentEntryToLoopItem } from './loopPrefetc
 import type { PublishedContentEntry } from '@core/content/schemas'
 import type { DbClient } from '../db/client'
 import type { PublishedPageSnapshot } from '../repositories/publish'
+import { hookBus } from '@core/plugins/hookBus'
+import { collectFrontendInjections } from './frontendInjections'
 
 /**
  * URL prefix where the Bun server exposes the per-site CSS bundle. Mirrors
@@ -31,9 +33,10 @@ export async function renderPublishedSnapshot(
 ): Promise<string> {
   const page = snapshot.site.pages.find((candidate) => candidate.id === snapshot.pageId)
   if (!page) throw new Error(`Published page "${snapshot.pageId}" not found in snapshot`)
+  await hookBus.emit('publish.before', { siteId: snapshot.site.id, pageId: snapshot.pageId })
   const cssBundle = buildSiteCssBundle(snapshot.site, registry)
   const loopData = await prefetchLoopData(page, snapshot.site, ctx.db, ctx.url)
-  return publishPage(page, snapshot.site, registry, {
+  const baseHtml = publishPage(page, snapshot.site, registry, {
     runtimeAssets: snapshot.runtimeAssets,
     cssEmission: 'external',
     cssBundle,
@@ -41,6 +44,10 @@ export async function renderPublishedSnapshot(
     loopData,
     loopEndpointBaseUrl: LOOP_ENDPOINT_BASE_URL,
   }).html
+  const withInjections = injectFrontendAssets(baseHtml, await collectFrontendInjections(ctx.db))
+  const filtered = await hookBus.applyFilter('publish.html', withInjections)
+  await hookBus.emit('publish.after', { siteId: snapshot.site.id, pageId: snapshot.pageId })
+  return filtered
 }
 
 export async function renderPublishedContentTemplate(
@@ -51,9 +58,10 @@ export async function renderPublishedContentTemplate(
   const template = selectEntryTemplate(snapshot.site, entry.collectionId)
   if (!template) return null
 
+  await hookBus.emit('publish.before', { siteId: snapshot.site.id, pageId: template.id })
   const cssBundle = buildSiteCssBundle(snapshot.site, registry)
   const loopData = await prefetchLoopData(template, snapshot.site, ctx.db, ctx.url)
-  return publishPage(template, snapshot.site, registry, {
+  const baseHtml = publishPage(template, snapshot.site, registry, {
     // Seed the entry stack with the published entry. Loop interceptors will
     // push/pop iteration items on top of this frame; nodes outside any loop
     // resolve their `currentEntry` bindings against this seed.
@@ -65,4 +73,51 @@ export async function renderPublishedContentTemplate(
     loopData,
     loopEndpointBaseUrl: LOOP_ENDPOINT_BASE_URL,
   }).html
+  const withInjections = injectFrontendAssets(baseHtml, await collectFrontendInjections(ctx.db))
+  const filtered = await hookBus.applyFilter('publish.html', withInjections)
+  await hookBus.emit('publish.after', { siteId: snapshot.site.id, pageId: template.id })
+  return filtered
+}
+
+/**
+ * Inject `<script>` and `<link>` tags supplied by `frontend.scripts` /
+ * `frontend.tracker` plugins. Tags are placed just before `</body>` so they
+ * don't block layout. If the document has no `</body>` (defensive), tags
+ * are appended.
+ *
+ * When any body tags are injected, also relax the publisher CSP so the
+ * inline tracker runtime + plugin script tags can actually execute. The
+ * publisher emits `script-src 'none'` for pages with no first-party
+ * runtime scripts; plugin injections override that to `'self' 'unsafe-inline'`.
+ */
+function injectFrontendAssets(
+  html: string,
+  injections: { headTags: string[]; bodyTags: string[] },
+): string {
+  let next = html
+  if (injections.headTags.length > 0) {
+    const headTag = injections.headTags.join('\n')
+    next = next.includes('</head>')
+      ? next.replace('</head>', `${headTag}\n</head>`)
+      : `${headTag}\n${next}`
+  }
+  if (injections.bodyTags.length > 0) {
+    const bodyTag = injections.bodyTags.join('\n')
+    next = next.includes('</body>')
+      ? next.replace('</body>', `${bodyTag}\n</body>`)
+      : `${next}\n${bodyTag}`
+    next = relaxCspForFrontendPlugins(next)
+  }
+  return next
+}
+
+const CSP_META_PATTERN = /<meta http-equiv="Content-Security-Policy"\s+content="([^"]*)"\s*\/?>/i
+
+function relaxCspForFrontendPlugins(html: string): string {
+  return html.replace(CSP_META_PATTERN, (full, content: string) => {
+    let next = content
+    next = next.replace(/script-src [^;]*;/i, `script-src 'self' 'unsafe-inline';`)
+    next = next.replace(/worker-src [^;]*;/i, `worker-src 'self' blob:;`)
+    return full.replace(content, next)
+  })
 }

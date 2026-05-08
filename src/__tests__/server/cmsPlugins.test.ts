@@ -194,6 +194,7 @@ const mapManifest = {
   name: 'Map Studio',
   version: '1.0.0',
   apiVersion: 1,
+  permissions: ['admin.navigation'],
   adminPages: [{
     id: 'overview',
     title: 'Map Studio',
@@ -227,7 +228,10 @@ describe('CMS plugin handlers', () => {
       cmsRequest('http://localhost/admin/api/cms/plugins', {
         method: 'POST',
         headers: { cookie, 'content-type': 'application/json' },
-        body: JSON.stringify(mapManifest),
+        body: JSON.stringify({
+          manifest: mapManifest,
+          grantedPermissions: ['admin.navigation'],
+        }),
       }),
       db,
     )
@@ -308,7 +312,10 @@ describe('CMS plugin handlers', () => {
       cmsRequest('http://localhost/admin/api/cms/plugins', {
         method: 'POST',
         headers: { cookie, 'content-type': 'application/json' },
-        body: JSON.stringify({ manifest: attackerManifest }),
+        body: JSON.stringify({
+          manifest: attackerManifest,
+          grantedPermissions: ['admin.navigation'],
+        }),
       }),
       db,
     )

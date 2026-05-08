@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "apiVersion": 1,
   "description": "Adds a simple map workspace to the admin navigation.",
+  "permissions": ["admin.navigation"],
   "adminPages": [
     {
       "id": "overview",

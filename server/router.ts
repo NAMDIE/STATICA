@@ -1,5 +1,6 @@
 import { handleAgentRequest, handleAgentToolResult } from './handlers/agent'
 import { handleCmsRequest } from './handlers/cms'
+import { handlePublicTrackerRequest, isPublicTrackerPath } from './handlers/cms/tracker'
 import type { DbClient } from './db/client'
 import {
   getContentEntryRedirectByRoute,
@@ -208,6 +209,14 @@ export async function handleServerRequest(
   }
   if (pathname.startsWith('/_pb/loop/')) {
     return handleLoopRequest(req, url, { db })
+  }
+
+  // Frontend tracker — the runtime injected into published pages POSTs
+  // structured events here. No admin auth: the endpoint is public by design,
+  // events are scoped per plugin grant, and abuse mitigation belongs at the
+  // edge (rate limit / CSRF) for the host operator to configure.
+  if (isPublicTrackerPath(pathname)) {
+    return handlePublicTrackerRequest(req, db)
   }
 
   const runtimeAsset = await tryServeRuntimeAsset(req, db, pathname)

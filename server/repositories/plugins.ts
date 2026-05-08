@@ -35,7 +35,7 @@ function toIsoString(value: Date | string): string {
 }
 
 // Returns unknown by design — every caller validates downstream via
-// parsePluginManifest (Zod) or readPermissionGrants. Safe boundary.
+// parsePluginManifest (TypeBox) or readPermissionGrants. Safe boundary.
 function readManifestJson(value: unknown): unknown {
   if (typeof value === 'string') {
     try {

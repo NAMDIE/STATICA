@@ -205,6 +205,13 @@
     font-weight: 700;
 }
 
+.pluginMeta .pluginPackHint {
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--editor-text-muted);
+    line-height: 1.4;
+}
+
 .pageLinks {
     display: flex;
     flex-wrap: wrap;

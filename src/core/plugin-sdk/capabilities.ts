@@ -1,6 +1,6 @@
 import type { PluginPermission } from './types'
 
-export type PluginCapabilitySurface = 'manifest' | 'admin' | 'editor' | 'server' | 'cms'
+export type PluginCapabilitySurface = 'manifest' | 'admin' | 'editor' | 'server' | 'cms' | 'frontend'
 export type PluginCapabilityRisk = 'low' | 'medium' | 'high' | 'dangerous'
 
 export interface PluginCapability {
@@ -30,6 +30,13 @@ export const PLUGIN_CAPABILITIES: PluginCapability[] = [
     permission: 'cms.routes',
     label: 'Register backend CMS routes',
     description: 'Allows the plugin server entrypoint to register authenticated backend routes.',
+    risk: 'high',
+    surfaces: ['server', 'cms'],
+  },
+  {
+    permission: 'cms.hooks',
+    label: 'Subscribe to CMS lifecycle events and filters',
+    description: 'Allows the plugin server entrypoint to listen to CMS events (publish, content changes, page updates) and to register filters that transform values before they leave the CMS.',
     risk: 'high',
     surfaces: ['server', 'cms'],
   },
@@ -78,8 +85,8 @@ export const PLUGIN_CAPABILITIES: PluginCapability[] = [
   {
     permission: 'modules.register',
     label: 'Register page builder modules',
-    description: 'Reserved for plugin-provided page builder modules.',
-    risk: 'medium',
+    description: 'Allows the plugin to ship new modules that show up in the canvas module library.',
+    risk: 'high',
     surfaces: ['editor', 'manifest'],
   },
   {
@@ -90,18 +97,25 @@ export const PLUGIN_CAPABILITIES: PluginCapability[] = [
     surfaces: ['editor', 'server', 'manifest'],
   },
   {
-    permission: 'hooks.register',
-    label: 'Register CMS hooks and filters',
-    description: 'Reserved for future CMS hook and filter APIs.',
-    risk: 'high',
-    surfaces: ['server', 'cms'],
+    permission: 'visualComponents.register',
+    label: 'Install Visual Components / templates into the site',
+    description: 'Allows the plugin to ship Visual Components, page templates, and class packs that are imported into the user\'s site on activation.',
+    risk: 'medium',
+    surfaces: ['admin', 'manifest'],
   },
   {
-    permission: 'storage.records',
-    label: 'Store plugin-owned records',
-    description: 'Compatibility alias for plugin-owned storage. Prefer cms.storage for new plugins.',
+    permission: 'frontend.scripts',
+    label: 'Inject scripts into published pages',
+    description: 'Allows the plugin to ship a JavaScript file that is loaded on every published page (analytics, third-party widgets, custom runtimes).',
+    risk: 'high',
+    surfaces: ['frontend', 'manifest'],
+  },
+  {
+    permission: 'frontend.tracker',
+    label: 'Receive frontend analytics events',
+    description: 'Allows the plugin to receive structured tracker events from published pages and store them in plugin-owned storage.',
     risk: 'medium',
-    surfaces: ['admin', 'editor', 'server', 'cms'],
+    surfaces: ['frontend', 'server', 'manifest'],
   },
   {
     permission: 'unstable.internals',
@@ -126,6 +140,10 @@ export function permissionLabel(permission: PluginPermission): string {
 
 export function permissionDescription(permission: PluginPermission): string {
   return capabilityByPermission.get(permission)?.description ?? ''
+}
+
+export function permissionRisk(permission: PluginPermission): PluginCapabilityRisk {
+  return capabilityByPermission.get(permission)?.risk ?? 'medium'
 }
 
 export function permissionsForSurface(surface: PluginCapabilitySurface): PluginPermission[] {

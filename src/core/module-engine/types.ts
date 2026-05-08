@@ -303,4 +303,8 @@ export interface IModuleRegistry {
   has(id: string): boolean
   list(): AnyModuleDefinition[]
   listByCategory(): Record<string, AnyModuleDefinition[]>
+  /** Subscribe to registration changes — used by the editor canvas. */
+  subscribe(listener: () => void): () => void
+  /** Monotonic counter that bumps on every register / unregister. */
+  generation(): number
 }

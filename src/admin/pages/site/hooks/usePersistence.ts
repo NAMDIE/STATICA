@@ -31,7 +31,7 @@
  *   every store mutation and leaking unbounded setTimeout instances.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useEditorStore } from '@core/editor-store/store'
+import { useEditorStore } from '@site/store/store'
 import type { IPersistenceAdapter } from '@core/persistence/types'
 import { cmsAdapter } from '@core/persistence/cms'
 import { validateSite, SiteValidationError } from '@core/persistence/validate'
@@ -40,7 +40,17 @@ import {
   readAutoSavePreference,
   readEditorSelectPreference,
   subscribeToEditorPrefsChanged,
-} from '@editor/preferences/editorPreferences'
+} from '@site/preferences/editorPreferences'
+
+/**
+ * Event dispatched by the Plugins admin page after a pack install (which
+ * mutates the site document at the DB level via `saveDraftSite`). The
+ * editor's in-memory store doesn't know to re-fetch — listening for this
+ * event causes `usePersistence` to pull the fresh document and replay it
+ * into the store so newly-imported Visual Components, pages, and CSS
+ * classes appear without a hard browser reload.
+ */
+export const CMS_SITE_RELOAD_EVENT = 'cms-site-reload'
 
 export interface PersistenceSaveStatus {
   state: 'loading' | 'saved' | 'unsaved' | 'saving' | 'error'
@@ -182,6 +192,39 @@ export function usePersistence(
     load()
     return () => { cancelled = true }
   }, [enabled, markNewSiteUnsaved, requestedSiteId])
+
+  // External "site changed at the server" hook — the Plugins admin page fires
+  // `CMS_SITE_RELOAD_EVENT` after installing a plugin pack so the editor pulls
+  // the fresh draft document and the new VCs / pages / classes show up
+  // without a browser reload.
+  useEffect(() => {
+    if (!enabled) return undefined
+
+    async function reload() {
+      const idToTry = requestedSiteId || 'default'
+      try {
+        const raw = await adapterRef.current.loadSite(idToTry)
+        if (!raw) return
+        const validated = validateSite(raw)
+        const { loadSite, setHasUnsavedChanges } = useEditorStore.getState()
+        loadSite(validated)
+        applyDefaultBreakpointPreference(validated.breakpoints)
+        // The site doc on disk is now authoritative; clear the unsaved flag so
+        // the auto-save loop doesn't immediately overwrite it back.
+        setHasUnsavedChanges(false)
+        setSaveStatus({ state: 'saved', lastSavedAt: Date.now() })
+      } catch (err) {
+        console.error('[persistence] Reload after pack install failed:', err)
+      }
+    }
+
+    function handleReload() {
+      void reload()
+    }
+
+    window.addEventListener(CMS_SITE_RELOAD_EVENT, handleReload)
+    return () => window.removeEventListener(CMS_SITE_RELOAD_EVENT, handleReload)
+  }, [enabled, requestedSiteId])
 
   // ─── 2. Auto-save (debounced) ──────────────────────────────────────────────
   useEffect(() => {

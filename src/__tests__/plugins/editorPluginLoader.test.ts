@@ -43,7 +43,7 @@ describe('installed editor plugin loader', () => {
 
     const result = await activateInstalledEditorPlugins({
       fetchImpl: async () => Response.json(payload),
-      importModule: async (url) => {
+      importEditorModule: async (url) => {
         imported.push(url)
         return {
           activate(api) {
@@ -66,6 +66,7 @@ describe('installed editor plugin loader', () => {
     expect(result).toEqual({
       activated: ['acme.workflow'],
       failed: [],
+      modulePacksLoaded: [],
     })
     expect(pluginRuntime.getToolbarButtons()).toEqual([{
       id: 'workflow.approve',
@@ -98,7 +99,7 @@ describe('installed editor plugin loader', () => {
           updatedAt: new Date().toISOString(),
         }],
       } satisfies CmsPluginsPayload),
-      importModule: async () => {
+      importEditorModule: async () => {
         throw new Error('Disabled plugins should not be imported')
       },
     })
@@ -106,6 +107,7 @@ describe('installed editor plugin loader', () => {
     expect(result).toEqual({
       activated: [],
       failed: [],
+      modulePacksLoaded: [],
     })
     expect(pluginRuntime.getToolbarButtons()).toEqual([])
   })
@@ -129,7 +131,7 @@ describe('installed editor plugin loader', () => {
           updatedAt: new Date().toISOString(),
         }],
       } satisfies CmsPluginsPayload),
-      importModule: async (url) => {
+      importEditorModule: async (url) => {
         imported.push(url)
         return {
           activate() {},
@@ -141,6 +143,7 @@ describe('installed editor plugin loader', () => {
     expect(result).toEqual({
       activated: [],
       failed: [],
+      modulePacksLoaded: [],
     })
   })
 })

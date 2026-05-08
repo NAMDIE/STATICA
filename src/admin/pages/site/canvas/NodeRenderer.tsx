@@ -12,8 +12,8 @@
  *   affected nodes re-render per selection/hover event (O(2) not O(N)).
  */
 
-import { memo, useCallback, useContext } from 'react'
-import { useEditorStore, selectActiveCanvasPage } from '@core/editor-store/store'
+import { memo, useCallback, useContext, useSyncExternalStore } from 'react'
+import { useEditorStore, selectActiveCanvasPage } from '@site/store/store'
 import { resolveProps } from '@core/page-tree/selectors'
 import { registry } from '@core/module-engine/registry'
 import { resolveDynamicProps, type TemplateRenderDataContext } from '@core/templates/dynamicBindings'
@@ -132,6 +132,15 @@ export const NodeRenderer = memo(function NodeRenderer({ nodeId }: NodeRendererP
       onNodeHover(hoveredNodeId, breakpointId)
     },
     [breakpointId, onNodeHover],
+  )
+
+  // Subscribe to module registry changes so plugin module packs that activate
+  // after the canvas mounted trigger a re-render — otherwise the canvas would
+  // freeze on `Unknown module` even after the registry receives the module.
+  useSyncExternalStore(
+    registry.subscribe.bind(registry),
+    registry.generation.bind(registry),
+    registry.generation.bind(registry),
   )
 
   if (!node) return null

@@ -21,10 +21,12 @@ export {
   inspectCmsPluginPackage,
   installCmsPluginPackage,
   installCmsPluginManifest,
+  installCmsPluginPack,
   listCmsPlugins,
   removeCmsPlugin,
   setCmsPluginEnabled,
 } from './cmsPlugins'
+export type { CmsPluginPackInstallSummary } from './cmsPlugins'
 export {
   createCmsPluginResourceRecord,
   deleteCmsPluginResourceRecord,

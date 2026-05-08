@@ -7,11 +7,11 @@ import type {
   PluginPermission,
   PluginPageContent,
   PluginResource,
-} from '../plugin-sdk'
+} from '@core/plugin-sdk'
 import {
   PLUGIN_PERMISSION_VALUES,
   permissionLabel as sdkPermissionLabel,
-} from '../plugin-sdk'
+} from '@core/plugin-sdk'
 
 const PLUGIN_ID_PATTERN = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)+$/
 const PAGE_ID_PATTERN = /^[a-z][a-z0-9-]*$/
@@ -108,10 +108,15 @@ const manifestSchema = Type.Object({
     server: Type.Optional(Type.String({ pattern: SAFE_ASSET_PATH_PATTERN.source })),
     editor: Type.Optional(Type.String({ pattern: SAFE_ASSET_PATH_PATTERN.source })),
     admin: Type.Optional(Type.String({ pattern: SAFE_ASSET_PATH_PATTERN.source })),
+    modules: Type.Optional(Type.String({ pattern: SAFE_ASSET_PATH_PATTERN.source })),
+    frontend: Type.Optional(Type.String({ pattern: SAFE_ASSET_PATH_PATTERN.source })),
   })),
   assetBasePath: Type.Optional(Type.String({ pattern: ASSET_BASE_PATH_PATTERN.source })),
   resources: Type.Array(resourceSchema, { maxItems: 20, default: [] }),
   adminPages: Type.Array(adminPageSchema, { maxItems: 20, default: [] }),
+  pack: Type.Optional(Type.Object({
+    path: Type.String({ pattern: SAFE_ASSET_PATH_PATTERN.source }),
+  })),
 })
 
 type ManifestRaw = Static<typeof manifestSchema>
@@ -199,6 +204,7 @@ export function parsePluginManifest(input: unknown): PluginManifest {
     assetBasePath: data.assetBasePath,
     resources,
     adminPages,
+    pack: data.pack,
   }
 }
 
@@ -270,10 +276,14 @@ export function validatePluginRecordData(
 }
 
 export function collectEnabledAdminPages(
-  plugins: Array<Pick<InstalledPlugin, 'enabled' | 'manifest'> & Partial<Pick<InstalledPlugin, 'lifecycleStatus'>>>,
+  plugins: Array<Pick<InstalledPlugin, 'enabled' | 'manifest' | 'grantedPermissions'> & Partial<Pick<InstalledPlugin, 'lifecycleStatus'>>>,
 ): PluginAdminPageRoute[] {
   return plugins
     .filter((plugin) => plugin.enabled && plugin.lifecycleStatus !== 'error')
+    // `admin.navigation` is the gate for adding pages to the CMS sidebar — a
+    // plugin that didn't request the grant has no business mounting nav
+    // entries even if its manifest declared `adminPages` items.
+    .filter((plugin) => plugin.grantedPermissions?.includes('admin.navigation'))
     .flatMap((plugin) =>
       plugin.manifest.adminPages.map((page) => {
         const content: PluginPageContent = page.content.kind === 'app'

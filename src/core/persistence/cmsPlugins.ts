@@ -4,7 +4,7 @@ import type {
   InstalledPlugin,
   PluginManifest,
   PluginPermission,
-} from '../plugin-sdk'
+} from '@core/plugin-sdk'
 import { readEnvelope } from './httpJson'
 import { responseErrorMessage } from './httpErrors'
 
@@ -163,4 +163,33 @@ export async function removeCmsPlugin(
   if (!res.ok) {
     throw new Error(await responseErrorMessage(res, `CMS plugin delete failed with ${res.status}`))
   }
+}
+
+export interface CmsPluginPackInstallSummary {
+  installed: {
+    visualComponents: { id: string; name: string }[]
+    pages: { id: string; title: string }[]
+    classes: { id: string; name: string }[]
+  }
+  replaced: {
+    visualComponents: string[]
+    pages: string[]
+    classes: string[]
+  }
+}
+
+export async function installCmsPluginPack(
+  pluginId: string,
+  fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
+  basePath = '/admin/api/cms',
+): Promise<CmsPluginPackInstallSummary> {
+  const res = await fetchImpl(`${basePath}/plugins/${encodeURIComponent(pluginId)}/pack/install`, {
+    method: 'POST',
+    credentials: 'include',
+  })
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, `CMS plugin pack install failed with ${res.status}`))
+  }
+  const body = (await res.json()) as CmsPluginPackInstallSummary
+  return body
 }

@@ -45,7 +45,7 @@ describe('plugin manifest validation', () => {
       version: '1.0.0',
       apiVersion: 1,
       description: 'Adds a backend-backed books database.',
-      permissions: ['storage.records'],
+      permissions: ['cms.storage'],
       resources: [
         {
           id: 'books',
@@ -238,8 +238,8 @@ describe('plugin manifest validation', () => {
 
     expect(
       collectEnabledAdminPages([
-        { manifest: enabled, enabled: true },
-        { manifest: disabled, enabled: false },
+        { manifest: enabled, enabled: true, grantedPermissions: ['admin.navigation'] },
+        { manifest: disabled, enabled: false, grantedPermissions: ['admin.navigation'] },
       ]).map((page) => page.pluginId),
     ).toEqual(['local.enabled'])
   })
@@ -255,7 +255,23 @@ describe('plugin manifest validation', () => {
 
     expect(
       collectEnabledAdminPages([
-        { manifest, enabled: true, lifecycleStatus: 'error' },
+        { manifest, enabled: true, lifecycleStatus: 'error', grantedPermissions: ['admin.navigation'] },
+      ]),
+    ).toEqual([])
+  })
+
+  it('does not collect admin pages when admin.navigation is not granted', () => {
+    const manifest = parsePluginManifest({
+      id: 'local.silent',
+      name: 'Silent',
+      version: '1.0.0',
+      apiVersion: 1,
+      adminPages: [{ id: 'dashboard', title: 'Silent', content: { kind: 'markdown', body: 'Hidden' } }],
+    })
+
+    expect(
+      collectEnabledAdminPages([
+        { manifest, enabled: true, grantedPermissions: [] },
       ]),
     ).toEqual([])
   })

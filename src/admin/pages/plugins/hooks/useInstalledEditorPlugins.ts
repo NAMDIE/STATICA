@@ -1,13 +1,16 @@
 import { useEffect } from 'react'
 import { activateInstalledEditorPlugins } from '@core/plugins/editorPluginLoader'
-import { CMS_PLUGINS_CHANGED_EVENT } from '../utils/pluginEvents'
+import { editorPluginModuleComponentFactory } from '@site/canvas/pluginModuleComponentFactory'
+import { CMS_PLUGINS_CHANGED_EVENT } from '@plugins/utils/pluginEvents'
 
 export function useInstalledEditorPlugins(): void {
   useEffect(() => {
     let cancelled = false
 
     async function activatePlugins() {
-      const result = await activateInstalledEditorPlugins()
+      const result = await activateInstalledEditorPlugins({
+        componentFactory: editorPluginModuleComponentFactory,
+      })
       if (!cancelled && result.failed.length > 0) {
         console.error('Some editor plugins failed to activate', result.failed)
       }

@@ -61,10 +61,22 @@ import {
   activateInstalledServerPlugins,
   assertPluginPathWithin,
   handleServerPluginRuntimeRequest,
+  loadPluginModulePack,
   loadServerPluginModule,
   runServerPluginLifecycleHook,
   serverPluginRuntime,
 } from '../../plugins/runtime'
+import {
+  activatePluginModulePack,
+  deactivatePluginModulePack,
+} from '@core/plugins/modulePackLoader'
+import {
+  applyPluginPackToSite,
+  loadPluginPackFile,
+  parsePluginPack,
+  PluginPackError,
+} from '../../plugins/pack'
+import { loadDraftSite, saveDraftSite } from '../../repositories/site'
 import { badRequest, jsonResponse, methodNotAllowed, readJsonObject } from '../../http'
 import { requestAuditContext, type CmsHandlerOptions } from './shared'
 import { nanoid } from 'nanoid'
@@ -116,6 +128,23 @@ async function runPluginLifecycleHook(
   const manifest = pluginManifestWithGrants(plugin)
 
   try {
+    // On `activate`, also load the plugin's canvas module pack into the
+    // server-side registry so the publisher can render plugin modules
+    // immediately (without restart). On `deactivate` / `uninstall`, drop them.
+    if (hook === 'activate'
+      && manifest.entrypoints?.modules
+      && manifest.grantedPermissions?.includes('modules.register')) {
+      try {
+        const pack = await loadPluginModulePack(manifest, options.uploadsDir)
+        if (pack) activatePluginModulePack(manifest, pack)
+      } catch (err) {
+        console.error(`[plugin:${plugin.id}] module pack activate failed`, err)
+      }
+    }
+    if (hook === 'deactivate' || hook === 'uninstall') {
+      deactivatePluginModulePack(plugin.id)
+    }
+
     const mod = await loadServerPluginModule(manifest, options.uploadsDir)
     if (!mod?.[hook]) {
       const updated = await setPluginLifecycleStatus(db, plugin.id, successStatus)
@@ -128,6 +157,7 @@ async function runPluginLifecycleHook(
   } catch (err) {
     if (hook === 'activate') {
       serverPluginRuntime.unregisterPlugin(plugin.id)
+      deactivatePluginModulePack(plugin.id)
     }
     const updated = await setPluginLifecycleStatus(db, plugin.id, 'error', lifecycleErrorMessage(err))
     return { plugin: updated ?? plugin, ok: false }
@@ -328,13 +358,91 @@ async function handlePackageInstall(
       'activate',
       'active',
     )
+
+    // Auto-install bundled pack — when the manifest declares one and the user
+    // granted `visualComponents.register`, importing the pack is what they
+    // expected. Skipping the manual "Install pack" click means a UI Kit-style
+    // plugin "just works" after upload.
+    let packSummary: Awaited<ReturnType<typeof installPluginPackToSite>> | null = null
+    if (
+      activateLifecycle.ok &&
+      activateLifecycle.plugin.manifest.pack &&
+      activateLifecycle.plugin.grantedPermissions.includes('visualComponents.register') &&
+      options.uploadsDir
+    ) {
+      try {
+        packSummary = await installPluginPackToSite(
+          db,
+          activateLifecycle.plugin,
+          options.uploadsDir,
+          user.id,
+          req,
+        )
+      } catch (err) {
+        console.error(`[plugins:${activateLifecycle.plugin.id}] auto pack install failed`, err)
+      }
+    }
+
     await recordPluginAuditEvent(db, user, req, 'plugin.install', activateLifecycle.plugin.id)
     return jsonResponse(
-      { plugin: activateLifecycle.plugin, ...await pluginsPayload(db) },
+      {
+        plugin: activateLifecycle.plugin,
+        ...await pluginsPayload(db),
+        pack: packSummary,
+      },
       { status: 201 },
     )
   } catch (err) {
     return badRequest(err instanceof Error ? err.message : 'Invalid plugin package')
+  }
+}
+
+/**
+ * Pure helper: load the plugin's pack from disk, merge into the active site,
+ * and emit an audit event. Used by both auto-install (zip upload) and the
+ * explicit `POST /pack/install` endpoint.
+ */
+async function installPluginPackToSite(
+  db: DbClient,
+  plugin: InstalledPlugin,
+  uploadsDir: string,
+  actorUserId: string,
+  req: Request,
+): Promise<{
+  installed: { visualComponents: { id: string; name: string }[]; pages: { id: string; title: string }[]; classes: { id: string; name: string }[] }
+  replaced: { visualComponents: string[]; pages: string[]; classes: string[] }
+} | null> {
+  if (!plugin.manifest.pack) return null
+  if (!plugin.manifest.assetBasePath) return null
+  const raw = await loadPluginPackFile(uploadsDir, plugin.manifest.assetBasePath, plugin.manifest.pack.path)
+  const pack = parsePluginPack(plugin.id, raw)
+  const site = await loadDraftSite(db)
+  if (!site) return null
+  const { site: nextSite, replaced } = applyPluginPackToSite(site, pack)
+  await saveDraftSite(db, nextSite, actorUserId)
+  await createAuditEvent(db, {
+    actorUserId,
+    action: 'plugin.pack.install',
+    targetType: 'plugin',
+    targetId: plugin.id,
+    metadata: {
+      pluginId: plugin.id,
+      installedVisualComponents: pack.visualComponents.length,
+      installedPages: pack.pages.length,
+      installedClasses: pack.classes.length,
+      replacedVisualComponents: replaced.visualComponents,
+      replacedPages: replaced.pages,
+      replacedClasses: replaced.classes,
+    },
+    ...requestAuditContext(req),
+  })
+  return {
+    installed: {
+      visualComponents: pack.visualComponents.map((vc) => ({ id: vc.id, name: vc.name })),
+      pages: pack.pages.map((p) => ({ id: p.id, title: p.title })),
+      classes: pack.classes.map((c) => ({ id: c.id, name: c.name })),
+    },
+    replaced,
   }
 }
 
@@ -416,6 +524,48 @@ async function handlePluginItem(
   }
 
   return methodNotAllowed()
+}
+
+async function handlePluginPackInstall(
+  req: Request,
+  db: DbClient,
+  options: CmsHandlerOptions,
+  user: AuthUser,
+  pluginId: string,
+): Promise<Response> {
+  if (req.method !== 'POST') return methodNotAllowed()
+  if (!options.uploadsDir) {
+    return jsonResponse({ error: 'Uploads directory is not configured' }, { status: 500 })
+  }
+
+  const plugin = await getInstalledPlugin(db, pluginId)
+  if (!plugin) return PLUGIN_NOT_FOUND
+  if (!plugin.grantedPermissions.includes('visualComponents.register')) {
+    return badRequest(`Plugin "${pluginId}" requires the visualComponents.register permission to install a pack`)
+  }
+  if (!plugin.manifest.pack) {
+    return badRequest(`Plugin "${pluginId}" does not declare a pack`)
+  }
+  if (!plugin.manifest.assetBasePath) {
+    return badRequest(`Plugin "${pluginId}" has no on-disk package`)
+  }
+
+  try {
+    const summary = await installPluginPackToSite(
+      db,
+      plugin,
+      options.uploadsDir,
+      user.id,
+      req,
+    )
+    if (!summary) {
+      return badRequest('No draft site to install pack into; finish initial setup first.')
+    }
+    return jsonResponse(summary)
+  } catch (err) {
+    if (err instanceof PluginPackError) return badRequest(err.message)
+    throw err
+  }
 }
 
 async function handlePluginRecordsCollection(
@@ -501,6 +651,7 @@ const PLUGIN_ITEM_PATTERN = /^\/admin\/api\/cms\/plugins\/([^/]+)$/
 const PLUGIN_RECORDS_PATTERN = /^\/admin\/api\/cms\/plugins\/([^/]+)\/resources\/([^/]+)\/records$/
 const PLUGIN_RECORD_ITEM_PATTERN = /^\/admin\/api\/cms\/plugins\/([^/]+)\/resources\/([^/]+)\/records\/([^/]+)$/
 const PLUGIN_RUNTIME_PATTERN = /^\/admin\/api\/cms\/plugins\/([^/]+)\/runtime(?:\/.*)?$/
+const PLUGIN_PACK_INSTALL_PATTERN = /^\/admin\/api\/cms\/plugins\/([^/]+)\/pack\/install$/
 
 // ---------------------------------------------------------------------------
 // Dispatcher
@@ -539,6 +690,11 @@ export async function handlePluginsRoutes(
 
   if (pathname === '/admin/api/cms/plugins/package') {
     return handlePackageInstall(req, db, options, user)
+  }
+
+  const packInstallMatch = pathname.match(PLUGIN_PACK_INSTALL_PATTERN)
+  if (packInstallMatch) {
+    return handlePluginPackInstall(req, db, options, user, decodeURIComponent(packInstallMatch[1]))
   }
 
   const recordItemMatch = pathname.match(PLUGIN_RECORD_ITEM_PATTERN)

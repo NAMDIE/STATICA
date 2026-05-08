@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
-import { Link } from "../lib/router";
+import { Link } from "@admin/lib/routing";
 import { Button } from "@ui/components/Button";
 import { PowerIcon } from "pixel-art-icons/icons/power";
 import { PowerOffIcon } from "pixel-art-icons/icons/power-off";
@@ -21,14 +21,20 @@ import {
   inspectCmsPluginPackage,
   installCmsPluginPackage,
   installCmsPluginManifest,
+  installCmsPluginPack,
   listCmsPlugins,
   removeCmsPlugin,
   setCmsPluginEnabled,
 } from "@core/persistence";
-import AdminLayout from "../AdminLayout";
-import { SettingsButton } from "../../editor/components/Toolbar/SettingsButton";
+import AdminLayout from "@admin/AdminLayout";
+import { SettingsButton } from "@site/toolbar/SettingsButton";
 import { notifyCmsPluginsChanged } from "./utils/pluginEvents";
+import { CMS_SITE_RELOAD_EVENT } from "@site/hooks/usePersistence";
 import styles from "./PluginsPage.module.css";
+
+function notifyCmsSiteReload(): void {
+  window.dispatchEvent(new Event(CMS_SITE_RELOAD_EVENT));
+}
 
 const emptyPayload: CmsPluginsPayload = { plugins: [], adminPages: [] };
 
@@ -150,6 +156,15 @@ export function PluginsPage() {
         await loadPlugins();
       }
       notifyCmsPluginsChanged();
+      // Auto-install path on the server may have also imported the bundled
+      // pack — refresh the editor's site state so any newly imported VCs /
+      // pages / classes appear immediately.
+      if (
+        pending.manifest.pack &&
+        grantedPermissions.includes("visualComponents.register")
+      ) {
+        notifyCmsSiteReload();
+      }
       setPendingInstall(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not install plugin");
@@ -173,6 +188,35 @@ export function PluginsPage() {
       notifyCmsPluginsChanged();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update plugin");
+    } finally {
+      setBusyPluginId(null);
+    }
+  }
+
+  async function installPluginPack(plugin: InstalledPlugin) {
+    setBusyPluginId(plugin.id);
+    setError(null);
+    try {
+      const summary = await installCmsPluginPack(plugin.id);
+      const installedCount =
+        summary.installed.visualComponents.length +
+        summary.installed.pages.length +
+        summary.installed.classes.length;
+      const replacedCount =
+        summary.replaced.visualComponents.length +
+        summary.replaced.pages.length +
+        summary.replaced.classes.length;
+      setError(
+        `Installed pack from ${plugin.name}: ${installedCount} item(s), ${replacedCount} replaced.`,
+      );
+      notifyCmsPluginsChanged();
+      // The pack writes Visual Components, pages, and classes directly to the
+      // draft site at the DB level. Tell the editor's persistence layer to
+      // re-pull so the new content shows up in the Site Explorer / canvas
+      // without a full browser reload.
+      notifyCmsSiteReload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not install plugin pack");
     } finally {
       setBusyPluginId(null);
     }
@@ -332,6 +376,16 @@ export function PluginsPage() {
                             {plugin.lastError}
                           </p>
                         )}
+                        {plugin.manifest.pack &&
+                          plugin.grantedPermissions.includes("visualComponents.register") && (
+                            <p className={styles.pluginPackHint}>
+                              Bundled Visual Components, templates, and CSS
+                              classes are imported into your site on upload.
+                              &ldquo;Re-sync pack&rdquo; replaces them with the
+                              plugin&rsquo;s latest version &mdash; useful
+                              after upgrading the plugin.
+                            </p>
+                          )}
                         {plugin.manifest.adminPages.length > 0 && (
                           <div className={styles.pageLinks}>
                             {plugin.manifest.adminPages.map((page) => (
@@ -344,6 +398,18 @@ export function PluginsPage() {
                       </div>
 
                       <div className={styles.pluginActions}>
+                        {plugin.manifest.pack &&
+                          plugin.grantedPermissions.includes("visualComponents.register") && (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              disabled={busyPluginId === plugin.id}
+                              onClick={() => void installPluginPack(plugin)}
+                              aria-label={`Re-sync ${plugin.name} pack from the plugin's latest version`}
+                            >
+                              <span>Re-sync pack</span>
+                            </Button>
+                          )}
                         <Button
                           variant="secondary"
                           size="sm"

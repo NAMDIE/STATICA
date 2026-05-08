@@ -14,7 +14,7 @@ Plugins declare requested permissions in `plugin.json`. The CMS shows those perm
 
 - `low`: visible UI additions with limited data access.
 - `medium`: reads or writes plugin-owned data, or changes editor UI.
-- `high`: mutates editor state or registers backend behavior.
+- `high`: mutates editor state, registers backend behavior, or runs plugin code on visitor browsers.
 - `dangerous`: internal APIs reserved for trusted first-party plugins.
 
 ## Capability Matrix
@@ -24,15 +24,18 @@ Plugins declare requested permissions in `plugin.json`. The CMS shows those perm
 | `admin.navigation` | Admin | Low | Add pages to the CMS admin navigation and plugin router. |
 | `cms.storage` | Admin, editor, server | Medium | Read and write records for resources declared by the plugin. |
 | `cms.routes` | Server | High | Register authenticated backend routes under the plugin runtime URL. |
+| `cms.hooks` | Server | High | Listen to CMS lifecycle events and register filters that transform values before they leave the CMS. |
 | `editor.toolbar` | Editor | Medium | Add toolbar buttons to the editor UI. |
 | `editor.commands` | Editor | Medium | Register commands callable from editor UI. |
 | `editor.store.read` | Editor | Medium | Read current editor store state. |
 | `editor.store.write` | Editor | High | Mutate editor store state through a host transaction. |
 | `editor.canvas` | Editor | High | Reserved for canvas-level APIs. |
 | `editor.panels` | Editor | Medium | Reserved for plugin-provided editor panels. |
-| `modules.register` | Editor, manifest | Medium | Reserved for plugin-provided page builder modules. |
-| `hooks.register` | Server | High | Reserved for CMS hooks and filters. |
-| `storage.records` | Admin, editor, server | Medium | Compatibility alias for plugin-owned storage. Prefer `cms.storage`. |
-| `unstable.internals` | Admin, editor, server | Dangerous | Reserved for trusted first-party internal API access. |
+| `modules.register` | Editor, manifest | High | Ship new modules that show up in the canvas module library. |
+| `loops.register` | Editor, server, manifest | Medium | Register new entity sources for the `base.loop` module. |
+| `visualComponents.register` | Admin, manifest | Medium | Ship Visual Components, page templates, and class packs that get imported into the user's site on activation. |
+| `frontend.scripts` | Frontend, manifest | High | Inject a JavaScript file into every published page (analytics, third-party widgets, custom runtimes). |
+| `frontend.tracker` | Frontend, server, manifest | Medium | Receive structured tracker events from published pages and store them in plugin-owned storage. |
+| `unstable.internals` | Admin, editor, server | Dangerous | Reserved for trusted first-party plugins that need unstable host internals. |
 
 The source of truth for labels, descriptions, risks, and surfaces is `src/core/plugin-sdk/capabilities.ts`.
