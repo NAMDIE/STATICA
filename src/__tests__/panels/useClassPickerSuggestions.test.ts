@@ -30,7 +30,6 @@ function makeClass(name: string, id = `cls-${name}`): CSSClass {
   }
 }
 
-const SITE_ID = 'site-1'
 const NO_USAGE = () => ({})
 
 // ---------------------------------------------------------------------------
@@ -45,7 +44,6 @@ describe('useClassPickerSuggestions — empty query', () => {
       assignedIds: ['cls-bar'],
       query: '',
       highlightedIndex: -1,
-      siteId: SITE_ID,
       readUsage: NO_USAGE,
     })
 
@@ -61,7 +59,6 @@ describe('useClassPickerSuggestions — empty query', () => {
       assignedIds: [],
       query: '',
       highlightedIndex: -1,
-      siteId: SITE_ID,
       readUsage: NO_USAGE,
     })
 
@@ -88,7 +85,6 @@ describe('useClassPickerSuggestions — empty query', () => {
       assignedIds: [],
       query: '',
       highlightedIndex: -1,
-      siteId: SITE_ID,
       readUsage: () => usage,
     })
 
@@ -98,25 +94,6 @@ describe('useClassPickerSuggestions — empty query', () => {
     expect(result.flatNavIds).toEqual([...result.recentIds, ...result.frequentIds])
   })
 
-  it('skips usage lookup when siteId is null', () => {
-    const allClasses = [makeClass('a'), makeClass('b')]
-    let readUsageCalled = false
-    const result = useClassPickerSuggestions({
-      allClasses,
-      assignedIds: [],
-      query: '',
-      highlightedIndex: -1,
-      siteId: null,
-      readUsage: () => {
-        readUsageCalled = true
-        return {}
-      },
-    })
-
-    expect(readUsageCalled).toBe(false)
-    expect(result.recentIds).toEqual([])
-    expect(result.frequentIds).toEqual([])
-  })
 })
 
 // ---------------------------------------------------------------------------
@@ -131,7 +108,6 @@ describe('useClassPickerSuggestions — typed query', () => {
       assignedIds: [],
       query: 'text',
       highlightedIndex: -1,
-      siteId: SITE_ID,
       readUsage: NO_USAGE,
     })
 
@@ -148,7 +124,6 @@ describe('useClassPickerSuggestions — typed query', () => {
       assignedIds: [],
       query: 'header',
       highlightedIndex: -1,
-      siteId: SITE_ID,
       readUsage: NO_USAGE,
     })
 
@@ -166,7 +141,6 @@ describe('useClassPickerSuggestions — typed query', () => {
       assignedIds: [cls.id],
       query: 'header',
       highlightedIndex: -1,
-      siteId: SITE_ID,
       readUsage: NO_USAGE,
     })
 
@@ -182,7 +156,6 @@ describe('useClassPickerSuggestions — typed query', () => {
       assignedIds: [],
       query: 'brand-new',
       highlightedIndex: -1,
-      siteId: SITE_ID,
       readUsage: NO_USAGE,
     })
 
@@ -197,7 +170,6 @@ describe('useClassPickerSuggestions — typed query', () => {
       assignedIds: [],
       query: 'zzz',
       highlightedIndex: -1,
-      siteId: SITE_ID,
       readUsage: NO_USAGE,
     })
 
@@ -217,7 +189,6 @@ describe('useClassPickerSuggestions — highlightedIndex clamping', () => {
       assignedIds: [],
       query: '',
       highlightedIndex: 99,
-      siteId: SITE_ID,
       readUsage: NO_USAGE,
     })
 
@@ -233,7 +204,6 @@ describe('useClassPickerSuggestions — highlightedIndex clamping', () => {
       assignedIds: [],
       query: '',
       highlightedIndex: 1,
-      siteId: SITE_ID,
       readUsage: NO_USAGE,
     })
 
@@ -253,7 +223,6 @@ describe('useClassPickerSuggestions — highlightedIndex clamping', () => {
       assignedIds: [],
       query: 'foo',
       highlightedIndex: 1,
-      siteId: SITE_ID,
       readUsage: NO_USAGE,
     })
 
@@ -273,7 +242,6 @@ describe('useClassPickerSuggestions — submit tooltip', () => {
       assignedIds: [],
       query: '',
       highlightedIndex: -1,
-      siteId: SITE_ID,
       readUsage: NO_USAGE,
     })
 

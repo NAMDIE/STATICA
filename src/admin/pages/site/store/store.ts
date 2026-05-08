@@ -31,7 +31,7 @@ import { setAgentStoreApi } from '@site/agent/storeRef'
  *   - settingsSlice:       settings modal open/close + active section (Guideline #193/#323)
  *   - agentSlice:          AI Agent Panel state + streaming (Phase D)
  *   - sitePanelSlice:      dependency manifest + site runtime settings
- *   - clipboardSlice:      copy / cut / paste of layer subtrees, persisted globally across sites
+ *   - clipboardSlice:      copy / cut / paste of layer subtrees, persisted editor-wide
  *
  * The combined `EditorStore` type lives in `./types` so each slice can import
  * it without going through this module — that's how the historical

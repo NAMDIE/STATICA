@@ -201,27 +201,27 @@ describe('clipboardSlice.pasteNode — class handling', () => {
     expect(matches.length).toBe(1)
   })
 
-  it('imports a copied class into a fresh site and preserves the assignment', () => {
-    const original = useEditorStore.getState()
-    const site = original.createSite('Source Site')
+  it('restores a copied class when the active document no longer has it', () => {
+    const store = useEditorStore.getState()
+    const site = store.createSite('Clip Site')
     const rootId = site.pages[0].rootNodeId
     const text = useEditorStore.getState().insertNode('base.text', {}, rootId)
-    const cls = useEditorStore.getState().createClass('cross-site-style')
+    const cls = useEditorStore.getState().createClass('restored-style')
     useEditorStore.getState().addNodeClass(text, cls.id)
     useEditorStore.getState().copyNode(text)
 
-    // Switch sites — clipboardEntry survives because we don't reset the slice.
-    useEditorStore.getState().createSite('Target Site')
-    const target = useEditorStore.getState()
-    const newRootId = target.site!.pages[0].rootNodeId
-    const container = target.insertNode('base.container', {}, newRootId)
-    const pastedIds = target.pasteNode(container)
+    useEditorStore.setState((state) => {
+      state.site!.classes = {}
+    })
+
+    const container = useEditorStore.getState().insertNode('base.container', {}, rootId)
+    const pastedIds = useEditorStore.getState().pasteNode(container)
     expect(pastedIds).not.toBeNull()
     expect(pastedIds!.length).toBe(1)
 
     const state = useEditorStore.getState()
     const importedClass = state.site!.classes[cls.id]
-    expect(importedClass?.name).toBe('cross-site-style')
+    expect(importedClass?.name).toBe('restored-style')
     expect(state.site!.pages[0].nodes[pastedIds![0]].classIds).toContain(cls.id)
   })
 })

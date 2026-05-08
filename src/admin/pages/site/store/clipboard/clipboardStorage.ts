@@ -2,9 +2,8 @@
  * Clipboard storage — TypeBox-validated localStorage persistence for the
  * editor clipboard.
  *
- * The clipboard is intentionally global (not per-site): copying a node in
- * one site should let the user paste it into another. The payload survives
- * page reloads because the data lives in localStorage under a single key.
+ * The clipboard is intentionally editor-wide. The payload survives page
+ * reloads because the data lives in localStorage under a single key.
  *
  * Persistence shape (versioned, additive — bump VERSION on incompatible
  * changes; `safeParseJson` will fall back to "no clipboard" on mismatch):
@@ -45,8 +44,8 @@ const ClipboardPayloadSchema = Type.Object({
   nodes: Type.Record(Type.String(), PageNodeSchema),
   /**
    * Classes referenced by any node in the payload. Carried alongside the
-   * nodes so a cross-site paste can reconstruct styling. Same-site pastes
-   * already have matching IDs in `site.classes` and ignore this map.
+   * nodes so paste can restore styling if the active document no longer has
+   * the referenced class definitions.
    */
   classes: Type.Record(Type.String(), CSSClassSchema),
   copiedAt: Type.Number(),

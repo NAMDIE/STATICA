@@ -6,7 +6,7 @@ The CMS supports SQLite as a first-class database engine alongside Postgres. SQL
 
 - You're a contributor or solo developer running locally (`bun run dev` defaults to SQLite — no Docker required).
 - You're deploying to a single VPS, Raspberry Pi, NAS, or other small instance and don't want to operate a separate Postgres process.
-- You're hosting multi-tenant SaaS with strict per-tenant data isolation (one SQLite file per tenant).
+- You're operating the managed Page Builder service with strict isolation, where the control plane provisions one SQLite file for each isolated CMS installation.
 - You want simple file-based backups (just copy the `.db` file).
 
 Use Postgres when:

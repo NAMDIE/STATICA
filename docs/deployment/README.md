@@ -7,6 +7,7 @@ This index maps every supported deployment target to the exact compose command a
 1. **Just running locally?** → use `bun run dev`. SQLite, no Docker, no env file. See the project [README](../../README.md#local-development).
 2. **Self-hosting on one server?** → see the matrix below.
 3. **Managed PaaS (Railway / Render / Fly)?** → see [managed-hosts.md](managed-hosts.md).
+4. **Operating Page Builder as a hosted service?** → see [managed-service.md](managed-service.md).
 
 ## Self-host compose matrix
 
@@ -31,7 +32,7 @@ Build-from-source (when no published image exists yet): append `-f compose.build
 | Horizontal scale (>1 app instance) | ✅ | ❌ (file-locked) |
 | Backup tooling | `pg_dump` / streaming replication | File copy / [Litestream](https://litestream.io) |
 | Setup complexity | Low | Trivial |
-| Best for | Small business → mid SaaS | Hobby / single-tenant / per-tenant SaaS |
+| Best for | Small business → mid SaaS | Hobby sites, small teams, or managed-service installations with one database per CMS |
 
 The CMS visitor traffic hits generated static HTML (it doesn't touch the DB), so the SQLite single-writer constraint only matters when multiple humans are saving in the admin simultaneously.
 
@@ -56,6 +57,7 @@ The CMS visitor traffic hits generated static HTML (it doesn't touch the DB), so
 - [HTTPS via Caddy](tls-caddy.md) — auto-TLS layered on either DB mode
 - [Backup and restore](backup-restore.md) — Postgres + SQLite, ad-hoc + Litestream
 - [Managed hosts](managed-hosts.md) — Railway, Render, Fly, Heroku notes
+- [Managed Page Builder service](managed-service.md) — operating our hosted product with one isolated CMS installation per site
 - [Release and image publishing workflow](release-workflow.md) — tag → GHCR → `docker pull`
 
 ## Pre-release notes

@@ -30,7 +30,7 @@ export const pgMigrations: Migration[] = [
 
       insert into roles (id, slug, name, description, is_system, capabilities_json)
       values
-        ('owner', 'owner', 'Owner', 'Permanent first-site owner with full system access.', true, '["site.read","site.edit","pages.edit","pages.publish","content.create","content.edit.own","content.edit.any","content.publish.own","content.publish.any","content.manage","media.manage","runtime.manage","plugins.manage","users.manage","roles.manage","audit.read"]'::jsonb),
+        ('owner', 'owner', 'Owner', 'Permanent installation owner with full system access.', true, '["site.read","site.edit","pages.edit","pages.publish","content.create","content.edit.own","content.edit.any","content.publish.own","content.publish.any","content.manage","media.manage","runtime.manage","plugins.manage","users.manage","roles.manage","audit.read"]'::jsonb),
         ('admin', 'admin', 'Admin', 'Full admin access.', true, '["site.read","site.edit","pages.edit","pages.publish","content.create","content.edit.own","content.edit.any","content.publish.own","content.publish.any","content.manage","media.manage","runtime.manage","plugins.manage","users.manage","roles.manage","audit.read"]'::jsonb),
         ('editor', 'editor', 'Editor', 'Can edit and publish assigned site content.', true, '["site.read","site.edit","pages.edit","pages.publish","content.create","content.edit.own","content.publish.own","media.manage"]'::jsonb),
         ('content-manager', 'content-manager', 'Content Manager', 'Can manage all content entries and collections.', true, '["site.read","content.create","content.edit.any","content.publish.any","content.manage","media.manage"]'::jsonb),

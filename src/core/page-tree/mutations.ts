@@ -310,9 +310,9 @@ export function buildSubtreeNodeIdMap(
 /**
  * Insert a foreign subtree (root node + descendants) under a target parent.
  *
- * The payload comes from the clipboard slice and may originate from any page
- * (or even any site). All node IDs are regenerated on insert so collisions
- * with the target tree are impossible.
+ * The payload comes from the clipboard slice and may originate from any page.
+ * All node IDs are regenerated on insert so collisions with the target tree
+ * are impossible.
  *
  * `options.nodeIdMap` accepts a precomputed map (typically built via
  * `buildSubtreeNodeIdMap`); if omitted, one is built locally. Callers that
@@ -321,9 +321,9 @@ export function buildSubtreeNodeIdMap(
  *
  * `options.classIdRemap` lets the caller filter / remap classIds at insertion
  * time — needed when the payload references classes that don't exist in the
- * target site (cross-site paste, or framework classes that aren't reconciled
- * in the target). Return `null` from the mapper to drop a classId, or a
- * string to remap it.
+ * active document or framework classes that were regenerated with different
+ * IDs. Return `null` from the mapper to drop a classId, or a string to remap
+ * it.
  *
  * Returns the new root node ID inside the target tree.
  */

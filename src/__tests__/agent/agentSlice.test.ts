@@ -28,7 +28,6 @@ function freshAgentState() {
     agentMessages: [],
     agentError: null,
     agentSessionId: null,
-    agentSessionSiteId: null,
     hasUnsavedChanges: false,
   })
 
@@ -111,7 +110,6 @@ describe('processStreamEvent — bridge handshake', () => {
       assistantId,
       noopTextSink,
       useEditorStore.setState,
-      useEditorStore.getState,
       bridge,
       null,
     )
@@ -143,7 +141,6 @@ describe('processStreamEvent — toolRequest dispatches to executor', () => {
         assistantId,
         () => {},
         useEditorStore.setState,
-        useEditorStore.getState,
         bridge,
         null,
       )
@@ -186,7 +183,6 @@ describe('processStreamEvent — toolRequest dispatches to executor', () => {
         assistantId,
         () => {},
         useEditorStore.setState,
-        useEditorStore.getState,
         bridge,
         null,
       )
@@ -221,7 +217,6 @@ describe('processStreamEvent — toolStatus badges', () => {
       assistantId,
       noopTextSink,
       useEditorStore.setState,
-      useEditorStore.getState,
       bridge,
       null,
     )
@@ -236,7 +231,6 @@ describe('processStreamEvent — toolStatus badges', () => {
       assistantId,
       noopTextSink,
       useEditorStore.setState,
-      useEditorStore.getState,
       bridge,
       null,
     )
@@ -277,7 +271,6 @@ describe('processStreamEvent — chronological text/tool ordering', () => {
       assistantId,
       inlineTextSink,
       useEditorStore.setState,
-      useEditorStore.getState,
       bridge,
       null,
     )
@@ -292,7 +285,6 @@ describe('processStreamEvent — chronological text/tool ordering', () => {
       assistantId,
       inlineTextSink,
       useEditorStore.setState,
-      useEditorStore.getState,
       bridge,
       null,
     )
@@ -302,7 +294,6 @@ describe('processStreamEvent — chronological text/tool ordering', () => {
       assistantId,
       inlineTextSink,
       useEditorStore.setState,
-      useEditorStore.getState,
       bridge,
       null,
     )
@@ -350,7 +341,6 @@ describe('sendAgentMessage — request lifecycle', () => {
       isAgentStreaming: false,
       agentMessages: [],
       agentSessionId: null,
-      agentSessionSiteId: null,
     })
 
     const sessionId = '00000000-0000-4000-8000-000000000001'

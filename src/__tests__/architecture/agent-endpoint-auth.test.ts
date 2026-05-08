@@ -11,7 +11,7 @@
  *      + output tokens for system prompt + tool-loop iterations).
  *   2. Use the operator's Claude account as a free Claude proxy — the
  *      streaming response forwards Claude's output back verbatim.
- *   3. Open enough concurrent streams to exhaust per-tenant SDK rate limits
+ *   3. Open enough concurrent streams to exhaust shared SDK rate limits
  *      and starve legitimate editor users (DoS).
  *
  * This gate asserts both handlers carry an `originAllowed` CSRF check and a

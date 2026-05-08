@@ -96,7 +96,6 @@ export interface AgentSlice {
   agentMessages: AgentMessage[]
   agentError: string | null
   agentSessionId: string | null
-  agentSessionSiteId: string | null
 
   // ── Actions ────────────────────────────────────────────────────────────────
   openAgent(): void
@@ -252,7 +251,6 @@ export const createAgentSlice: EditorStoreSliceCreator<AgentSlice> = (set, get) 
     agentMessages: [],
     agentError: null,
     agentSessionId: null,
-    agentSessionSiteId: null,
 
     // ── UI actions ───────────────────────────────────────────────────────────
     openAgent() {
@@ -278,7 +276,6 @@ export const createAgentSlice: EditorStoreSliceCreator<AgentSlice> = (set, get) 
         agentMessages: [],
         agentError: null,
         agentSessionId: null,
-        agentSessionSiteId: null,
       })
     },
 
@@ -286,12 +283,9 @@ export const createAgentSlice: EditorStoreSliceCreator<AgentSlice> = (set, get) 
     async sendAgentMessage(content) {
       if (get().isAgentStreaming) return // one request at a time
 
-      // Reuse the in-memory session id only when it belongs to the current
-      // site. Switching sites or reloading the page resets it.
-      const siteId = get().site?.id ?? null
-      const resumeSessionId = get().agentSessionSiteId === siteId
-        ? get().agentSessionId
-        : null
+      // Reuse the in-memory session id while this editor session is open.
+      // Reloading the page clears both the visible thread and the SDK session.
+      const resumeSessionId = get().agentSessionId
 
       const userMsg: AgentMessage = {
         id: nanoid(),
@@ -372,7 +366,6 @@ export const createAgentSlice: EditorStoreSliceCreator<AgentSlice> = (set, get) 
               assistantId,
               textSink,
               set,
-              get,
               bridge,
               _abortController?.signal ?? null,
             )
@@ -416,7 +409,6 @@ export async function processStreamEvent(
   assistantId: string,
   textSink: AgentTextStreamSink,
   set: EditorStoreSet,
-  get: () => EditorStore,
   bridge: AgentBridgeRuntime,
   signal: AbortSignal | null,
 ): Promise<void> {
@@ -499,10 +491,8 @@ export async function processStreamEvent(
     }
 
     case 'session': {
-      const siteId = get().site?.id ?? null
       set({
         agentSessionId: event.sessionId,
-        agentSessionSiteId: siteId,
       })
       break
     }

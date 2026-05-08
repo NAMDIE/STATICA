@@ -1,16 +1,12 @@
 /**
- * ClassPicker usage tracker — recent + most-used signals scoped per site.
+ * ClassPicker usage tracker — recent + most-used signals for this installation.
  *
  * The ClassPicker dropdown surfaces "Recent" and "Frequent" sections when the
  * input is empty so users don't have to scroll past the alphabetical class
  * registry to re-add classes they actually use. This module owns the
- * persistence: a `siteId → classId → { lastUsedAt, count }` map kept in
- * localStorage and validated through TypeBox at the boundary.
- *
- * Why per-site:
- *   - Class IDs are only stable within a single site document. A `cls_42` in
- *     site A has nothing to do with `cls_42` in site B.
- *   - Editing two sites should not pollute each other's recents.
+ * persistence: a `classId → { lastUsedAt, count }` map kept in localStorage
+ * and validated through TypeBox at the boundary. The CMS has one active site
+ * per installation, so there is no tenant/site key in this local UI state.
  *
  * Why localStorage (not the site document):
  *   - This is local UI/UX state, not part of the published site. Storing it
@@ -36,10 +32,7 @@ const ClassUsageEntrySchema = Type.Object({
   count: Type.Number(),
 })
 
-const ClassUsageMapSchema = Type.Record(
-  Type.String(),
-  Type.Record(Type.String(), ClassUsageEntrySchema),
-)
+const ClassUsageMapSchema = Type.Record(Type.String(), ClassUsageEntrySchema)
 
 type ClassUsageMap = Static<typeof ClassUsageMapSchema>
 type ClassUsageEntry = Static<typeof ClassUsageEntrySchema>
@@ -74,50 +67,45 @@ function writeUsageMap(next: ClassUsageMap): void {
  * Increments `count` by one and stamps `lastUsedAt` to `Date.now()`. New
  * entries start with `count: 1`.
  */
-export function recordClassUsage(siteId: string, classId: string): void {
-  if (!siteId || !classId) return
+export function recordClassUsage(classId: string): void {
+  if (!classId) return
   const map = readUsageMap()
-  const siteMap = map[siteId] ?? {}
-  const prev: ClassUsageEntry = siteMap[classId] ?? { lastUsedAt: 0, count: 0 }
+  const prev: ClassUsageEntry = map[classId] ?? { lastUsedAt: 0, count: 0 }
   const nextEntry: ClassUsageEntry = {
     lastUsedAt: Date.now(),
     count: prev.count + 1,
   }
   writeUsageMap({
     ...map,
-    [siteId]: { ...siteMap, [classId]: nextEntry },
+    [classId]: nextEntry,
   })
 }
 
-/** Read the per-site usage table. Returns `{}` for an unknown siteId. */
-export function readSiteClassUsage(siteId: string): Record<string, ClassUsageEntry> {
-  if (!siteId) return {}
-  const map = readUsageMap()
-  return map[siteId] ?? {}
+/** Read the installation-local usage table. */
+export function readClassUsage(): Record<string, ClassUsageEntry> {
+  return readUsageMap()
 }
 
 /**
- * Drop one or more class IDs from the per-site usage table.
+ * Drop one or more class IDs from the usage table.
  *
  * Called when classes are deleted so dead IDs don't linger in the recents.
  * (Keeping them is harmless — the picker filters against the live registry —
  * but cleanup keeps localStorage tidy over time.)
  */
-export function forgetClassUsage(siteId: string, classIds: readonly string[]): void {
-  if (!siteId || classIds.length === 0) return
+export function forgetClassUsage(classIds: readonly string[]): void {
+  if (classIds.length === 0) return
   const map = readUsageMap()
-  const siteMap = map[siteId]
-  if (!siteMap) return
   let changed = false
-  const nextSiteMap: Record<string, ClassUsageEntry> = { ...siteMap }
+  const nextMap: Record<string, ClassUsageEntry> = { ...map }
   for (const id of classIds) {
-    if (id in nextSiteMap) {
-      delete nextSiteMap[id]
+    if (id in nextMap) {
+      delete nextMap[id]
       changed = true
     }
   }
   if (!changed) return
-  writeUsageMap({ ...map, [siteId]: nextSiteMap })
+  writeUsageMap(nextMap)
 }
 
 /**

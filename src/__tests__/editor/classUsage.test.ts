@@ -3,7 +3,6 @@
  *
  * The ClassPicker dropdown surfaces "Recent" and "Frequent" sections when its
  * input is empty (Spec UX #1349). This file pins:
- *   - Per-site scoping (siteA writes don't pollute siteB's table)
  *   - Recency wins ties; Frequent excludes anything already in Recent
  *   - Available-class filtering: deleted/hidden classes drop out
  *   - localStorage persistence round-trips with no decoding surprises
@@ -17,7 +16,7 @@ import {
   CLASS_USAGE_STORAGE_KEY,
   __resetClassUsageForTests,
   forgetClassUsage,
-  readSiteClassUsage,
+  readClassUsage,
   recordClassUsage,
   selectRecentAndFrequent,
 } from '@site/preferences/classUsage'
@@ -29,82 +28,60 @@ beforeEach(() => {
 describe('recordClassUsage', () => {
   it('starts new entries at count=1 and stamps lastUsedAt', () => {
     const before = Date.now()
-    recordClassUsage('site-1', 'cls-a')
+    recordClassUsage('cls-a')
     const after = Date.now()
 
-    const usage = readSiteClassUsage('site-1')
+    const usage = readClassUsage()
     expect(usage['cls-a']?.count).toBe(1)
     expect(usage['cls-a']?.lastUsedAt).toBeGreaterThanOrEqual(before)
     expect(usage['cls-a']?.lastUsedAt).toBeLessThanOrEqual(after)
   })
 
   it('increments count on subsequent usage', () => {
-    recordClassUsage('site-1', 'cls-a')
-    recordClassUsage('site-1', 'cls-a')
-    recordClassUsage('site-1', 'cls-a')
+    recordClassUsage('cls-a')
+    recordClassUsage('cls-a')
+    recordClassUsage('cls-a')
 
-    expect(readSiteClassUsage('site-1')['cls-a']?.count).toBe(3)
+    expect(readClassUsage()['cls-a']?.count).toBe(3)
   })
 
-  it('keeps each site\'s table independent', () => {
-    recordClassUsage('site-1', 'cls-a')
-    recordClassUsage('site-2', 'cls-b')
-
-    expect(Object.keys(readSiteClassUsage('site-1'))).toEqual(['cls-a'])
-    expect(Object.keys(readSiteClassUsage('site-2'))).toEqual(['cls-b'])
-  })
-
-  it('ignores empty siteId or classId (defensive guard)', () => {
-    recordClassUsage('', 'cls-a')
-    recordClassUsage('site-1', '')
-    expect(readSiteClassUsage('site-1')).toEqual({})
+  it('ignores empty classId (defensive guard)', () => {
+    recordClassUsage('')
+    expect(readClassUsage()).toEqual({})
   })
 })
 
-describe('readSiteClassUsage', () => {
-  it('returns an empty object for an unknown site', () => {
-    expect(readSiteClassUsage('never-written')).toEqual({})
-  })
-
+describe('readClassUsage', () => {
   it('falls back to {} when localStorage holds non-JSON garbage', () => {
     globalThis.localStorage?.setItem(CLASS_USAGE_STORAGE_KEY, '{not valid json')
-    expect(readSiteClassUsage('site-1')).toEqual({})
+    expect(readClassUsage()).toEqual({})
   })
 
   it('falls back to {} when localStorage holds the wrong shape', () => {
     globalThis.localStorage?.setItem(
       CLASS_USAGE_STORAGE_KEY,
-      JSON.stringify({ 'site-1': 'not-an-object' }),
+      JSON.stringify({ 'cls-a': 'not-an-object' }),
     )
-    expect(readSiteClassUsage('site-1')).toEqual({})
+    expect(readClassUsage()).toEqual({})
   })
 })
 
 describe('forgetClassUsage', () => {
-  it('drops only the named class IDs from the per-site map', () => {
-    recordClassUsage('site-1', 'cls-a')
-    recordClassUsage('site-1', 'cls-b')
-    recordClassUsage('site-1', 'cls-c')
+  it('drops only the named class IDs from the usage map', () => {
+    recordClassUsage('cls-a')
+    recordClassUsage('cls-b')
+    recordClassUsage('cls-c')
 
-    forgetClassUsage('site-1', ['cls-b'])
+    forgetClassUsage(['cls-b'])
 
-    const usage = readSiteClassUsage('site-1')
+    const usage = readClassUsage()
     expect(Object.keys(usage).sort()).toEqual(['cls-a', 'cls-c'])
   })
 
   it('is a no-op when none of the IDs are present', () => {
-    recordClassUsage('site-1', 'cls-a')
-    forgetClassUsage('site-1', ['nope'])
-    expect(readSiteClassUsage('site-1')['cls-a']?.count).toBe(1)
-  })
-
-  it('does not touch other sites', () => {
-    recordClassUsage('site-1', 'cls-a')
-    recordClassUsage('site-2', 'cls-a')
-    forgetClassUsage('site-1', ['cls-a'])
-
-    expect(readSiteClassUsage('site-1')).toEqual({})
-    expect(readSiteClassUsage('site-2')['cls-a']?.count).toBe(1)
+    recordClassUsage('cls-a')
+    forgetClassUsage(['nope'])
+    expect(readClassUsage()['cls-a']?.count).toBe(1)
   })
 })
 

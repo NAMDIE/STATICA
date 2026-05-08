@@ -2,10 +2,10 @@
  * useClassPickerSuggestions — derive the entire ClassPicker dropdown state
  * from the assigned-class set, the registry, and the typed query.
  *
- * Pure-derivation hook: reads `recordClassUsage`-backed history (per-site
- * localStorage) but writes nothing, dispatches no store actions, and runs
+ * Pure-derivation hook: reads `recordClassUsage`-backed history from
+ * localStorage but writes nothing, dispatches no store actions, and runs
  * no effects. The component owns the *state inputs* (`query`,
- * `highlightedIndex`, `siteId`); we own everything that follows from them.
+ * `highlightedIndex`); we own everything that follows from them.
  *
  * Splitting these computations out of `ClassPicker.tsx` is what dropped its
  * cognitive complexity below the "critical" threshold and made the logic
@@ -15,12 +15,12 @@
 import type { CSSClass } from '@core/page-tree/schemas'
 import {
   CLASS_USAGE_RECENT_LIMIT,
-  readSiteClassUsage,
+  readClassUsage,
   selectRecentAndFrequent,
 } from '@site/preferences/classUsage'
 
-/** Per-site class-usage table — return type of `readSiteClassUsage`. */
-type ClassUsageMap = ReturnType<typeof readSiteClassUsage>
+/** Installation-local class-usage table — return type of `readClassUsage`. */
+type ClassUsageMap = ReturnType<typeof readClassUsage>
 import { rankBySuggestionScore } from './classPickerRanking'
 
 // When the input is empty and Recent + Frequent (deduped) collectively surface
@@ -40,17 +40,10 @@ export interface ClassPickerSuggestionsInput {
   /** The Arrow-Up/Down highlight index; -1 means "no explicit selection". */
   highlightedIndex: number
   /**
-   * Site ID, used to scope the per-site usage history (localStorage). When
-   * `null`, recent/frequent are empty — fresh installs show only the All
-   * section without the personalised header.
+   * Override `readClassUsage()` — useful for tests so we don't have to stub
+   * localStorage. Production callers omit this.
    */
-  siteId: string | null
-  /**
-   * Override `readSiteClassUsage(siteId)` — useful for tests so we don't have
-   * to stub localStorage. Production callers omit this; the hook reads from
-   * persisted usage only when `siteId` is non-null.
-   */
-  readUsage?: (siteId: string) => ClassUsageMap
+  readUsage?: () => ClassUsageMap
 }
 
 export interface ClassPickerSuggestionsResult {
@@ -105,8 +98,7 @@ export function useClassPickerSuggestions(
     assignedIds,
     query,
     highlightedIndex,
-    siteId,
-    readUsage = readSiteClassUsage,
+    readUsage = readClassUsage,
   } = input
 
   const trimmedQueryRaw = query.trim()
@@ -126,7 +118,7 @@ export function useClassPickerSuggestions(
 
   // Empty-query layout: surface Recent + Frequent first, then optionally an
   // "All classes" section so fresh sites with sparse history stay browsable.
-  const usage: ClassUsageMap = isEmptyQuery && siteId ? readUsage(siteId) : {}
+  const usage: ClassUsageMap = isEmptyQuery ? readUsage() : {}
   const { recent: recentIds, frequent: frequentIds } = isEmptyQuery
     ? selectRecentAndFrequent(usage, candidates.map((c) => c.id))
     : { recent: [] as string[], frequent: [] as string[] }

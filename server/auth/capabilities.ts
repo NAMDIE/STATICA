@@ -64,7 +64,7 @@ export const SYSTEM_ROLES: SystemRoleDefinition[] = [
     id: 'owner',
     slug: 'owner',
     name: 'Owner',
-    description: 'Permanent first-site owner with full system access.',
+    description: 'Permanent installation owner with full system access.',
     capabilities: CORE_CAPABILITIES,
   },
   {

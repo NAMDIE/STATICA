@@ -175,7 +175,6 @@ function ClassPickerInner({ nodeId, trailingAction }: ClassPickerProps, ref) {
     assignedIds,
     query,
     highlightedIndex,
-    siteId: site?.id ?? null,
   })
 
   const suggestions = isEmptyQuery ? candidates : filteredSuggestions
@@ -184,18 +183,16 @@ function ClassPickerInner({ nodeId, trailingAction }: ClassPickerProps, ref) {
     setShowSuggestions(true)
   }, [])
 
-  const siteId = site?.id ?? null
-
   const handleAddExisting = useCallback(
     (classId: string) => {
       addNodeClass(nodeId, classId)
       setActiveClass(classId)
       clearPreviewNodeClass(nodeId, classId)
-      if (siteId) recordClassUsage(siteId, classId)
+      recordClassUsage(classId)
       setQuery('')
       setShowSuggestions(false)
     },
-    [nodeId, addNodeClass, setActiveClass, clearPreviewNodeClass, siteId],
+    [nodeId, addNodeClass, setActiveClass, clearPreviewNodeClass],
   )
 
   const handleCreateAndAdd = useCallback(() => {
@@ -206,13 +203,13 @@ function ClassPickerInner({ nodeId, trailingAction }: ClassPickerProps, ref) {
       addNodeClass(nodeId, newClass.id)
       setActiveClass(newClass.id)
       clearPreviewNodeClass(nodeId)
-      if (siteId) recordClassUsage(siteId, newClass.id)
+      recordClassUsage(newClass.id)
       setQuery('')
       setShowSuggestions(false)
     } catch {
       // Class with this name already exists
     }
-  }, [query, createClass, addNodeClass, nodeId, setActiveClass, clearPreviewNodeClass, siteId])
+  }, [query, createClass, addNodeClass, nodeId, setActiveClass, clearPreviewNodeClass])
 
   // Shared submit logic for both the Enter key and the trailing enter-icon
   // button. Resolution priority:

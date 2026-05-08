@@ -4,11 +4,11 @@
 
 Page Builder will become a single-site, self-hosted CMS with an integrated page builder. The existing editor and document model stay as the foundation. The product will no longer export static HTML or downloadable React projects as its main deployment path. Instead, a Docker Compose stack will run the public website, admin UI, API server, Postgres database, and uploads volume.
 
-The v1 scope is page CMS basics only: pages, drafts, published versions, site settings, media uploads, admin login, and public rendering from published snapshots. Posts, custom collections, forms, multi-site, and roles are later slices.
+The v1 scope is page CMS basics only: pages, drafts, published versions, site settings, media uploads, admin login, and public rendering from published snapshots. Posts, custom collections, forms, expanded roles, and managed-service provisioning are later slices.
 
 ## Product Decisions
 
-- V1 is single-site, not multi-site.
+- V1 is a single-install CMS. The managed service runs one isolated CMS installation per hosted site.
 - V1 targets Docker Compose with Postgres.
 - One installation serves the public site, admin app, and API.
 - Public site lives at `/`.

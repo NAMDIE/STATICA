@@ -10,9 +10,8 @@
  * right-clicked nodeId as an explicit parent — no smart-resolution fallback.
  *
  * The Paste item is rendered conditionally: it appears only when the
- * clipboard slice has a captured subtree. The clipboard is global and
- * persisted to localStorage, so it can survive page reloads and span
- * across sites.
+ * clipboard slice has a captured subtree. The clipboard is editor-wide and
+ * persisted to localStorage, so it can survive page reloads.
  *
  * Multi-select awareness:
  * - When multiple nodes are selected AND the right-clicked node is part of
