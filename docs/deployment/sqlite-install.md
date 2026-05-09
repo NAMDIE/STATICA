@@ -1,50 +1,80 @@
-# SQLite deployment
+# SQLite deployment (default)
 
-## When to use SQLite
+**SQLite is the default database engine for self-hosting Page Builder CMS.** It's a first-class adapter alongside Postgres — same code, same migrations, same image — selected by `DATABASE_URL`. For most users this is the right choice: one container, file-based backups, near-zero ops surface.
 
-The CMS supports SQLite as a first-class database engine alongside Postgres. SQLite is the right choice when:
+If you have a multi-author editorial team or need to run more than one app container, see [the deployment overview](README.md#advanced-postgres) for when to upgrade to Postgres instead.
 
-- You're a contributor or solo developer running locally (`bun run dev` defaults to SQLite — no Docker required).
-- You're deploying to a single VPS, Raspberry Pi, NAS, or other small instance and don't want to operate a separate Postgres process.
-- You're operating the managed Page Builder service with strict isolation, where the control plane provisions one SQLite file for each isolated CMS installation.
-- You want simple file-based backups (just copy the `.db` file).
+## Quickstart — production install, one command, no `.env`
 
-Use Postgres when:
+```sh
+docker compose -f compose.prod.yml -f compose.sqlite.yml up -d
+```
 
-- You expect concurrent writers (multiple admin users editing simultaneously).
-- You need horizontal scale-out or replication beyond Litestream.
-- You already operate Postgres infrastructure.
+That's the full install. **No `.env` file required.** SQLite mode disables the Postgres service entirely (`compose.sqlite.yml` puts it in the `_disabled` profile), and every other variable in `compose.prod.yml` has a working default. Copy `.env.production.example` only if you want to customize `HOST_PORT`, the image tag (`PAGE_BUILDER_IMAGE`), or set `DOMAIN` for TLS.
 
-## Single-writer trade-off
+Until the public Docker image is published, build the image from source instead:
 
-SQLite supports one concurrent writer at a time. For the CMS workload this is fine — admin actions are infrequent, page reads serve from generated static HTML, and the WAL mode pragma we set means readers don't block writers. If your site has dozens of simultaneous editors making changes, switch to Postgres.
+```sh
+docker compose -f compose.prod.yml -f compose.sqlite.yml -f compose.build.yml up -d --build
+```
+
+What you get:
+
+- One `app` container with the CMS, admin, public site, and uploads handler.
+- A named Docker volume mounted at `/app/data` containing `cms.db`.
+- A second named volume at `/app/uploads` for uploaded media.
+- Migrations run automatically on first boot.
+
+Open `http://server-ip:3001/admin` and create the first admin account.
+
+To put HTTPS in front (auto-provisioned Let's Encrypt cert), layer `compose.tls.yml` on top — see [tls-caddy.md](tls-caddy.md):
+
+```sh
+docker compose -f compose.prod.yml -f compose.sqlite.yml -f compose.tls.yml up -d
+```
 
 ## Local development
 
 ```sh
 bun install
 bun run dev
-# Server starts on http://localhost:3001/admin with SQLite at .tmp/dev.db
+# Editor at http://localhost:5173, CMS at http://localhost:3001, SQLite at .tmp/dev.db
 ```
 
-No Docker, no postgres, no setup. The migrations run automatically on first boot.
+No Docker, no postgres, no setup. The migrations run automatically on first boot. This is the same SQLite engine the production image uses.
 
-## Production deployment
+## No-Docker production install
 
-Use the `compose.sqlite.yml` override file:
+If you'd rather run Bun directly on the host (no container around it):
 
 ```sh
-docker compose -f compose.prod.yml -f compose.sqlite.yml up -d
+bun install
+bun run build
+DATABASE_URL=sqlite:./data/cms.db \
+  STATIC_DIR=./dist \
+  UPLOADS_DIR=./uploads \
+  bun run server/index.ts
 ```
 
-This disables the postgres service and mounts a `data` volume at `/app/data` for the SQLite database. The `DATABASE_URL` env is set to `sqlite:/app/data/cms.db` automatically.
+Wrap that in your process manager of choice (systemd, pm2, supervisord). Put any HTTPS-capable reverse proxy in front (Caddy, Nginx, Cloudflare).
 
-## Backup & durability with Litestream
+## Backup & durability
 
-[Litestream](https://litestream.io) replicates SQLite databases to S3, Backblaze, GCS, etc. in real time. Recommended for production SQLite deployments:
+### Quick backup — copy the file
+
+```sh
+docker compose exec app sh -c 'cp /app/data/cms.db /app/data/cms.db.bak'
+docker cp $(docker compose ps -q app):/app/data/cms.db.bak ./cms.db.bak
+```
+
+For occasional snapshots that's enough. For continuous off-site replication, use Litestream.
+
+### Continuous replication with Litestream
+
+[Litestream](https://litestream.io) replicates SQLite databases to S3, Backblaze, GCS, etc. in real time, with second-level RPO. Recommended for any production SQLite deployment that matters:
 
 ```yaml
-# Add to compose.sqlite.yml
+# Add to compose.sqlite.yml or a separate compose file layered on top:
   litestream:
     image: litestream/litestream
     command: replicate
@@ -55,26 +85,39 @@ This disables the postgres service and mounts a `data` volume at `/app/data` for
       - app
 ```
 
-With Litestream, your SQLite deployment has continuous off-site backup with second-level RPO.
+See [backup-restore.md](backup-restore.md) for the full Litestream config and restore drill.
 
-## Migrating from SQLite to Postgres
+## Single-writer trade-off
 
-If your traffic outgrows SQLite, migrate to Postgres:
+SQLite supports one concurrent writer at a time. For the CMS workload this is fine in the common case:
 
-1. Export data from SQLite with [`sqlite3 dump`](https://sqlite.org/cli.html) or a custom tool.
-2. Stand up Postgres, run migrations against it (the CMS does this on first boot).
-3. Import the data via psql.
-4. Set `DATABASE_URL=postgres://...` and restart the CMS.
+- Public visitor traffic hits generated static HTML — it never touches the database.
+- Admin writes (saving a page, uploading media, installing a plugin) are infrequent and short.
+- WAL mode (enabled by the SQLite adapter) means readers don't block writers.
+
+The constraint only bites when **multiple humans save in the admin at the same time** — for example, a 5-person editorial team all hitting "Publish" within the same second. In practice that's rare; if it's your situation, [upgrade to Postgres](#when-to-upgrade-to-postgres).
+
+## When to upgrade to Postgres
+
+| Signal | Action |
+|---|---|
+| One or two admins, infrequent saves | Stay on SQLite |
+| Several admins, occasional simultaneous saves | Stay on SQLite (WAL handles it) |
+| Editorial team with constant simultaneous saves | Upgrade to Postgres |
+| You need to run more than one app container | Upgrade to Postgres (SQLite is file-locked) |
+| You already operate Postgres and prefer to use it | Upgrade to Postgres |
+| You want `pg_dump` / streaming replication instead of file copy / Litestream | Upgrade to Postgres |
+
+To upgrade, follow [vps-compose.md](vps-compose.md) and migrate your data:
+
+1. Stop the SQLite stack: `docker compose -f compose.prod.yml -f compose.sqlite.yml down`
+2. Export from SQLite with `sqlite3 cms.db .dump > dump.sql` or a custom tool.
+3. Stand up Postgres, run migrations against it (the CMS does this on first boot of `compose.prod.yml`).
+4. Import the data into Postgres via `psql`.
+5. Set `DATABASE_URL=postgres://...` (the default in `compose.prod.yml`) and restart.
 
 The migrations are dialect-translated but otherwise identical, so the schema shape matches. Field-by-field data import is the part you have to write yourself — there's no built-in migration tool yet (PRs welcome).
 
-## Choosing between SQLite and Postgres
+## Comparison reference
 
-| Criterion | SQLite | Postgres |
-|---|---|---|
-| Setup complexity | Zero (file-based) | Docker or managed service |
-| Concurrent writers | One at a time | Many |
-| Backup | Copy file (or Litestream) | pg_dump / streaming replication |
-| Horizontal scale | None (vertical only) | Read replicas, sharding |
-| Operational overhead | Trivial | Moderate |
-| CMS workload fit | Excellent for solo / small teams | Excellent for any scale |
+For the full SQLite vs Postgres trade-off matrix see [the deployment overview](README.md#per-mode-trade-offs).

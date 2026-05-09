@@ -1,6 +1,8 @@
-# VPS Deployment With Docker Compose
+# VPS Deployment With Docker Compose (Postgres)
 
-This is the easiest full self-host path. It runs the CMS app, Postgres, and uploaded media storage on one server.
+This guide covers the Postgres self-host path: CMS app + Postgres + uploaded media on one server. It's the right choice when you have a multi-author editorial team, need horizontal scale-out, or already operate Postgres.
+
+**For most users** (single site, single-author or small team) the simpler default is SQLite — see [sqlite-install.md](sqlite-install.md). SQLite mode runs in one container with no Postgres process, no `.env` file, and no password to manage.
 
 ## 1. Prepare The Server
 
@@ -32,6 +34,8 @@ cp .env.production.example /path/on/server/.env.production.example
 ```
 
 ## 3. Create Production Environment
+
+> ⚠️ **Postgres mode requires `POSTGRES_PASSWORD`.** `compose.prod.yml` ships a placeholder default (`CHANGEME_set_POSTGRES_PASSWORD_in_env`) so the file loads in SQLite mode without an `.env`, but a Postgres deployment that does not override this default is insecure. Always set a real password before running `docker compose up -d` against Postgres.
 
 ```sh
 cp .env.production.example .env

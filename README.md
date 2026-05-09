@@ -36,29 +36,31 @@ The first visit creates the site and admin account.
 
 ## Production Deployment
 
-For a VPS/self-host install with bundled Postgres:
-
-```sh
-cp .env.production.example .env
-docker compose -f compose.prod.yml up -d
-```
-
-For a VPS/self-host install with SQLite (no separate Postgres process):
+The default self-host install is **SQLite + one container** — recommended for most users (single sites, hobby and small-business installs, single-author or small editorial teams). No `.env` file required:
 
 ```sh
 docker compose -f compose.prod.yml -f compose.sqlite.yml up -d
 ```
 
+If you have a multi-author editorial team, need horizontal app scale-out, or already operate Postgres, run with bundled Postgres instead (two containers). Postgres mode requires setting `POSTGRES_PASSWORD`:
+
+```sh
+cp .env.production.example .env       # set POSTGRES_PASSWORD to a real secret
+docker compose -f compose.prod.yml up -d
+```
+
 To put HTTPS in front (Caddy + Let's Encrypt, auto-provisioned), layer `compose.tls.yml` on top of either DB mode and set `DOMAIN` in `.env`:
 
 ```sh
+# SQLite + TLS (default)
+docker compose -f compose.prod.yml -f compose.sqlite.yml -f compose.tls.yml up -d
 # Postgres + TLS
 docker compose -f compose.prod.yml -f compose.tls.yml up -d
-# SQLite + TLS
-docker compose -f compose.prod.yml -f compose.sqlite.yml -f compose.tls.yml up -d
 ```
 
 Without `compose.tls.yml`, the app is reachable on `http://server-ip:3001/admin`. With it, only Caddy is exposed (ports 80 / 443) and the cert is auto-provisioned for `${DOMAIN}` on the first request.
+
+Engine selection is one env var (`DATABASE_URL`) — same image, same code. Docker is purely packaging; both engines also run with `bun run server/index.ts` directly on the host. See [docs/deployment/README.md](docs/deployment/README.md) for the full decision matrix.
 
 Production servers should normally pull the published Docker image configured in `.env.production.example`. Developers can build locally from source with:
 

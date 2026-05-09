@@ -7,7 +7,10 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-page_builder}
       POSTGRES_USER: ${POSTGRES_USER:-page_builder}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env before starting the production stack}
+      # Placeholder default lets the file load without an .env (e.g. SQLite mode,
+      # which disables this service). Postgres deployments MUST override this in
+      # .env — see docs/deployment/vps-compose.md.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-CHANGEME_set_POSTGRES_PASSWORD_in_env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -23,7 +26,7 @@ services:
       - "${HOST_PORT:-3001}:3001"
     environment:
       PORT: "3001"
-      DATABASE_URL: postgres://${POSTGRES_USER:-page_builder}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env before starting the production stack}@postgres:5432/${POSTGRES_DB:-page_builder}
+      DATABASE_URL: postgres://${POSTGRES_USER:-page_builder}:${POSTGRES_PASSWORD:-CHANGEME_set_POSTGRES_PASSWORD_in_env}@postgres:5432/${POSTGRES_DB:-page_builder}
       UPLOADS_DIR: /app/uploads
       STATIC_DIR: /app/dist
     volumes:
