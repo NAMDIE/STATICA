@@ -66,8 +66,17 @@ export function BreakpointSelectionOverlay({
   // subscription stable when the array reference changes but its contents
   // are equal (matters because selectedNodeIds is a new array every set call).
   const selectedNodeIds = useEditorStore(useShallow((s) => s.selectedNodeIds))
+  // `hoveredBreakpointId === null` means "global hover" — i.e. the hover did
+  // not originate from a specific breakpoint frame on the canvas (e.g. it was
+  // triggered by hovering a row in the DOM panel). In that case every frame
+  // mirrors the hover so the user sees the highlight wherever they're looking.
+  // When the hover originated from the canvas itself, scope it to the owning
+  // frame so adjacent breakpoint previews don't all light up at once.
   const hoveredNodeId = useEditorStore((s) =>
-    s.hoveredBreakpointId === breakpointId ? s.hoveredNodeId : null,
+    s.hoveredNodeId &&
+    (s.hoveredBreakpointId === null || s.hoveredBreakpointId === breakpointId)
+      ? s.hoveredNodeId
+      : null,
   )
 
   // One ref per selected node, keyed by id. Stable across renders while the
