@@ -1,0 +1,119 @@
+/**
+ * useUsersPageData — central data store for the Users workspace.
+ *
+ * Loads users, roles, and audit events in parallel from the CMS API, gated
+ * by the caller-supplied `access` flags. The Users tab needs `users` and
+ * `roles`; the Roles tab needs `roles`; the Audit tab needs `events` plus
+ * `users`/`roles` to enrich the displayed labels. Loading them all at once
+ * keeps tab-switching instant and matches the per-tab capability gates
+ * applied by the page shell.
+ *
+ * Returns mutable state setters so each tab can do optimistic updates after
+ * a successful save (avoids the round-trip flicker), then call `refresh()`
+ * to reconcile authoritative state from the server.
+ */
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  listCmsAuditEvents,
+  listCmsRoles,
+  listCmsUsers,
+  type CmsAuditEvent,
+  type CmsCurrentUser,
+  type CmsRole,
+} from '@core/persistence'
+import { emptyUserForm, type UsersPageLoadAccess } from '../types'
+
+interface LoadedData {
+  users: CmsCurrentUser[]
+  roles: CmsRole[]
+  events: CmsAuditEvent[]
+}
+
+export interface UsersPageData {
+  users: CmsCurrentUser[]
+  roles: CmsRole[]
+  events: CmsAuditEvent[]
+  error: string | null
+  /**
+   * The first role id that admins can assign to a user (i.e. excludes the
+   * Owner role). Used to seed the create-user dialog so it never opens
+   * with a stale or impossible role selection.
+   */
+  defaultAssignableRoleId: string
+  setUsers: (updater: (current: CmsCurrentUser[]) => CmsCurrentUser[]) => void
+  setRoles: (updater: (current: CmsRole[]) => CmsRole[]) => void
+  setError: (value: string | null) => void
+  refresh: () => Promise<void>
+}
+
+async function loadUsersPageData(access: UsersPageLoadAccess): Promise<LoadedData> {
+  const [users, roles, events] = await Promise.all([
+    access.canManageUsers ? listCmsUsers() : Promise.resolve([]),
+    access.canReadRoleOptions ? listCmsRoles() : Promise.resolve([]),
+    access.canReadAudit ? listCmsAuditEvents() : Promise.resolve([]),
+  ])
+  return { users, roles, events }
+}
+
+export function useUsersPageData(access: UsersPageLoadAccess): UsersPageData {
+  const [users, setUsers] = useState<CmsCurrentUser[]>([])
+  const [roles, setRoles] = useState<CmsRole[]>([])
+  const [events, setEvents] = useState<CmsAuditEvent[]>([])
+  const [error, setError] = useState<string | null>(null)
+
+  // Memoise the access object to keep the load effect / refresh stable
+  // across re-renders. The caller passes a fresh object each render, so
+  // we re-derive the memo on the underlying boolean flags only.
+  const loadAccess = useMemo<UsersPageLoadAccess>(
+    () => ({
+      canManageUsers: access.canManageUsers,
+      canReadRoleOptions: access.canReadRoleOptions,
+      canReadAudit: access.canReadAudit,
+    }),
+    [access.canManageUsers, access.canReadRoleOptions, access.canReadAudit],
+  )
+
+  const applyLoadedData = useCallback((data: LoadedData) => {
+    setUsers(data.users)
+    setRoles(data.roles)
+    setEvents(data.events)
+  }, [])
+
+  const refresh = useCallback(async () => {
+    setError(null)
+    try {
+      applyLoadedData(await loadUsersPageData(loadAccess))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load users')
+    }
+  }, [applyLoadedData, loadAccess])
+
+  useEffect(() => {
+    let cancelled = false
+    void loadUsersPageData(loadAccess)
+      .then((data) => {
+        if (!cancelled) applyLoadedData(data)
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load users')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [applyLoadedData, loadAccess])
+
+  const defaultAssignableRoleId =
+    roles.find((role) => role.id !== 'owner')?.id ?? emptyUserForm.roleId
+
+  return {
+    users,
+    roles,
+    events,
+    error,
+    defaultAssignableRoleId,
+    setUsers,
+    setRoles,
+    setError,
+    refresh,
+  }
+}
