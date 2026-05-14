@@ -190,7 +190,7 @@ Every untyped boundary uses TypeBox (`@sinclair/typebox`). Inside the boundary, 
 - `console.log` in production code. Use `console.error` / `console.warn` with a `[<module>]` prefix, or remove the log.
 - Re-throwing a wrapped `Error` that loses the original stack. Use `new Error(message, { cause: err })` if you must wrap.
 - `as Foo` at a JSON / HTTP / `JSON.parse` boundary. Use a TypeBox schema instead.
-- Importing `zod` anywhere outside `server/agentTools.ts`. The codebase migrated to TypeBox; the lone `server/agentTools.ts` exemption exists only because `@anthropic-ai/claude-agent-sdk`'s `tool()` API has a type-level `AnyZodRawShape` constraint TypeBox can't satisfy.
+- Importing `zod` anywhere outside `server/handlers/agent/tools.ts`. The codebase migrated to TypeBox; the lone `server/handlers/agent/tools.ts` exemption exists only because `@anthropic-ai/claude-agent-sdk`'s `tool()` API has a type-level `AnyZodRawShape` constraint TypeBox can't satisfy.
 
 ---
 
@@ -280,7 +280,7 @@ The bar is: **your work is clean.** The repo's overall green/red state is the us
 1. We are pre-release. There are no users to protect.
 2. Never preserve backward compatibility, never leave band-aids, never duplicate "old vs new" code paths.
 3. If the architecture would be cleaner with a multi-file refactor — do the refactor, in this change.
-4. Every untyped boundary goes through TypeBox (`@sinclair/typebox`). `as Foo` at a JSON boundary is a bug. The only legitimate `zod` usage in the entire repo is `server/agentTools.ts` (Anthropic SDK boundary).
+4. Every untyped boundary goes through TypeBox (`@sinclair/typebox`). `as Foo` at a JSON boundary is a bug. The only legitimate `zod` usage in the entire repo is `server/handlers/agent/tools.ts` (Anthropic SDK boundary).
 5. UI uses shared primitives from `src/ui/`, design tokens from `src/styles/globals.css`, CSS Modules only.
 6. Output of this project must stay clean: clean HTML, clean CSS, clean TypeScript, clean modules. No exceptions.
 7. Verify once at the end of the task. Pre-existing failures from parallel sessions are not yours to fix — make sure *your* code is green and move on.

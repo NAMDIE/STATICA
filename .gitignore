@@ -47,3 +47,11 @@ coverage/
 !.agents/skills/page-builder-user-e2e/
 !.agents/skills/page-builder-user-e2e/**
 .skills/
+
+# User uploads — runtime data, never commit
+# (real user media has PII risk; plugin/font runtime artifacts are not source)
+uploads/*
+!uploads/.gitkeep
+
+# E2E test run artifacts — generated, not source
+docs/e2e/runs
