@@ -70,8 +70,8 @@ export const PLUGIN_CAPABILITIES: PluginCapability[] = [
   },
   {
     permission: 'editor.canvas',
-    label: 'Read and modify the editor canvas',
-    description: 'Reserved for canvas-level plugin APIs.',
+    label: 'Add canvas overlays',
+    description: 'Allows the plugin to register canvas overlay React components — annotation pins, custom selection adornments, measurement tools — that mount on top of the rendered canvas via `editor.canvas.registerOverlay`.',
     risk: 'high',
     surfaces: ['editor'],
   },

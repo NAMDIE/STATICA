@@ -543,6 +543,87 @@ describe('LayerNodeContextMenu — "Insert module here" sibling fallback on leaf
     expect(page?.nodes[insertedId!]?.moduleId).toBe('base.visual-component-ref')
     expect(page?.nodes[insertedId!]?.props.componentId).toBe('vc-sibling')
   })
+
+  /**
+   * Regression: right-clicking a `base.visual-component-ref` whose referenced
+   * Visual Component declares no slot params (and therefore has no
+   * `base.slot-instance` children) used to silently no-op because
+   * `resolveInsertLocation` returned null when no slot-instance was found.
+   * The expected behaviour is to fall through to sibling-after — exactly like
+   * a leaf target — so the user's click is never a dead-end.
+   */
+  it('inserts a module as the NEXT SIBLING when the target is a slotless VC ref', () => {
+    localStorage.clear()
+    const home = makePage({
+      id: 'page-slotless-vc',
+      title: 'Home',
+      slug: 'index',
+      rootNodeId: 'root',
+      nodes: {
+        root: makeNode({ id: 'root', moduleId: 'base.body', children: ['vc-ref'] }),
+        'vc-ref': makeNode({
+          id: 'vc-ref',
+          moduleId: 'base.visual-component-ref',
+          props: { componentId: 'slotless-vc', propOverrides: {} },
+          // No slot-instance children — the referenced VC has no slot params.
+          children: [],
+        }),
+      },
+    })
+    useEditorStore.setState({
+      site: makeSite({
+        pages: [home],
+        files: [],
+        visualComponents: [makeVC('slotless-vc', 'Slotless')],
+      }),
+      activePageId: 'page-slotless-vc',
+      selectedNodeId: null,
+      selectedNodeIds: [],
+      hoveredNodeId: null,
+      activeDocument: null,
+      _historyPast: [],
+      _historyFuture: [],
+      canUndo: false,
+      canRedo: false,
+      hasUnsavedChanges: false,
+    } as Parameters<typeof useEditorStore.setState>[0])
+
+    render(
+      <LayerNodeContextMenu
+        x={100}
+        y={200}
+        nodeId="vc-ref"
+        onClose={noop}
+        onDelete={noop}
+        onDuplicate={noop}
+        onRename={noop}
+        onWrapInContainer={noop}
+        onCopy={noop}
+        onCut={noop}
+        onPaste={noop}
+      />,
+    )
+    const trigger = screen.getByRole('menuitem', { name: /insert module here/i })
+    fireEvent.mouseEnter(trigger)
+
+    const submenu = screen.getByRole('menu', { name: 'Insert module here' })
+    const textOption = within(submenu).getAllByRole('menuitem').find(
+      (el) => el.getAttribute('data-module-id') === 'base.text',
+    )
+    expect(textOption).toBeDefined()
+    fireEvent.click(textOption!)
+
+    const state = useEditorStore.getState()
+    const page = state.site?.pages.find((p) => p.id === 'page-slotless-vc')
+    const root = page?.nodes['root']
+    // root.children was [vc-ref]; the new base.text must land as a sibling
+    // AFTER vc-ref under root, NOT silently nowhere.
+    expect(root?.children.length).toBe(2)
+    expect(root?.children[0]).toBe('vc-ref')
+    const insertedId = root?.children[1]
+    expect(insertedId).toBeDefined()
+    expect(page?.nodes[insertedId!]?.moduleId).toBe('base.text')
+  })
 })
 
 describe('LayerNodeContextMenu — multi-delete confirmation', () => {

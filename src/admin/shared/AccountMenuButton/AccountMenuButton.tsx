@@ -37,7 +37,8 @@ import { MonitorIcon } from 'pixel-art-icons/icons/monitor'
 import { useAuthenticatedAdminUser } from '@admin/sessionContext'
 import { useAdminNavigate } from '@admin/lib/useAdminNavigate'
 import { StepUpCancelledMessage, useStepUp } from '@admin/shared/StepUp'
-import { logoutAllOtherCmsSessions, logoutCms, type CmsCurrentUser } from '@core/persistence'
+import { UserAvatar } from '@admin/shared/UserAvatar'
+import { logoutAllOtherCmsSessions, logoutCms } from '@core/persistence'
 import styles from './AccountMenuButton.module.css'
 
 const ACCOUNT_ROUTE = '/admin/account'
@@ -51,7 +52,6 @@ export function AccountMenuButton(): ReactNode {
   const [status, setStatus] = useState<{ tone: 'info' | 'error'; message: string } | null>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
 
-  const initials = deriveInitials(user)
   const displayName = user.displayName.trim() || user.email
   const roleLabel = user.role.name
 
@@ -122,7 +122,7 @@ export function AccountMenuButton(): ReactNode {
         data-active={open ? 'true' : undefined}
         onClick={() => setOpen((current) => !current)}
       >
-        <span className={styles.initials} aria-hidden="true">{initials}</span>
+        <UserAvatar user={user} size={26} alt={null} className={styles.triggerAvatar} />
       </Button>
       {open && (
         <ContextMenu
@@ -181,14 +181,3 @@ export function AccountMenuButton(): ReactNode {
   )
 }
 
-/**
- * First letter of the display name (or email when display name is empty),
- * uppercased. Single-letter is enough today — `displayName` is a free-text
- * single field with no last-name signal to derive a second letter from.
- */
-function deriveInitials(user: CmsCurrentUser): string {
-  const source = (user.displayName.trim() || user.email).trim()
-  if (!source) return '?'
-  const firstChar = source[0]
-  return firstChar ? firstChar.toUpperCase() : '?'
-}

@@ -165,6 +165,29 @@ export async function removeCmsPlugin(
   }
 }
 
+/**
+ * POST /admin/api/cms/plugins/:id/restart — manually restart a plugin
+ * after its worker crashed past the budget. The host resets the per-plugin
+ * crash counter, drops historical crash events, terminates any stale
+ * worker, then re-loads the entrypoint and runs `activate`. Returns the
+ * fresh row + payload so the admin UI can update its state in one round.
+ */
+export async function restartCmsPlugin(
+  pluginId: string,
+  fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
+  basePath = '/admin/api/cms',
+): Promise<{ plugin?: InstalledPlugin } & CmsPluginsPayload> {
+  const res = await fetchImpl(`${basePath}/plugins/${encodeURIComponent(pluginId)}/restart`, {
+    method: 'POST',
+    credentials: 'include',
+  })
+  const body = await readEnvelope(res, PluginActionEnvelope, `CMS plugin restart failed with ${res.status}`)
+  return {
+    plugin: body.plugin as InstalledPlugin | undefined,
+    ...emptyPayload(body as Partial<CmsPluginsPayload>),
+  }
+}
+
 export interface CmsPluginPackInstallSummary {
   installed: {
     visualComponents: { id: string; name: string }[]

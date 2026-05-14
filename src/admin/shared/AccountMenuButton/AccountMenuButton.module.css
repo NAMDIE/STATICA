@@ -21,9 +21,18 @@
     justify-content: center;
     cursor: pointer;
     user-select: none;
+    overflow: hidden;
     transition:
         background-color 120ms ease,
         border-color 120ms ease;
+}
+
+/* The avatar nested inside the trigger already paints its own circle. Hide
+ * the inner ring so we don't end up with a double border, and let the
+ * button's own background show through behind the identicon. */
+.triggerAvatar {
+    border: none;
+    background: transparent;
 }
 
 .trigger:hover {
@@ -37,12 +46,6 @@
 
 .trigger:focus-visible {
     box-shadow: var(--editor-focus-ring);
-}
-
-.initials {
-    font-variant-numeric: tabular-nums;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
 }
 
 /* ── Dropdown header (display name + email + role badge) ─────────────────── */

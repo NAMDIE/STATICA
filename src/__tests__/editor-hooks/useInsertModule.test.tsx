@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test'
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { useEditorStore } from '@site/store/store'
 import { registry } from '@core/module-engine/registry'
@@ -187,8 +187,11 @@ describe('useInsertModule — VC ref redirect', () => {
     expect(page.nodes['vc-ref'].children).toEqual(['slot-1', 'slot-2'])
   })
 
-  it('Test C: warns and skips insertion when VC ref has no slot-instance children', () => {
-    // Page with a VC ref that has NO slot-instance children (edge case)
+  it('Test C: inserts as the next sibling when VC ref has no slot-instance children', () => {
+    // A VC ref with no slot-instances has nowhere to nest user content (the
+    // referenced VC declares no slot params). Treating the ref like a leaf
+    // and placing the new node as a sibling-after under its parent is the
+    // expected behaviour — silently no-op'ing on the click was the bug.
     useEditorStore.setState({
       site: makeSite({
         pages: [
@@ -220,8 +223,6 @@ describe('useInsertModule — VC ref redirect', () => {
       hasUnsavedChanges: false,
     } as Parameters<typeof useEditorStore.setState>[0])
 
-    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {})
-
     const textMod = registry.get('base.text')
     expect(textMod).toBeTruthy()
 
@@ -229,20 +230,22 @@ describe('useInsertModule — VC ref redirect', () => {
     let insertedId: string | null | undefined
     act(() => { insertedId = result.current(textMod!) })
 
-    // Hook must return null (insertion skipped)
-    expect(insertedId).toBeNull()
+    // The hook must return the new node's id (insertion happened).
+    expect(insertedId).toBeTruthy()
 
-    // console.warn must have been called with the expected prefix
-    expect(warnSpy).toHaveBeenCalled()
-    const warnArgs = warnSpy.mock.calls[0]
-    expect(warnArgs[0]).toMatch(/\[useInsertModule\]/)
-
-    // VC ref must still have no children
     const state = useEditorStore.getState()
-    const vcRef = state.site!.pages[0].nodes['vc-ref']
+    const page = state.site!.pages[0]
+
+    // VC ref still has no children (the new node is its sibling, not a child).
+    const vcRef = page.nodes['vc-ref']
     expect(vcRef.children).toEqual([])
 
-    warnSpy.mockRestore()
+    // New node lands as the next sibling of vc-ref under root.
+    const root = page.nodes['root']
+    expect(root.children.length).toBe(2)
+    expect(root.children[0]).toBe('vc-ref')
+    expect(root.children[1]).toBe(insertedId!)
+    expect(page.nodes[insertedId!].moduleId).toBe('base.text')
   })
 })
 

@@ -281,3 +281,86 @@ export async function deletePluginRecord(
   `
   return rowCount > 0
 }
+
+// ---------------------------------------------------------------------------
+// Plugin crash events — persisted history of plugin worker crashes so the
+// admin UI can show "Recent issues" for each plugin without operators
+// having to read server stdout. Capped at MAX_CRASH_EVENTS_PER_PLUGIN per
+// plugin id (rolling window) to bound DB growth.
+// ---------------------------------------------------------------------------
+
+const MAX_CRASH_EVENTS_PER_PLUGIN = 50
+
+export interface PluginCrashEvent {
+  id: string
+  pluginId: string
+  occurredAt: string
+  reason: string
+  stack: string | null
+}
+
+interface PluginCrashEventRow {
+  id: string
+  plugin_id: string
+  occurred_at: Date | string
+  reason: string
+  stack: string | null
+}
+
+function mapPluginCrashEvent(row: PluginCrashEventRow): PluginCrashEvent {
+  return {
+    id: row.id,
+    pluginId: row.plugin_id,
+    occurredAt: toIsoString(row.occurred_at),
+    reason: row.reason,
+    stack: row.stack ?? null,
+  }
+}
+
+/** Insert a new crash event row + prune older rows past the cap. */
+export async function recordPluginCrash(
+  db: DbClient,
+  input: { id: string; pluginId: string; reason: string; stack?: string | null },
+): Promise<PluginCrashEvent> {
+  const { rows } = await db<PluginCrashEventRow>`
+    insert into plugin_crash_events (id, plugin_id, reason, stack)
+    values (${input.id}, ${input.pluginId}, ${input.reason}, ${input.stack ?? null})
+    returning id, plugin_id, occurred_at, reason, stack
+  `
+
+  // Roll the window — keep only the N most recent events for this plugin.
+  // Done as a separate statement (not a CTE) to stay dialect-naive: ANSI
+  // SQL guarantees this works on both PG and SQLite.
+  await db`
+    delete from plugin_crash_events
+    where plugin_id = ${input.pluginId}
+      and id not in (
+        select id from plugin_crash_events
+        where plugin_id = ${input.pluginId}
+        order by occurred_at desc
+        limit ${MAX_CRASH_EVENTS_PER_PLUGIN}
+      )
+  `
+  return mapPluginCrashEvent(rows[0])
+}
+
+/** List the most-recent crash events for one plugin, newest first. */
+export async function listPluginCrashes(
+  db: DbClient,
+  pluginId: string,
+  limit = MAX_CRASH_EVENTS_PER_PLUGIN,
+): Promise<PluginCrashEvent[]> {
+  const { rows } = await db<PluginCrashEventRow>`
+    select id, plugin_id, occurred_at, reason, stack
+    from plugin_crash_events
+    where plugin_id = ${pluginId}
+    order by occurred_at desc
+    limit ${limit}
+  `
+  return rows.map(mapPluginCrashEvent)
+}
+
+/** Drop every crash event for a plugin. Called on uninstall + on manual restart. */
+export async function clearPluginCrashes(db: DbClient, pluginId: string): Promise<void> {
+  await db`delete from plugin_crash_events where plugin_id = ${pluginId}`
+}

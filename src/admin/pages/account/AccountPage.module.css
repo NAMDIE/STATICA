@@ -151,25 +151,34 @@
 
 .profileGrid {
     display: grid;
-    grid-template-columns: 96px minmax(0, 1fr);
+    grid-template-columns: minmax(96px, auto) minmax(0, 1fr);
     gap: 20px;
     align-items: start;
 }
 
-.avatarCircle {
+.avatarColumn {
+    display: grid;
+    gap: 10px;
+    justify-items: start;
     width: 96px;
-    height: 96px;
-    border-radius: 999px;
-    border: 1px solid var(--editor-border);
-    background: var(--editor-surface-2);
-    color: var(--editor-text-bright);
+}
+
+.avatarActions {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 36px;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
+    flex-wrap: wrap;
+    gap: 6px;
+    width: 100%;
+}
+
+.avatarHint {
+    margin: 0;
+    color: var(--editor-text-muted);
+    font-size: 10px;
+    line-height: 1.4;
+}
+
+.hiddenFileInput {
+    display: none;
 }
 
 .profileFields {
@@ -285,6 +294,11 @@
 @media (max-width: 760px) {
     .profileGrid {
         grid-template-columns: 1fr;
+    }
+
+    .avatarColumn {
+        width: auto;
+        justify-items: start;
     }
 
     .sectionHeader {

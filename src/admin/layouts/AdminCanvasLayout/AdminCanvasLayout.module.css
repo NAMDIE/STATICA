@@ -34,13 +34,12 @@
   border-top-right-radius: 12px;
 }
 
-:global(::view-transition-old(admin-left-sidebar-panel)),
-:global(::view-transition-new(admin-left-sidebar-panel)),
-:global(::view-transition-old(admin-right-sidebar-panel)),
-:global(::view-transition-new(admin-right-sidebar-panel)),
-:global(::view-transition-old(admin-toolbar-controls)),
-:global(::view-transition-new(admin-toolbar-controls)) {
-  animation-duration: 160ms;
+/* Root cross-fade between admin pages — sidebars and toolbar share this single
+   page-level fade, no per-region named view transitions. Tweaking this duration
+   tunes the entire admin navigation feel. */
+:global(::view-transition-old(root)),
+:global(::view-transition-new(root)) {
+  animation-duration: 100ms;
   animation-timing-function: ease;
 }
 
@@ -70,12 +69,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :global(::view-transition-old(admin-left-sidebar-panel)),
-  :global(::view-transition-new(admin-left-sidebar-panel)),
-  :global(::view-transition-old(admin-right-sidebar-panel)),
-  :global(::view-transition-new(admin-right-sidebar-panel)),
-  :global(::view-transition-old(admin-toolbar-controls)),
-  :global(::view-transition-new(admin-toolbar-controls)) {
+  :global(::view-transition-old(root)),
+  :global(::view-transition-new(root)) {
     animation-duration: 0.01ms;
   }
 }

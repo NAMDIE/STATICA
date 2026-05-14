@@ -29,7 +29,7 @@ Plugins declare requested permissions in `plugin.json`. The CMS shows those perm
 | `editor.commands` | Editor | Medium | Register commands callable from editor UI. |
 | `editor.store.read` | Editor | Medium | Read current editor store state. |
 | `editor.store.write` | Editor | High | Mutate editor store state through a host transaction. |
-| `editor.canvas` | Editor | High | Reserved for canvas-level APIs. |
+| `editor.canvas` | Editor | High | Register canvas overlay React components (annotation pins, custom selection adornments, measurement tools) via `api.editor.canvas.registerOverlay`. |
 | `editor.panels` | Editor | Medium | Register left-sidebar panels (custom inspectors, plugin dashboards) via `api.editor.panels.register`. |
 | `modules.register` | Editor, manifest | High | Ship new modules that show up in the canvas module library. |
 | `loops.register` | Editor, server, manifest | Medium | Register new entity sources for the `base.loop` module. |

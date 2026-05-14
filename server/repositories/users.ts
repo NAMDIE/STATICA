@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { nanoid } from 'nanoid'
 import type { DbClient } from '../db/client'
 import { normalizeCapabilities, type CoreCapability } from '../auth/capabilities'
@@ -20,6 +21,13 @@ export interface CmsUser {
   role: UserRole
   capabilities: CoreCapability[]
   lastLoginAt: string | null
+  failedLoginCount: number
+  lockedUntil: string | null
+  avatarMediaId: string | null
+  /** Public path of the uploaded avatar (resolved from media_assets), or null. */
+  avatarUrl: string | null
+  /** SHA-256 hex of the normalized email — drives the Gravatar fallback URL. */
+  gravatarHash: string
   createdAt: string
   updatedAt: string
 }
@@ -34,6 +42,7 @@ interface JoinedUserRow extends UserRow {
   role_description: string
   role_is_system: boolean | number
   role_capabilities_json: unknown
+  avatar_public_path: string | null
 }
 
 export class UserMutationError extends Error {
@@ -50,9 +59,19 @@ function normalizeEmail(email: string): string {
   return email.trim().toLowerCase()
 }
 
-function dateString(value: Date | string | null): string | null {
-  if (value === null) return null
+function dateString(value: Date | string | null | undefined): string | null {
+  if (value == null) return null
   return new Date(value).toISOString()
+}
+
+/**
+ * SHA-256 hex of the normalized email. Gravatar accepts both MD5 and SHA-256
+ * hashes; we use SHA-256 because Node/Bun ship it natively and it's the modern
+ * default. The hash is recomputed on every read — there's no value in caching
+ * it (cheap to derive, always tracks `email` mutations).
+ */
+function computeGravatarHash(email: string): string {
+  return createHash('sha256').update(normalizeEmail(email)).digest('hex')
 }
 
 export function rowToUser(row: JoinedUserRow): AuthUser {
@@ -74,6 +93,11 @@ export function rowToUser(row: JoinedUserRow): AuthUser {
     capabilities,
     passwordHash: row.password_hash,
     lastLoginAt: dateString(row.last_login_at),
+    failedLoginCount: Number(row.failed_login_count ?? 0),
+    lockedUntil: dateString(row.locked_until),
+    avatarMediaId: row.avatar_media_id ?? null,
+    avatarUrl: row.avatar_public_path ?? null,
+    gravatarHash: computeGravatarHash(row.email),
     createdAt: dateString(row.created_at)!,
     updatedAt: dateString(row.updated_at)!,
   }
@@ -88,6 +112,11 @@ export function toPublicUser(user: AuthUser): CmsUser {
     role: user.role,
     capabilities: user.capabilities,
     lastLoginAt: user.lastLoginAt,
+    failedLoginCount: user.failedLoginCount,
+    lockedUntil: user.lockedUntil,
+    avatarMediaId: user.avatarMediaId,
+    avatarUrl: user.avatarUrl,
+    gravatarHash: user.gravatarHash,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   }
@@ -103,6 +132,9 @@ export async function listUsers(db: DbClient): Promise<CmsUser[]> {
            users.status,
            users.role_id,
            users.last_login_at,
+           users.failed_login_count,
+           users.locked_until,
+           users.avatar_media_id,
            users.created_at,
            users.updated_at,
            users.deleted_at,
@@ -110,9 +142,11 @@ export async function listUsers(db: DbClient): Promise<CmsUser[]> {
            roles.name as role_name,
            roles.description as role_description,
            roles.is_system as role_is_system,
-           roles.capabilities_json as role_capabilities_json
+           roles.capabilities_json as role_capabilities_json,
+           media_assets.public_path as avatar_public_path
     from users
     join roles on roles.id = users.role_id
+    left join media_assets on media_assets.id = users.avatar_media_id
     where users.deleted_at is null
     order by users.created_at asc
   `
@@ -129,6 +163,9 @@ export async function findUserById(db: DbClient, userId: string): Promise<AuthUs
            users.status,
            users.role_id,
            users.last_login_at,
+           users.failed_login_count,
+           users.locked_until,
+           users.avatar_media_id,
            users.created_at,
            users.updated_at,
            users.deleted_at,
@@ -136,9 +173,11 @@ export async function findUserById(db: DbClient, userId: string): Promise<AuthUs
            roles.name as role_name,
            roles.description as role_description,
            roles.is_system as role_is_system,
-           roles.capabilities_json as role_capabilities_json
+           roles.capabilities_json as role_capabilities_json,
+           media_assets.public_path as avatar_public_path
     from users
     join roles on roles.id = users.role_id
+    left join media_assets on media_assets.id = users.avatar_media_id
     where users.id = ${userId}
       and users.deleted_at is null
     limit 1
@@ -156,6 +195,9 @@ export async function findUserByEmail(db: DbClient, email: string): Promise<Auth
            users.status,
            users.role_id,
            users.last_login_at,
+           users.failed_login_count,
+           users.locked_until,
+           users.avatar_media_id,
            users.created_at,
            users.updated_at,
            users.deleted_at,
@@ -163,9 +205,11 @@ export async function findUserByEmail(db: DbClient, email: string): Promise<Auth
            roles.name as role_name,
            roles.description as role_description,
            roles.is_system as role_is_system,
-           roles.capabilities_json as role_capabilities_json
+           roles.capabilities_json as role_capabilities_json,
+           media_assets.public_path as avatar_public_path
     from users
     join roles on roles.id = users.role_id
+    left join media_assets on media_assets.id = users.avatar_media_id
     where users.email_normalized = ${normalizeEmail(email)}
       and users.deleted_at is null
     limit 1
@@ -198,7 +242,7 @@ export async function createUser(
   const { rows } = await db<UserRow>`
     insert into users (id, email, email_normalized, display_name, password_hash, status, role_id)
     values (${id}, ${email}, ${emailNormalized}, ${displayName}, ${input.passwordHash}, ${status}, ${input.roleId})
-    returning id, email, email_normalized, display_name, password_hash, status, role_id, last_login_at, created_at, updated_at, deleted_at
+    returning id, email, email_normalized, display_name, password_hash, status, role_id, last_login_at, failed_login_count, locked_until, avatar_media_id, created_at, updated_at, deleted_at
   `
   const created = await findUserById(db, rows[0]!.id)
   if (!created) throw new UserMutationError('User was not created', 500)
@@ -240,12 +284,34 @@ export async function updateUser(
         updated_at = current_timestamp
     where id = ${userId}
       and deleted_at is null
-    returning id, email, email_normalized, display_name, password_hash, status, role_id, last_login_at, created_at, updated_at, deleted_at
+    returning id, email, email_normalized, display_name, password_hash, status, role_id, last_login_at, failed_login_count, locked_until, avatar_media_id, created_at, updated_at, deleted_at
   `
   if (!rows[0]) return null
   const updated = await findUserById(db, rows[0].id)
   if (!updated) return null
   return toPublicUser(updated)
+}
+
+/**
+ * Update only the avatar reference on a user row. Returns the post-update
+ * public user view (with `avatarUrl` resolved via the join) or null when
+ * the target row is missing/soft-deleted.
+ */
+export async function setUserAvatarMediaId(
+  db: DbClient,
+  userId: string,
+  mediaId: string | null,
+): Promise<CmsUser | null> {
+  const result = await db`
+    update users
+    set avatar_media_id = ${mediaId},
+        updated_at = current_timestamp
+    where id = ${userId}
+      and deleted_at is null
+  `
+  if (result.rowCount === 0) return null
+  const refreshed = await findUserById(db, userId)
+  return refreshed ? toPublicUser(refreshed) : null
 }
 
 export async function softDeleteUser(db: DbClient, userId: string): Promise<boolean> {
@@ -274,7 +340,38 @@ export async function markUserLoggedIn(db: DbClient, userId: string): Promise<vo
   await db`
     update users
     set last_login_at = current_timestamp,
+        failed_login_count = 0,
+        locked_until = ${null},
         updated_at = current_timestamp
     where id = ${userId}
   `
+}
+
+/**
+ * Increment the user's failed-login counter and (if a lockout was triggered)
+ * persist the new `locked_until` deadline. Returns the post-update user row so
+ * the caller can decide whether to emit a lock audit event.
+ *
+ * Idempotent in the sense that it always runs an UPDATE; the caller is
+ * responsible for not double-counting (one call per failed attempt).
+ */
+export async function recordFailedLoginAttempt(
+  db: DbClient,
+  userId: string,
+  lockedUntil: Date | null,
+): Promise<{ failedLoginCount: number; lockedUntil: string | null } | null> {
+  const { rows } = await db<{ failed_login_count: number; locked_until: Date | string | null }>`
+    update users
+    set failed_login_count = failed_login_count + 1,
+        locked_until = ${lockedUntil},
+        updated_at = current_timestamp
+    where id = ${userId}
+      and deleted_at is null
+    returning failed_login_count, locked_until
+  `
+  if (!rows[0]) return null
+  return {
+    failedLoginCount: Number(rows[0].failed_login_count ?? 0),
+    lockedUntil: dateString(rows[0].locked_until),
+  }
 }

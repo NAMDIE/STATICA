@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from 'react'
+import { useLayoutEffect, useRef, type KeyboardEvent } from 'react'
 import { Button } from '@ui/components/Button'
 import { Textarea } from '@ui/components/Input'
 import { cn } from '@ui/cn'
@@ -16,12 +16,23 @@ interface ContentDocumentCanvasProps {
   selectedCollection: ContentCollection | null
   loading: boolean
   title: string
-  titleId: string
   blocks: ContentBlock[]
   notchActions: CanvasNotchAction[]
   canEditEntry: boolean
   canCreateEntry: boolean
+  /**
+   * Bumped by the parent whenever the title field should be re-focused
+   * (e.g. just after a new entry was created). Using a counter rather than
+   * a boolean lets us re-trigger focus for back-to-back creations.
+   */
+  focusTitleSignal: number
+  /**
+   * Bumped by the parent whenever the body editor should focus its first
+   * editable block (e.g. when Enter was pressed in the title field).
+   */
+  focusBodySignal: number
   onTitleChange: (value: string) => void
+  onTitleEnter: () => void
   onBlocksChange: (blocks: ContentBlock[]) => void
   onRequestMedia: (blockId: string) => void
   onCreateEntry: () => void
@@ -32,12 +43,14 @@ export function ContentDocumentCanvas({
   selectedCollection,
   loading,
   title,
-  titleId,
   blocks,
   notchActions,
   canEditEntry,
   canCreateEntry,
+  focusTitleSignal,
+  focusBodySignal,
   onTitleChange,
+  onTitleEnter,
   onBlocksChange,
   onRequestMedia,
   onCreateEntry,
@@ -51,6 +64,26 @@ export function ContentDocumentCanvas({
   useLayoutEffect(() => {
     resizeTitleField(titleFieldRef.current)
   }, [title])
+
+  // Focus the title field whenever the parent bumps the signal. We skip the
+  // initial mount (signal === 0) so navigating to an existing entry doesn't
+  // hijack focus.
+  useLayoutEffect(() => {
+    if (focusTitleSignal === 0) return
+    const node = titleFieldRef.current
+    if (!node || node.disabled) return
+    node.focus()
+    const length = node.value.length
+    node.setSelectionRange(length, length)
+  }, [focusTitleSignal])
+
+  function handleTitleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
+    // Title is a single-line field: Enter should jump to the body editor
+    // rather than inserting a newline.
+    event.preventDefault()
+    onTitleEnter()
+  }
 
   const addControl = bodyEnabled ? (
     <Button
@@ -85,17 +118,18 @@ export function ContentDocumentCanvas({
           <ContentCanvasLoading />
         ) : selectedEntry ? (
           <article className={styles.document}>
-            <label className={styles.titleLabel} htmlFor={titleId}>Title</label>
             <Textarea
               ref={titleFieldRef}
-              id={titleId}
               value={title}
               rows={1}
               resize="none"
+              placeholder="Untitled"
+              aria-label="Title"
               onChange={(event) => {
                 resizeTitleField(event.currentTarget)
                 onTitleChange(event.target.value)
               }}
+              onKeyDown={handleTitleKeyDown}
               disabled={!editorEnabled}
               className={styles.titleInput}
               fieldSize="md"
@@ -105,6 +139,7 @@ export function ContentDocumentCanvas({
               <RichMarkdownEditor
                 blocks={blocks}
                 readOnly={!editorEnabled}
+                focusSignal={focusBodySignal}
                 onChange={onBlocksChange}
                 onMediaRequest={onRequestMedia}
               />

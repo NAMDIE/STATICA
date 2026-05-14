@@ -10,7 +10,26 @@
  */
 import { GlobalWindow } from 'happy-dom'
 
-const happyWindow = new GlobalWindow({ url: 'http://localhost/' })
+// happy-dom auto-fetches and parses every `<link rel="stylesheet">` inserted
+// into the document — including the Google Fonts CSS that
+// `loadFontPreview()` injects from `src/core/fonts/preview.ts`. The fetched
+// CSS contains selectors happy-dom's parser can't represent, and the
+// internal SyntaxError it throws crashes on `new this.window.SyntaxError(...)`
+// in deno-style noise between test files (the link load is async and outlives
+// the test that triggered it). Disabling CSS file loading silences the noise
+// without affecting any assertion — no test actually inspects the parsed
+// CSSRules from a `<link>` tag.
+//
+// Equivalent: `disableJavaScriptFileLoading: true` also disables the
+// JavaScript loader that would otherwise fetch `<script src>` URLs from
+// canvas previews.
+const happyWindow = new GlobalWindow({
+  url: 'http://localhost/',
+  settings: {
+    disableCSSFileLoading: true,
+    disableJavaScriptFileLoading: true,
+  },
+})
 
 // Assign the window and document globals first — other globals are derived from these
 ;(globalThis as Record<string, unknown>).window = happyWindow
@@ -89,4 +108,28 @@ for (const key of GLOBALS_TO_COPY) {
   if (val !== undefined) {
     ;(globalThis as Record<string, unknown>)[key] = val
   }
+}
+
+// happy-dom does not implement EventSource, but several admin layouts
+// (AdminPageLayout, AdminCanvasLayout) construct one on mount via the
+// plugin event bridge. Provide a no-op stub so tests can render those
+// layouts without each test file needing its own polyfill.
+if (typeof (globalThis as { EventSource?: unknown }).EventSource === 'undefined') {
+  class StubEventSource {
+    readonly url: string
+    readonly withCredentials: boolean
+    readonly readyState: number = 1
+    onopen: ((this: StubEventSource, ev: Event) => unknown) | null = null
+    onmessage: ((this: StubEventSource, ev: MessageEvent) => unknown) | null = null
+    onerror: ((this: StubEventSource, ev: Event) => unknown) | null = null
+    constructor(url: string | URL, init?: { withCredentials?: boolean }) {
+      this.url = typeof url === 'string' ? url : url.toString()
+      this.withCredentials = Boolean(init?.withCredentials)
+    }
+    addEventListener(): void {}
+    removeEventListener(): void {}
+    dispatchEvent(): boolean { return true }
+    close(): void {}
+  }
+  ;(globalThis as { EventSource?: unknown }).EventSource = StubEventSource as unknown
 }

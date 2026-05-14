@@ -281,7 +281,7 @@ Catalog as of latest. The Settings → Preferences screen renders this list auto
 | Editor | `autoSaveDelay` | select (5s/15s/30s/60s/5min) | `'30'` | `usePersistence.ts` (`readAutoSaveDelayMs`) |
 | Editor | `hoverPreview` | boolean | `true` | `ClassPicker.tsx` (class suggestions) + `SpacingBoxControl.tsx` (spacing tokens) — covers all transient "hover this and see the canvas update" flows |
 | Editor | `confirmBeforeDelete` | boolean | `false` | `ConfirmDeleteProvider` (canvas Delete + layers context menu) |
-| Editor | `density` | select (compact / comfortable) | `'compact'` | `data-editor-density` on `AdminLayout` root → CSS vars on `TreeRow` etc. |
+| Editor | `density` | select (compact / comfortable) | `'compact'` | `data-editor-density` on `AdminCanvasLayout` root → CSS vars on `TreeRow` etc. |
 | Canvas | `defaultBreakpoint` | select-dynamic (`site.breakpoints`) | `'desktop'` | `applyDefaultBreakpointPreference` in `usePersistence.ts` |
 | Canvas | `dimInactiveBreakpoints` | boolean | `true` | `CanvasRoot.tsx` `focusActiveBreakpoint` |
 | Layers panel | `layersShowIcon` | boolean | `true` | `TreeNode.tsx` |
@@ -293,7 +293,7 @@ Catalog as of latest. The Settings → Preferences screen renders this list auto
 
 ### Confirm-before-delete flow
 
-`confirmBeforeDelete` runs through a single shared `<ConfirmDeleteProvider/>` mounted in `AdminLayout`. Components call `useConfirmDelete()` and pass a `commit` callback:
+`confirmBeforeDelete` runs through a single shared `<ConfirmDeleteProvider/>` mounted in `AdminCanvasLayout`. Components call `useConfirmDelete()` and pass a `commit` callback:
 
 ```tsx
 const confirmDelete = useConfirmDelete()
@@ -340,7 +340,7 @@ Notes:
 
 ### Density attribute
 
-`AdminLayout` reads `useEditorSelectPreference('density')` and sets `data-editor-density="compact"` (default) or `"comfortable"` on the root `<div>`. Surfaces that respond to density use scoped `:global([data-editor-density='comfortable'])` selectors in their CSS module to override their default values:
+`AdminCanvasLayout` reads `useEditorSelectPreference('density')` and sets `data-editor-density="compact"` (default) or `"comfortable"` on the root `<div>`. Surfaces that respond to density use scoped `:global([data-editor-density='comfortable'])` selectors in their CSS module to override their default values:
 
 ```css
 /* TreeRow.module.css */
@@ -369,7 +369,7 @@ Behaviours we identified during the codebase sweep that are still hardcoded. Pic
 
 #### `dragActivationDistance` — drag threshold (number)
 
-- Today: `activationConstraint: { distance: 5 }` in `DomPanel.tsx` and `AdminLayout.tsx`.
+- Today: `activationConstraint: { distance: 5 }` in `DomPanel.tsx` and `AdminCanvasLayout.tsx`.
 - Shape: needs the `'number'` preference type, which doesn't exist yet.
 
 #### `layersHighlightContainerGroup` — selected-container group highlight (boolean)

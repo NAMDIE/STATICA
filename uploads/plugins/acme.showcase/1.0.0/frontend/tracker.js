@@ -1,4 +1,4 @@
-// examples/plugins/showcase/frontend/tracker.ts
+// frontend/tracker.ts
 (function init() {
   const pb = window.__pb;
   if (!pb || !pb.tracker) {

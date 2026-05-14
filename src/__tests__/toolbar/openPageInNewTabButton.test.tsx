@@ -1,9 +1,51 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import React from 'react'
+import React, { type ReactNode } from 'react'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { MemoryRouter } from '@admin/lib/routing'
 import { Toolbar } from '@site/toolbar'
+import { AdminSessionProvider } from '@admin/session'
+import { StepUpProvider } from '@admin/shared/StepUp'
 import { useEditorStore } from '@site/store/store'
+import type { CmsCurrentUser } from '@core/persistence'
 import { makePage, makeSite } from '../fixtures'
+
+const now = '2026-05-07T10:00:00.000Z'
+
+function toolbarUser(): CmsCurrentUser {
+  return {
+    id: 'toolbar-user',
+    email: 'admin@example.com',
+    displayName: 'Admin',
+    status: 'active',
+    role: {
+      id: 'admin',
+      slug: 'admin',
+      name: 'Admin',
+      description: '',
+      isSystem: true,
+      capabilities: ['site.read', 'site.edit', 'pages.edit', 'pages.publish'],
+    },
+    capabilities: ['site.read', 'site.edit', 'pages.edit', 'pages.publish'],
+    lastLoginAt: null,
+    failedLoginCount: 0,
+    lockedUntil: null,
+    avatarMediaId: null,
+    avatarUrl: null,
+    gravatarHash: '',
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
+function Wrapper({ children }: { children: ReactNode }) {
+  return (
+    <MemoryRouter>
+      <AdminSessionProvider user={toolbarUser()}>
+        <StepUpProvider>{children}</StepUpProvider>
+      </AdminSessionProvider>
+    </MemoryRouter>
+  )
+}
 
 let originalFetch: typeof fetch
 
@@ -41,7 +83,7 @@ describe('Toolbar publishing actions', () => {
     }) as typeof window.open
 
     try {
-      render(<Toolbar />)
+      render(<Wrapper><Toolbar /></Wrapper>)
 
       const toolbar = screen.getByTestId('toolbar')
       fireEvent.click(within(toolbar).getByRole('button', { name: /more publishing actions/i }))

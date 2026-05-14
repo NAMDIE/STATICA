@@ -18,6 +18,7 @@ if (!G) {
 
 export const PLUGIN_API_VERSION = G.PLUGIN_API_VERSION
 export const definePluginPanel = G.definePluginPanel
+export const definePluginCanvasOverlay = G.definePluginCanvasOverlay
 export const definePluginAdminApp = G.definePluginAdminApp
 export const definePlugin = G.definePlugin
 export const defineModule = G.defineModule

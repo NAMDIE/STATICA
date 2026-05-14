@@ -66,3 +66,9 @@ export type {
   PluginEditorPanelComponent,
   PluginEditorPanelProps,
 } from './panel'
+export { definePluginCanvasOverlay } from './canvasOverlay'
+export type {
+  DefinePluginCanvasOverlayConfig,
+  PluginCanvasOverlayComponent,
+  PluginCanvasOverlayProps,
+} from './canvasOverlay'

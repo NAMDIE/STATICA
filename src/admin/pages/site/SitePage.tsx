@@ -1,5 +1,14 @@
 import { AdminCanvasLayout } from '@admin/layouts'
 
+// Register base modules with the global registry. Kept here (not in
+// AdminEntry / main.tsx) so the publisher / page-tree / sanitize stack only
+// ships in the lazy SitePage chunk — admins who never open the visual editor
+// (Users-only role, Content-only role, Account page, etc.) never download it.
+import '@modules/base'
+// Register built-in loop sources so the Properties Panel + editor preview
+// can pick them up. Same lazy-chunk reasoning as the modules import above.
+import '@core/loops/sources'
+
 /**
  * SitePage — the visual page-builder workspace.
  *

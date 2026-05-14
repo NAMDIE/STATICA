@@ -69,6 +69,10 @@ export function canAccessWorkspace(user: CmsCurrentUser | null, workspace: Admin
       return hasCapability(user, 'plugins.manage')
     case 'users':
       return canAccessUsersWorkspace(user)
+    case 'account':
+      // Self-targeted page — every authenticated user can manage their own
+      // profile + devices. Anonymous visitors fall through to false.
+      return user !== null
   }
 }
 
@@ -89,5 +93,7 @@ export function workspacePath(workspace: AdminWorkspace): string {
       return '/admin/users'
     case 'pluginPage':
       return '/admin/plugins'
+    case 'account':
+      return '/admin/account'
   }
 }

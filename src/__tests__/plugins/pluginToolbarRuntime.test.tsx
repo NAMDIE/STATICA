@@ -1,10 +1,52 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import React from 'react'
+import React, { type ReactNode } from 'react'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter } from '@admin/lib/routing'
 import { Toolbar } from '@site/toolbar'
+import { AdminSessionProvider } from '@admin/session'
+import { StepUpProvider } from '@admin/shared/StepUp'
 import { pluginRuntime } from '@core/plugins/runtime'
 import { useEditorStore } from '@site/store/store'
+import type { CmsCurrentUser } from '@core/persistence'
 import { makeSite } from '../fixtures'
+
+const now = '2026-05-07T10:00:00.000Z'
+
+function adminUser(): CmsCurrentUser {
+  return {
+    id: 'toolbar-user',
+    email: 'admin@example.com',
+    displayName: 'Toolbar User',
+    status: 'active',
+    role: {
+      id: 'admin',
+      slug: 'admin',
+      name: 'Admin',
+      description: '',
+      isSystem: true,
+      capabilities: ['site.read', 'site.edit'],
+    },
+    capabilities: ['site.read', 'site.edit'],
+    lastLoginAt: null,
+    failedLoginCount: 0,
+    lockedUntil: null,
+    avatarMediaId: null,
+    avatarUrl: null,
+    gravatarHash: '',
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
+function Wrapper({ children }: { children: ReactNode }) {
+  return (
+    <MemoryRouter>
+      <AdminSessionProvider user={adminUser()}>
+        <StepUpProvider>{children}</StepUpProvider>
+      </AdminSessionProvider>
+    </MemoryRouter>
+  )
+}
 
 beforeEach(() => {
   const site = makeSite({ name: 'Runtime Site' })
@@ -39,7 +81,11 @@ describe('Toolbar plugin runtime buttons', () => {
       command: 'workflow.approve',
     })
 
-    render(<Toolbar rightSlot={<span>right</span>} />)
+    render(
+      <Wrapper>
+        <Toolbar rightSlot={<span>right</span>} />
+      </Wrapper>,
+    )
 
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
 
@@ -60,7 +106,11 @@ describe('Toolbar plugin runtime buttons', () => {
       command: 'workflow.requestApproval',
     })
 
-    render(<Toolbar rightSlot={<span>right</span>} />)
+    render(
+      <Wrapper>
+        <Toolbar rightSlot={<span>right</span>} />
+      </Wrapper>,
+    )
 
     fireEvent.click(screen.getByRole('button', { name: 'Request Approval' }))
 

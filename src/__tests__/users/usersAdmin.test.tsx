@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
+import type { ReactNode } from 'react'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from '@admin/lib/routing'
 import { UsersPage } from '@users/UsersPage'
 import { AdminSessionProvider } from '@admin/session'
+import { StepUpProvider } from '@admin/shared/StepUp'
 import { useEditorStore } from '@site/store/store'
 import type { CmsCurrentUser } from '@core/persistence'
 import { makeSite } from '../fixtures'
@@ -130,6 +132,41 @@ function json(body: unknown, status = 200) {
   })
 }
 
+/**
+ * Ambient fetch fallback for endpoints AdminPageLayout calls on mount
+ * (site load, plugin list) so individual tests don't have to enumerate
+ * them. Returns `undefined` for non-ambient URLs — the caller's own
+ * handler should still answer those.
+ */
+function ambientFetchFallback(url: string): Response | undefined {
+  if (url.endsWith('/admin/api/cms/plugins')) {
+    return json({ plugins: [], adminPages: [] })
+  }
+  if (url.endsWith('/admin/api/cms/site')) {
+    return json({ site: null }, 404)
+  }
+  if (url.endsWith('/admin/api/cms/site/publish-status')) {
+    return json({ ok: false }, 404)
+  }
+  return undefined
+}
+
+function Wrapper({
+  user,
+  children,
+}: {
+  user: CmsCurrentUser
+  children: ReactNode
+}) {
+  return (
+    <MemoryRouter>
+      <AdminSessionProvider user={user}>
+        <StepUpProvider>{children}</StepUpProvider>
+      </AdminSessionProvider>
+    </MemoryRouter>
+  )
+}
+
 function currentUser(capabilities: string[]): CmsCurrentUser {
   return {
     id: 'current-user',
@@ -146,6 +183,11 @@ function currentUser(capabilities: string[]): CmsCurrentUser {
     },
     capabilities,
     lastLoginAt: null,
+    failedLoginCount: 0,
+    lockedUntil: null,
+    avatarMediaId: null,
+    avatarUrl: null,
+    gravatarHash: '',
     createdAt: now,
     updatedAt: now,
   }
@@ -191,6 +233,8 @@ beforeEach(() => {
     if (url === '/admin/api/cms/users' && init?.method === 'GET') return json({ users })
     if (url === '/admin/api/cms/roles' && init?.method === 'GET') return json({ roles })
     if (url === '/admin/api/cms/audit' && init?.method === 'GET') return json({ events: auditEvents })
+    const ambient = ambientFetchFallback(url)
+    if (ambient) return ambient
     return json({ error: `Unhandled ${url}` }, 500)
   }
 })
@@ -209,15 +253,15 @@ describe('UsersPage', () => {
       if (url === '/admin/api/cms/users' && init?.method === 'GET') return json({ users })
       if (url === '/admin/api/cms/roles' && init?.method === 'GET') return json({ roles })
       if (url === '/admin/api/cms/audit' && init?.method === 'GET') return json({ events: auditEvents })
+      const ambient = ambientFetchFallback(url)
+      if (ambient) return ambient
       return json({ error: `Unhandled ${url}` }, 500)
     }
 
     render(
-      <MemoryRouter>
-        <AdminSessionProvider user={currentUser(['users.manage'])}>
-          <UsersPage />
-        </AdminSessionProvider>
-      </MemoryRouter>,
+      <Wrapper user={currentUser(['users.manage'])}>
+        <UsersPage />
+      </Wrapper>,
     )
 
     expect(await screen.findByRole('table', { name: 'Users' })).toBeDefined()
@@ -238,15 +282,15 @@ describe('UsersPage', () => {
       if (url === '/admin/api/cms/users' && init?.method === 'GET') return json({ users })
       if (url === '/admin/api/cms/roles' && init?.method === 'GET') return json({ roles })
       if (url === '/admin/api/cms/audit' && init?.method === 'GET') return json({ events: auditEvents })
+      const ambient = ambientFetchFallback(url)
+      if (ambient) return ambient
       return json({ error: `Unhandled ${url}` }, 500)
     }
 
     render(
-      <MemoryRouter>
-        <AdminSessionProvider user={currentUser(['roles.manage'])}>
-          <UsersPage />
-        </AdminSessionProvider>
-      </MemoryRouter>,
+      <Wrapper user={currentUser(['roles.manage'])}>
+        <UsersPage />
+      </Wrapper>,
     )
 
     expect(await screen.findByRole('table', { name: 'Roles' })).toBeDefined()
@@ -267,6 +311,8 @@ describe('UsersPage', () => {
       if (url === '/admin/api/cms/users' && init?.method === 'GET') return json({ users })
       if (url === '/admin/api/cms/roles' && init?.method === 'GET') return json({ roles })
       if (url === '/admin/api/cms/audit' && init?.method === 'GET') return json({ events: auditEvents })
+      const ambient = ambientFetchFallback(url)
+      if (ambient) return ambient
       return json({ error: `Unhandled ${url}` }, 500)
     }
     useEditorStore.setState({
@@ -275,11 +321,9 @@ describe('UsersPage', () => {
     } as Parameters<typeof useEditorStore.setState>[0])
 
     render(
-      <MemoryRouter>
-        <AdminSessionProvider user={currentUser(['audit.read'])}>
-          <UsersPage />
-        </AdminSessionProvider>
-      </MemoryRouter>,
+      <Wrapper user={currentUser(['audit.read'])}>
+        <UsersPage />
+      </Wrapper>,
     )
 
     expect(await screen.findByRole('table', { name: 'Audit events' })).toBeDefined()
@@ -302,9 +346,9 @@ describe('UsersPage', () => {
 
   it('locks the owner row and exposes edit/reset actions for regular users', async () => {
     render(
-      <MemoryRouter>
+      <Wrapper user={currentUser(['users.manage', 'roles.manage', 'audit.read'])}>
         <UsersPage />
-      </MemoryRouter>,
+      </Wrapper>,
     )
 
     expect(screen.queryByRole('heading', { name: 'Create User' })).toBeNull()
@@ -354,9 +398,9 @@ describe('UsersPage', () => {
 
   it('renders roles as a compact table and keeps full capability details in a dialog', async () => {
     render(
-      <MemoryRouter>
+      <Wrapper user={currentUser(['users.manage', 'roles.manage', 'audit.read'])}>
         <UsersPage />
-      </MemoryRouter>,
+      </Wrapper>,
     )
 
     fireEvent.click(await screen.findByRole('button', { name: 'Roles' }))
@@ -412,9 +456,9 @@ describe('UsersPage', () => {
 
   it('renders audit events as human-readable activity rows', async () => {
     render(
-      <MemoryRouter>
+      <Wrapper user={currentUser(['users.manage', 'roles.manage', 'audit.read'])}>
         <UsersPage />
-      </MemoryRouter>,
+      </Wrapper>,
     )
 
     fireEvent.click(await screen.findByRole('button', { name: 'Audit' }))

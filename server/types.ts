@@ -28,7 +28,24 @@ export interface UserRow {
   status: UserStatus
   role_id: string
   last_login_at: Date | string | null
+  failed_login_count: number
+  locked_until: Date | string | null
+  avatar_media_id: string | null
   created_at: Date | string
   updated_at: Date | string
   deleted_at: Date | string | null
+}
+
+export interface SessionRow {
+  id_hash: string
+  user_id: string
+  device_label: string
+  ip_address: string | null
+  user_agent: string | null
+  created_at: Date | string
+  last_seen_at: Date | string
+  expires_at: Date | string
+  revoked_at: Date | string | null
+  mfa_passed_at: Date | string | null
+  step_up_expires_at: Date | string | null
 }

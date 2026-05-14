@@ -22,3 +22,5 @@ export const usePluginSettings = G.usePluginSettings
 export const usePluginContext = G.usePluginContext
 export const usePluginRoutes = G.usePluginRoutes
 export const useEditorCommand = G.useEditorCommand
+export const useCanvasNodeRect = G.useCanvasNodeRect
+export const useCanvasViewport = G.useCanvasViewport

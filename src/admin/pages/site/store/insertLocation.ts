@@ -16,9 +16,12 @@
  *     slot-instance children are managed by the editor), but user-authored
  *     content goes inside the FIRST slot-instance, not as a direct child of
  *     the ref. We redirect into that slot here so callers don't have to
- *     repeat the logic. A ref without any slot-instances is a defensive
- *     dead-end (syncSlotInstances guarantees it can't happen) — return null
- *     rather than inserting orphan content.
+ *     repeat the logic. A VC ref WITHOUT any slot-instances (the component
+ *     declares no slot params) is treated as a leaf — there is no addressable
+ *     place to nest user content, so we fall through to sibling-after under
+ *     the ref's parent. The earlier behaviour of returning null silently
+ *     no-op'd every right-click "Insert module here" / paste on a slotless
+ *     VC ref, which read as a broken click in the editor.
  */
 
 import { registry } from '@core/module-engine/registry'
@@ -28,6 +31,20 @@ export interface InsertLocation {
   parentId: string
   /** Insertion index inside parent. Undefined means "append to end". */
   index: number | undefined
+}
+
+/**
+ * Sibling-after fallback: insert at `target`'s parent, right after `target`.
+ * Returns null only when the target has no parent (e.g. the root) — that's
+ * the genuine dead-end case where the caller has nowhere to place content.
+ */
+function siblingAfter(page: Page, targetNodeId: string): InsertLocation | null {
+  const parent = Object.values(page.nodes).find((n) =>
+    n.children.includes(targetNodeId),
+  )
+  if (!parent) return null
+  const idx = parent.children.indexOf(targetNodeId)
+  return { parentId: parent.id, index: idx >= 0 ? idx + 1 : undefined }
 }
 
 export function resolveInsertLocation(
@@ -45,29 +62,23 @@ export function resolveInsertLocation(
 
   if (!acceptsChildren) {
     // Leaf target → insert as next sibling under target's parent.
-    const parent = Object.values(page.nodes).find((n) =>
-      n.children.includes(targetNodeId),
-    )
-    if (!parent) return null
-    const idx = parent.children.indexOf(targetNodeId)
-    return { parentId: parent.id, index: idx >= 0 ? idx + 1 : undefined }
+    return siblingAfter(page, targetNodeId)
   }
 
   // base.visual-component-ref is a container, but user content must land
   // inside its first slot-instance child — direct children are managed by
   // syncSlotInstances. The redirect happens here so every caller doesn't
-  // repeat the logic.
+  // repeat the logic. When the referenced component has no slot params there
+  // are no slot-instances to land in, so we treat the ref as a leaf and place
+  // the new node as a sibling-after under its parent.
   if (target.moduleId === 'base.visual-component-ref') {
     const slotInstanceChildId = target.children.find(
       (childId) => page.nodes[childId]?.moduleId === 'base.slot-instance',
     )
-    if (!slotInstanceChildId) {
-      // Defensive: a VC ref without slot-instances shouldn't exist post-
-      // syncSlotInstances. Surface the dead-end rather than insert orphan
-      // content into a ref that the publisher would discard.
-      return null
+    if (slotInstanceChildId) {
+      return { parentId: slotInstanceChildId, index: undefined }
     }
-    return { parentId: slotInstanceChildId, index: undefined }
+    return siblingAfter(page, targetNodeId)
   }
 
   return { parentId: targetNodeId, index: undefined }

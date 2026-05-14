@@ -9,8 +9,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import React from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { MemoryRouter } from '@admin/lib/routing'
 import { AdminCanvasLayout } from '@admin/layouts'
 import { AdminSessionProvider } from '@admin/session'
+import { StepUpProvider } from '@admin/shared/StepUp'
 import { useEditorStore } from '@site/store/store'
 import { makeNode, makePage, makeSite } from '../fixtures'
 import type { CmsCurrentUser } from '@core/persistence'
@@ -18,7 +20,39 @@ import '@modules/base/index'
 
 const LAYOUT_STORAGE_KEY = 'pb-editor-layout-v1'
 
-afterEach(cleanup)
+const originalFetch = globalThis.fetch
+
+/**
+ * AdminCanvasLayout's mount fires `/admin/api/cms/plugins` and
+ * `/admin/api/cms/site` through usePluginEventBridge / usePersistence. Most
+ * tests in this file don't care about the result — they only care about
+ * layout/panel behaviour — so provide a default fetch that answers those
+ * endpoints with safe empty values. Tests that need bespoke responses still
+ * override `globalThis.fetch` directly.
+ */
+function installAmbientFetch() {
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.endsWith('/admin/api/cms/plugins')) {
+      return new Response(JSON.stringify({ plugins: [], adminPages: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    if (url.endsWith('/admin/api/cms/site')) {
+      return new Response(JSON.stringify({ error: 'no draft site' }), { status: 404 })
+    }
+    if (url.endsWith('/admin/api/cms/site/publish-status')) {
+      return new Response(JSON.stringify({ ok: false }), { status: 404 })
+    }
+    return new Response(JSON.stringify({ error: `Unhandled ${url}` }), { status: 500 })
+  }) as typeof fetch
+}
+
+afterEach(() => {
+  cleanup()
+  globalThis.fetch = originalFetch
+})
 
 function resetStore() {
   localStorage.clear()
@@ -71,6 +105,11 @@ function currentUser(capabilities: string[]): CmsCurrentUser {
     },
     capabilities,
     lastLoginAt: null,
+    failedLoginCount: 0,
+    lockedUntil: null,
+    avatarMediaId: null,
+    avatarUrl: null,
+    gravatarHash: '',
     createdAt: now,
     updatedAt: now,
   }
@@ -86,13 +125,30 @@ function renderEditorLayout({
   if (preloadSite && !useEditorStore.getState().site) {
     loadSiteWithSelectedHeading()
   }
-  render(user ? (
-    <AdminSessionProvider user={user}>
-      <AdminCanvasLayout />
-    </AdminSessionProvider>
-  ) : (
-    <AdminCanvasLayout />
-  ))
+  // AdminCanvasLayout renders the Toolbar (AccountMenuButton -> useStepUp +
+  // useAuthenticatedAdminUser) and AdminSectionNavigation (router hooks).
+  // Each test that previously rendered without a session is updated to pass
+  // a sensible default user; tests that opt in to a custom user keep that.
+  // The default mirrors an Editor — all rail capabilities present — so the
+  // permanent rail renders all panel buttons. Tests that need a restricted
+  // view (e.g. read-only) pass an explicit `user`.
+  const sessionUser = user ?? currentUser([
+    'site.read',
+    'site.edit',
+    'pages.edit',
+    'pages.publish',
+    'media.manage',
+    'plugins.manage',
+  ])
+  render(
+    <MemoryRouter>
+      <AdminSessionProvider user={sessionUser}>
+        <StepUpProvider>
+          <AdminCanvasLayout />
+        </StepUpProvider>
+      </AdminSessionProvider>
+    </MemoryRouter>,
+  )
 }
 
 function loadSiteWithSelectedHeading() {
@@ -118,7 +174,10 @@ function loadSiteWithSelectedHeading() {
   } as Parameters<typeof useEditorStore.setState>[0])
 }
 
-beforeEach(resetStore)
+beforeEach(() => {
+  resetStore()
+  installAmbientFetch()
+})
 
 describe('AdminCanvasLayout — CMS site hydration gate', () => {
   it('does not render editor chrome with an empty store while the CMS site hydrates', async () => {

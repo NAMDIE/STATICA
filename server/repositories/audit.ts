@@ -5,6 +5,9 @@ import { Type, Value, type Static } from '@core/utils/typeboxHelpers'
 const AuditActionSchema = Type.Union([
   Type.Literal('login.success'),
   Type.Literal('login.failure'),
+  Type.Literal('login.locked'),
+  Type.Literal('login.unlocked'),
+  Type.Literal('login.rate_limited'),
   Type.Literal('logout'),
   Type.Literal('user.create'),
   Type.Literal('user.update'),

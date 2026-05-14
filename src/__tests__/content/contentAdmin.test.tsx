@@ -1,16 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import React from 'react'
+import React, { type ReactNode } from 'react'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from '@admin/lib/routing'
 import { useLocation } from '@admin/lib/routing'
 import { ContentPage } from '@content/ContentPage'
+import { AdminSessionProvider } from '@admin/session'
+import { StepUpProvider } from '@admin/shared/StepUp'
 import { useEditorStore } from '@site/store/store'
 import { makeSite } from '../fixtures'
 import { Toolbar } from '@site/toolbar'
 import { AdminSectionNavigation } from '@admin/shared/AdminSectionNavigation'
+import type { CmsCurrentUser } from '@core/persistence'
+import { CORE_CAPABILITIES } from '@core/capabilities'
 
 const originalFetch = globalThis.fetch
 
@@ -94,9 +98,80 @@ function json(body: unknown, status = 200) {
   })
 }
 
+/**
+ * Ambient fetch fallback for endpoints the shared Toolbar / AdminCanvasLayout
+ * fire on mount (plugin list, draft site, publish status). Returns
+ * `undefined` for non-ambient URLs so per-test handlers stay authoritative.
+ */
+function ambientFetchFallback(url: string): Response | undefined {
+  if (url.endsWith('/admin/api/cms/plugins')) {
+    return json({ plugins: [], adminPages: [] })
+  }
+  if (url.endsWith('/admin/api/cms/site')) {
+    return json({ site: null }, 404)
+  }
+  if (url.endsWith('/admin/api/cms/publish/status')) {
+    return json({ ok: false }, 404)
+  }
+  return undefined
+}
+
 function LocationProbe() {
   const location = useLocation()
   return <output aria-label="current route">{location.pathname}</output>
+}
+
+const now = '2026-05-07T10:00:00.000Z'
+
+function contentEditorUser(): CmsCurrentUser {
+  return {
+    id: 'content-editor',
+    email: 'editor@example.com',
+    displayName: 'Editor',
+    status: 'active',
+    role: {
+      id: 'admin',
+      slug: 'admin',
+      name: 'Admin',
+      description: '',
+      isSystem: true,
+      capabilities: [...CORE_CAPABILITIES],
+    },
+    capabilities: [...CORE_CAPABILITIES],
+    lastLoginAt: null,
+    failedLoginCount: 0,
+    lockedUntil: null,
+    avatarMediaId: null,
+    avatarUrl: null,
+    gravatarHash: '',
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
+/**
+ * Wraps test renders in the same provider stack production uses:
+ *   MemoryRouter -> AdminSessionProvider -> StepUpProvider
+ *
+ * The shared Toolbar and AdminPageLayout require all three (router hooks,
+ * AccountMenuButton -> useStepUp + useAuthenticatedAdminUser).
+ */
+function AdminTestProviders({
+  initialEntries,
+  user,
+  children,
+}: {
+  initialEntries?: string[]
+  user?: CmsCurrentUser
+  children: ReactNode
+}) {
+  return (
+    <MemoryRouter initialEntries={initialEntries}>
+      <AdminSessionProvider user={user ?? contentEditorUser()}>
+        <StepUpProvider>{children}</StepUpProvider>
+      </AdminSessionProvider>
+    </MemoryRouter>
+  )
 }
 
 function clickToolbarSaveDraft() {
@@ -253,6 +328,9 @@ beforeEach(() => {
       return json({ assets: [imageAsset, videoAsset] })
     }
 
+    const ambient = ambientFetchFallback(url)
+    if (ambient) return ambient
+
     return json({ error: `Unhandled ${url}` }, 500)
   }
 })
@@ -265,7 +343,7 @@ afterEach(() => {
 describe('ContentPage', () => {
   it('uses SPA navigation with active Site and Content labels in the shared toolbar', () => {
     render(
-      <MemoryRouter initialEntries={['/admin/site']}>
+      <AdminTestProviders initialEntries={['/admin/site']}>
         <Routes>
           <Route
             path="/admin/site"
@@ -294,7 +372,7 @@ describe('ContentPage', () => {
             )}
           />
         </Routes>
-      </MemoryRouter>,
+      </AdminTestProviders>,
     )
 
     expect(screen.getByText('Site')).toBeDefined()
@@ -308,7 +386,7 @@ describe('ContentPage', () => {
     const transitionStarts: string[] = []
 
     render(
-      <MemoryRouter initialEntries={['/admin/site']}>
+      <AdminTestProviders initialEntries={['/admin/site']}>
         <Routes>
           <Route
             path="/admin/site"
@@ -345,7 +423,7 @@ describe('ContentPage', () => {
             )}
           />
         </Routes>
-      </MemoryRouter>,
+      </AdminTestProviders>,
     )
 
     fireEvent.click(screen.getByRole('link', { name: 'Content' }))
@@ -395,13 +473,15 @@ describe('ContentPage', () => {
         return entriesResponse
       }
 
+      const ambient = ambientFetchFallback(url)
+      if (ambient) return ambient
       return json({ error: `Unhandled ${url}` }, 500)
     }
 
     render(
-      <MemoryRouter>
+      <AdminTestProviders>
         <ContentPage />
-      </MemoryRouter>,
+      </AdminTestProviders>,
     )
 
     expect(await screen.findByRole('region', { name: 'Posts' })).toBeDefined()
@@ -422,9 +502,9 @@ describe('ContentPage', () => {
 
   it('mounts content inside the existing editor shell chrome', async () => {
     render(
-      <MemoryRouter>
+      <AdminTestProviders>
         <ContentPage />
-      </MemoryRouter>,
+      </AdminTestProviders>,
     )
 
     expect(await screen.findByTestId('toolbar')).toBeDefined()
@@ -440,9 +520,9 @@ describe('ContentPage', () => {
 
   it('hides the right settings panel until an entry is selected, then shows it', async () => {
     render(
-      <MemoryRouter>
+      <AdminTestProviders>
         <ContentPage />
-      </MemoryRouter>,
+      </AdminTestProviders>,
     )
 
     expect(await screen.findByRole('region', { name: 'Posts' })).toBeDefined()
@@ -536,13 +616,15 @@ describe('ContentPage', () => {
         return json({ assets: [] })
       }
 
+      const ambient = ambientFetchFallback(url)
+      if (ambient) return ambient
       return json({ error: `Unhandled ${url}` }, 500)
     }
 
     render(
-      <MemoryRouter>
+      <AdminTestProviders>
         <ContentPage />
-      </MemoryRouter>,
+      </AdminTestProviders>,
     )
 
     const postsRegion = await screen.findByRole('region', { name: 'Posts' })
@@ -569,9 +651,9 @@ describe('ContentPage', () => {
 
   it('uses content-specific rail panels instead of editor-only panels', async () => {
     render(
-      <MemoryRouter>
+      <AdminTestProviders>
         <ContentPage />
-      </MemoryRouter>,
+      </AdminTestProviders>,
     )
 
     await screen.findByTestId('content-explorer-panel')
@@ -585,9 +667,9 @@ describe('ContentPage', () => {
 
   it('reuses the shared media explorer panel in the content rail', async () => {
     render(
-      <MemoryRouter>
+      <AdminTestProviders>
         <ContentPage />
-      </MemoryRouter>,
+      </AdminTestProviders>,
     )
 
     await screen.findByTestId('content-explorer-panel')
@@ -603,9 +685,9 @@ describe('ContentPage', () => {
 
   it('creates, edits, saves, and publishes a rich Markdown-backed post', async () => {
     render(
-      <MemoryRouter>
+      <AdminTestProviders>
         <ContentPage />
-      </MemoryRouter>,
+      </AdminTestProviders>,
     )
 
     expect(await screen.findByRole('region', { name: 'Posts' })).toBeDefined()
@@ -648,9 +730,9 @@ describe('ContentPage', () => {
 
   it('renders the post title as a wrapping multi-line editor', async () => {
     render(
-      <MemoryRouter>
+      <AdminTestProviders>
         <ContentPage />
-      </MemoryRouter>,
+      </AdminTestProviders>,
     )
 
     await screen.findByRole('region', { name: 'Posts' })
@@ -742,13 +824,15 @@ describe('ContentPage', () => {
         }, 201)
       }
 
+      const ambient = ambientFetchFallback(url)
+      if (ambient) return ambient
       return json({ error: `Unhandled ${url}` }, 500)
     }
 
     render(
-      <MemoryRouter>
+      <AdminTestProviders>
         <ContentPage />
-      </MemoryRouter>,
+      </AdminTestProviders>,
     )
 
     await screen.findByRole('region', { name: 'Posts' })
@@ -897,13 +981,15 @@ describe('ContentPage', () => {
         return json({ assets: [imageAsset] })
       }
 
+      const ambient = ambientFetchFallback(url)
+      if (ambient) return ambient
       return json({ error: `Unhandled ${url}` }, 500)
     }
 
     render(
-      <MemoryRouter>
+      <AdminTestProviders>
         <ContentPage />
-      </MemoryRouter>,
+      </AdminTestProviders>,
     )
 
     expect(await screen.findByDisplayValue('Portable lamp')).toBeDefined()
@@ -1111,13 +1197,15 @@ describe('ContentPage', () => {
         return json({ assets: [] })
       }
 
+      const ambient = ambientFetchFallback(url)
+      if (ambient) return ambient
       return json({ error: `Unhandled ${url}` }, 500)
     }
 
     render(
-      <MemoryRouter>
+      <AdminTestProviders>
         <ContentPage />
-      </MemoryRouter>,
+      </AdminTestProviders>,
     )
 
     const postsRegion = await screen.findByRole('region', { name: 'Posts' })
@@ -1248,9 +1336,9 @@ describe('ContentPage', () => {
 
     try {
       render(
-        <MemoryRouter>
+        <AdminTestProviders>
           <ContentPage />
-        </MemoryRouter>,
+        </AdminTestProviders>,
       )
 
       await screen.findByRole('region', { name: 'Posts' })
@@ -1274,9 +1362,9 @@ describe('ContentPage', () => {
 
   it('opens semantic paragraph, heading level, and media choices from the block chrome', async () => {
     render(
-      <MemoryRouter>
+      <AdminTestProviders>
         <ContentPage />
-      </MemoryRouter>,
+      </AdminTestProviders>,
     )
 
     await screen.findByRole('region', { name: 'Posts' })
@@ -1320,9 +1408,9 @@ describe('ContentPage', () => {
 
   it('uses one media block type that can select image and video assets', async () => {
     render(
-      <MemoryRouter>
+      <AdminTestProviders>
         <ContentPage />
-      </MemoryRouter>,
+      </AdminTestProviders>,
     )
 
     await screen.findByRole('region', { name: 'Posts' })
@@ -1364,9 +1452,9 @@ describe('ContentPage', () => {
 
   it('reorders blocks by vertically dragging the block handle', async () => {
     render(
-      <MemoryRouter>
+      <AdminTestProviders>
         <ContentPage />
-      </MemoryRouter>,
+      </AdminTestProviders>,
     )
 
     await screen.findByRole('region', { name: 'Posts' })
@@ -1442,9 +1530,9 @@ describe('ContentPage', () => {
 
   it('keeps the dragged block visually anchored on drop before settling into place', async () => {
     render(
-      <MemoryRouter>
+      <AdminTestProviders>
         <ContentPage />
-      </MemoryRouter>,
+      </AdminTestProviders>,
     )
 
     await screen.findByRole('region', { name: 'Posts' })
@@ -1519,9 +1607,9 @@ describe('ContentPage', () => {
 
   it('edits slug, status, and featured media from the settings sidebar', async () => {
     render(
-      <MemoryRouter>
+      <AdminTestProviders>
         <ContentPage />
-      </MemoryRouter>,
+      </AdminTestProviders>,
     )
 
     await screen.findByRole('region', { name: 'Posts' })
@@ -1595,9 +1683,9 @@ describe('ContentPage', () => {
     }
 
     render(
-      <MemoryRouter>
+      <AdminTestProviders>
         <ContentPage />
-      </MemoryRouter>,
+      </AdminTestProviders>,
     )
 
     expect(await screen.findByText(imageAsset.filename)).toBeDefined()
@@ -1608,9 +1696,9 @@ describe('ContentPage', () => {
   it('keeps typed paragraph text in left-to-right order while editing', async () => {
     const user = userEvent.setup()
     render(
-      <MemoryRouter>
+      <AdminTestProviders>
         <ContentPage />
-      </MemoryRouter>,
+      </AdminTestProviders>,
     )
 
     await screen.findByRole('region', { name: 'Posts' })
@@ -1629,9 +1717,9 @@ describe('ContentPage', () => {
   it('moves typing into the new paragraph after pressing Enter', async () => {
     const user = userEvent.setup()
     render(
-      <MemoryRouter>
+      <AdminTestProviders>
         <ContentPage />
-      </MemoryRouter>,
+      </AdminTestProviders>,
     )
 
     await screen.findByRole('region', { name: 'Posts' })

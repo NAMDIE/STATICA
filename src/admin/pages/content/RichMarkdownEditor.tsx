@@ -62,11 +62,17 @@ const DROP_SETTLE_DURATION_MS = 180
 interface RichMarkdownEditorProps {
   blocks: ContentBlock[]
   readOnly?: boolean
+  /**
+   * Counter bumped by the parent when the editor should focus its first
+   * editable text block (e.g. when the user pressed Enter in the title
+   * field). Initial value of 0 is treated as "no focus requested yet".
+   */
+  focusSignal?: number
   onChange: (blocks: ContentBlock[]) => void
   onMediaRequest?: (blockId: string) => void
 }
 
-export function RichMarkdownEditor({ blocks, readOnly = false, onChange, onMediaRequest }: RichMarkdownEditorProps) {
+export function RichMarkdownEditor({ blocks, readOnly = false, focusSignal = 0, onChange, onMediaRequest }: RichMarkdownEditorProps) {
   const [pendingFocusBlockId, setPendingFocusBlockId] = useState<string | null>(null)
   const [dragState, setDragState] = useState<BlockDragState | null>(null)
   const [dropAnimation, setDropAnimation] = useState<DropAnimationState | null>(null)
@@ -117,6 +123,28 @@ export function RichMarkdownEditor({ blocks, readOnly = false, onChange, onMedia
       }
     }
   }, [])
+
+  // External focus request (e.g. user pressed Enter in the title field).
+  // Either focuses the first existing empty text block, or inserts a new
+  // paragraph at the top of the editor and focuses that one — whichever
+  // results in a clean caret next to no content. We intentionally only
+  // re-run on `focusSignal` so the effect is a parent-driven event, not a
+  // continuous sync of blocks; setting `pendingFocusBlockId` here is the
+  // same pattern the in-editor Enter-handler uses (its own dedicated
+  // useLayoutEffect picks it up to move the caret).
+  /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
+  useLayoutEffect(() => {
+    if (focusSignal === 0 || readOnly) return
+    const firstTextBlock = blocks.find((block) => block.type === 'paragraph' || block.type === 'heading')
+    if (firstTextBlock && firstTextBlock.text.length === 0) {
+      setPendingFocusBlockId(firstTextBlock.id)
+      return
+    }
+    const paragraph = createParagraphBlock()
+    setPendingFocusBlockId(paragraph.id)
+    onChange([paragraph, ...blocks])
+  }, [focusSignal])
+  /* eslint-enable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 
   function updateBlock(index: number, patch: ContentBlock) {
     if (readOnly) return

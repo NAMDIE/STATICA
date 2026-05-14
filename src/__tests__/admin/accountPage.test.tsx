@@ -46,6 +46,8 @@ function makeUser(overrides: Partial<CmsCurrentUser> = {}): CmsCurrentUser {
     failedLoginCount: 0,
     lockedUntil: null,
     avatarMediaId: null,
+    avatarUrl: null,
+    gravatarHash: '',
     createdAt: now,
     updatedAt: now,
     ...overrides,

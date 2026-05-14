@@ -122,3 +122,20 @@ export const loginRateLimit = new RateLimiter({
   limit: 5,
   windowMs: 15 * 60 * 1000,
 })
+
+/**
+ * Per-IP login rate limiter — blanket protection against a single attacker
+ * IP grinding through many email addresses.
+ *
+ * 30 attempts per 10-minute window per IP. Triggers BEFORE per-(IP, email)
+ * does, so a sustained credential-stuffing run from one IP gets shut off
+ * while legitimate users (who only attempt their own account) never see it.
+ *
+ * IP-less requests (no proxy, Bun.serve doesn't surface client IP) bypass
+ * this layer — the per-(IP, email) limiter still applies, with `'unknown'`
+ * as the IP component, so a single email is still defended.
+ */
+export const loginPerIpRateLimit = new RateLimiter({
+  limit: 30,
+  windowMs: 10 * 60 * 1000,
+})

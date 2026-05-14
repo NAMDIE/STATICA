@@ -43,6 +43,11 @@ function makeUser(overrides: Partial<CmsCurrentUser> = {}): CmsCurrentUser {
     failedLoginCount: 0,
     lockedUntil: null,
     avatarMediaId: null,
+    avatarUrl: null,
+    // Empty hash → no Gravatar URL → initials fallback fires. Keeps the
+    // toolbar trigger's textContent assertions stable; real sessions always
+    // carry a non-empty hash from the server.
+    gravatarHash: '',
     createdAt: now,
     updatedAt: now,
     ...overrides,

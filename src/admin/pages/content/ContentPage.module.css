@@ -23,12 +23,6 @@
     margin: 100px auto;
 }
 
-.titleLabel {
-    color: var(--editor-text-muted);
-    font-size: 16px;
-    font-weight: 500;
-}
-
 .titleInput {
     display: block;
     height: auto;
@@ -48,7 +42,11 @@
     word-break: break-word;
 }
 
-.titleInput:focus {
+.titleInput:focus,
+.titleInput:focus-visible {
+    background: transparent;
+    border: 0;
+    outline: none;
     box-shadow: none;
 }
 

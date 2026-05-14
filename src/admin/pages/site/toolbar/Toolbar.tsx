@@ -22,6 +22,7 @@ import type { RegisteredPluginToolbarButton } from '@core/plugin-sdk'
 import { ZoomControls } from './ZoomControls'
 import { PublishButton } from './PublishButton'
 import { SettingsButton } from './SettingsButton'
+import { AccountMenuButton } from '@admin/shared/AccountMenuButton'
 import { PreviewOverlay } from '@site/preview/PreviewOverlay'
 import VCBreadcrumb from './VCBreadcrumb'
 import { Button } from '@ui/components/Button'
@@ -199,6 +200,10 @@ export function Toolbar({
               <SettingsButton />
             </>
           )}
+          {/* AccountMenuButton always rendered, regardless of `rightSlot`
+              override. Users may need to switch accounts / sign out from
+              every admin page (Users, Content, Plugins, etc.). */}
+          <AccountMenuButton />
         </div>
       </header>
     </>

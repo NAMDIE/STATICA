@@ -32,6 +32,7 @@ import { isStateChangingMethod, originAllowed } from '../../auth/security'
 import type { CmsHandlerOptions } from './shared'
 import { handleSetupRoutes } from './setup'
 import { handleAuthRoutes } from './auth'
+import { handleMeRoutes } from './me'
 import { handleUsersRoutes } from './users'
 import { handleRolesRoutes } from './roles'
 import { handleAuditRoutes } from './audit'
@@ -66,6 +67,7 @@ export async function handleCmsRequest(
   const response =
     (await handleSetupRoutes(req, db))
     ?? (await handleAuthRoutes(req, db))
+    ?? (await handleMeRoutes(req, db, options))
     ?? (await handleUsersRoutes(req, db))
     ?? (await handleRolesRoutes(req, db))
     ?? (await handleAuditRoutes(req, db))

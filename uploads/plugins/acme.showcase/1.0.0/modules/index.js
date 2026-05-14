@@ -1,4 +1,4 @@
-// src/core/plugin-sdk/capabilities.ts
+// ../../../src/core/plugin-sdk/capabilities.ts
 var PLUGIN_CAPABILITIES = [
   {
     permission: "admin.navigation",
@@ -66,7 +66,7 @@ var PLUGIN_CAPABILITIES = [
   {
     permission: "editor.panels",
     label: "Add editor panels",
-    description: "Reserved for plugins that add panels to the editor workspace.",
+    description: "Allows the plugin to register panels that mount in the editor's left sidebar (custom inspectors, plugin dashboards, review queues).",
     risk: "medium",
     surfaces: ["editor"]
   },
@@ -114,7 +114,7 @@ var PLUGIN_CAPABILITIES = [
   }
 ];
 var capabilityByPermission = new Map(PLUGIN_CAPABILITIES.map((capability) => [capability.permission, capability]));
-// src/core/plugin-sdk/builders/defineModule.ts
+// ../../../src/core/plugin-sdk/builders/defineModule.ts
 function defineModule(config) {
   if (typeof config.id !== "string" || !config.id.includes(".")) {
     throw new Error(`[plugin-sdk] Module id "${config.id}" must be namespaced as "<pluginId>.<name>".`);
@@ -133,7 +133,7 @@ function defineModule(config) {
     ...config.preview ? { preview: (props, children) => config.preview({ props, children }) } : {}
   };
 }
-// src/core/plugin-sdk/builders/controls.ts
+// ../../../src/core/plugin-sdk/builders/controls.ts
 var control = {
   text(label, options = {}) {
     return { type: "text", label, ...options };
@@ -162,7 +162,7 @@ var control = {
     return { type: "url", label, ...options };
   }
 };
-// src/core/plugin-sdk/builders/html.ts
+// ../../../src/core/plugin-sdk/builders/html.ts
 var HTML_ESCAPE_RE = /[&<>"']/g;
 var HTML_ESCAPE_MAP = {
   "&": "&amp;",
@@ -201,7 +201,7 @@ function html(strings, ...values) {
   }
   return out;
 }
-// examples/plugins/showcase/modules/eventCounter.ts
+// modules/eventCounter.ts
 var eventCounter_default = defineModule({
   id: "acme.showcase.event-counter",
   name: "Event Counter",
@@ -234,7 +234,7 @@ var eventCounter_default = defineModule({
   }
 });
 
-// examples/plugins/showcase/modules/callout.ts
+// modules/callout.ts
 var callout_default = defineModule({
   id: "acme.showcase.callout",
   name: "Callout",
@@ -279,7 +279,7 @@ var callout_default = defineModule({
   }
 });
 
-// examples/plugins/showcase/__modules-facade.ts
+// __modules-facade.ts
 var __modules_facade_default = [eventCounter_default, callout_default];
 export {
   __modules_facade_default as default

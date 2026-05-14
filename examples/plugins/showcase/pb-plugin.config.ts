@@ -35,6 +35,7 @@ export default definePlugin({
     permissions.editorToolbar,
     permissions.editorCommands,
     permissions.editorPanels,
+    permissions.editorCanvas,
     permissions.modulesRegister,
     permissions.visualComponentsRegister,
     permissions.frontendScripts,

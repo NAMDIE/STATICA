@@ -24,6 +24,7 @@ export {
   installCmsPluginPack,
   listCmsPlugins,
   removeCmsPlugin,
+  restartCmsPlugin,
   setCmsPluginEnabled,
 } from './cmsPlugins'
 export type { CmsPluginPackInstallSummary } from './cmsPlugins'
@@ -44,6 +45,25 @@ export {
   updateCmsUser,
 } from './cmsUsers'
 export type { CmsAuditEvent, CmsRole } from './cmsUsers'
-export { getCmsSetupStatus, getCurrentCmsUser, loginCms, setupCms } from './cmsAuth'
-export type { CmsCurrentUser } from './cmsAuth'
+export {
+  deleteCurrentUserAvatar,
+  getCmsSetupStatus,
+  getCurrentCmsUser,
+  isStepUpRequiredError,
+  listCmsLoginActivity,
+  listCmsSessions,
+  loginCms,
+  logoutAllOtherCmsSessions,
+  logoutCms,
+  revokeCmsSession,
+  setupCms,
+  stepUpCms,
+  uploadCurrentUserAvatar,
+} from './cmsAuth'
+export type {
+  CmsCurrentUser,
+  CmsLoginActivityEvent,
+  CmsLoginActivityResult,
+  CmsSession,
+} from './cmsAuth'
 // usePersistence moved to src/editor/hooks/usePersistence.ts (Constraint #179 — no React in core)

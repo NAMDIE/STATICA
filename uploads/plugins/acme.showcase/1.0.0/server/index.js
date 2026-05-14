@@ -1,4 +1,4 @@
-// examples/plugins/showcase/server/index.ts
+// server/index.ts
 var STATUS_TAG = "<!-- plugin:acme.showcase -->";
 var mod = {
   install(api) {

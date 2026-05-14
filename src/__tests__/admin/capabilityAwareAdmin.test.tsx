@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it } from 'bun:test'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from '@admin/lib/routing'
-import { AdminSectionNavigation } from '@admin/AdminLayout'
+import { AdminSectionNavigation } from '@admin/shared/AdminSectionNavigation'
 import { AdminSessionProvider } from '@admin/session'
+import { StepUpProvider } from '@admin/shared/StepUp'
 import { ContentPage } from '@content/ContentPage'
 import type { CmsCurrentUser } from '@core/persistence'
 import { useEditorStore } from '@site/store/store'
@@ -27,6 +28,11 @@ function currentUser(capabilities: string[]): CmsCurrentUser {
     },
     capabilities,
     lastLoginAt: null,
+    failedLoginCount: 0,
+    lockedUntil: null,
+    avatarMediaId: null,
+    avatarUrl: null,
+    gravatarHash: '',
     createdAt: now,
     updatedAt: now,
   }
@@ -138,13 +144,18 @@ describe('capability-aware admin UI', () => {
         })
       }
       if (url === '/admin/api/cms/media') return json({ assets: [] })
+      if (url.endsWith('/admin/api/cms/plugins')) return json({ plugins: [], adminPages: [] })
+      if (url.endsWith('/admin/api/cms/site')) return json({ site: null }, 404)
+      if (url.endsWith('/admin/api/cms/publish/status')) return json({ ok: false }, 404)
       return json({ error: `Unhandled ${url}` }, 500)
     }
 
     render(
       <MemoryRouter>
         <AdminSessionProvider user={currentUser(['content.create', 'content.edit.own', 'content.publish.own'])}>
-          <ContentPage />
+          <StepUpProvider>
+            <ContentPage />
+          </StepUpProvider>
         </AdminSessionProvider>
       </MemoryRouter>,
     )
@@ -240,13 +251,18 @@ describe('capability-aware admin UI', () => {
         return json({ error: 'edit forbidden' }, 403)
       }
 
+      if (url.endsWith('/admin/api/cms/plugins')) return json({ plugins: [], adminPages: [] })
+      if (url.endsWith('/admin/api/cms/site')) return json({ site: null }, 404)
+      if (url.endsWith('/admin/api/cms/publish/status')) return json({ ok: false }, 404)
       return json({ error: `Unhandled ${method} ${url}` }, 500)
     }
 
     render(
       <MemoryRouter>
         <AdminSessionProvider user={currentUser(['content.publish.own'])}>
-          <ContentPage />
+          <StepUpProvider>
+            <ContentPage />
+          </StepUpProvider>
         </AdminSessionProvider>
       </MemoryRouter>,
     )

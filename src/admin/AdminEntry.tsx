@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { lazy, Suspense, useEffect, useId, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Button } from '@ui/components/Button'
 import { DatabaseIcon } from 'pixel-art-icons/icons/database'
@@ -10,26 +10,42 @@ import {
   setupCms,
   type CmsCurrentUser,
 } from '@core/persistence'
-import { ContentPage } from './pages/content/ContentPage'
-import { PluginPage } from './pages/plugins/PluginPage'
-import { PluginsPage } from './pages/plugins/PluginsPage'
-import { SitePage } from './pages/site/SitePage'
-import { UsersPage } from './pages/users/UsersPage'
 import { AppLoadingScreen } from './AppLoadingScreen'
 import type { AdminWorkspace } from './workspace'
 import { AdminSessionProvider } from './session'
+import { StepUpProvider } from './shared/StepUp'
 import { canAccessWorkspace, firstAccessibleWorkspace, workspacePath } from './access'
 import { Navigate } from './lib/routing'
 import { useInRouterContext } from './lib/routing'
 import styles from './AdminEntry.module.css'
 
-// Register base modules with the global registry. Kept here (not in main.tsx)
-// so the publisher / page-tree / sanitize stack only ships in the lazy admin
-// chunk, never on the login / setup cold path.
-import '@modules/base'
-// Register built-in loop sources so the Properties Panel + editor preview
-// can pick them up. Same lazy-chunk reasoning as the modules import above.
-import '@core/loops/sources'
+// Section pages are split into per-workspace chunks so that admins who only
+// ever open one section (e.g. a user manager who never opens the visual
+// editor) don't pay to download the others. Each `lazy(...)` becomes its own
+// rolldown chunk; named-export → default-export adapter keeps the page files
+// using their existing named exports (which the rest of the codebase imports).
+//
+// Side-effect imports for `@modules/base` and `@core/loops/sources` live
+// inside `SitePage.tsx` so they only load when the visual editor mounts —
+// they're not used by Users / Content / Plugins / Account.
+const SitePage = lazy(() =>
+  import('./pages/site/SitePage').then((m) => ({ default: m.SitePage })),
+)
+const ContentPage = lazy(() =>
+  import('./pages/content/ContentPage').then((m) => ({ default: m.ContentPage })),
+)
+const PluginsPage = lazy(() =>
+  import('./pages/plugins/PluginsPage').then((m) => ({ default: m.PluginsPage })),
+)
+const PluginPage = lazy(() =>
+  import('./pages/plugins/PluginPage').then((m) => ({ default: m.PluginPage })),
+)
+const UsersPage = lazy(() =>
+  import('./pages/users/UsersPage').then((m) => ({ default: m.UsersPage })),
+)
+const AccountPage = lazy(() =>
+  import('./pages/account/AccountPage').then((m) => ({ default: m.AccountPage })),
+)
 
 type AdminPhase = 'loading' | 'setup' | 'login' | 'editor'
 type AdminSection = AdminWorkspace
@@ -242,11 +258,16 @@ function AuthenticatedAdmin({
 
   return (
     <AdminSessionProvider user={currentUser}>
-      {section === 'content' ? <ContentPage /> :
-        section === 'plugins' ? <PluginsPage /> :
-        section === 'users' ? <UsersPage /> :
-        section === 'pluginPage' ? <PluginPage /> :
-        <SitePage />}
+      <StepUpProvider>
+        <Suspense fallback={<AppLoadingScreen />}>
+          {section === 'content' ? <ContentPage /> :
+            section === 'plugins' ? <PluginsPage /> :
+            section === 'users' ? <UsersPage /> :
+            section === 'pluginPage' ? <PluginPage /> :
+            section === 'account' ? <AccountPage /> :
+            <SitePage />}
+        </Suspense>
+      </StepUpProvider>
     </AdminSessionProvider>
   )
 }

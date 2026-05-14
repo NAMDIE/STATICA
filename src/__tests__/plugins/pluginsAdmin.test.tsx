@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import React from 'react'
+import React, { type ReactNode } from 'react'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from '@admin/lib/routing'
 import { PluginsPage } from '@plugins/PluginsPage'
+import { AdminSessionProvider } from '@admin/session'
+import { StepUpProvider } from '@admin/shared/StepUp'
 import { useEditorStore } from '@site/store/store'
+import type { CmsCurrentUser } from '@core/persistence'
 import { makeSite } from '../fixtures'
 
 const originalFetch = globalThis.fetch
@@ -84,6 +87,60 @@ function json(body: unknown, status = 200) {
   })
 }
 
+/**
+ * Ambient fetch fallback for endpoints AdminPageLayout calls on mount that
+ * the PluginsPage tests don't otherwise care about (site load,
+ * publish-status). The plugins-list endpoint is owned by each test, so it's
+ * intentionally NOT in here.
+ */
+function ambientFetchFallback(url: string): Response | undefined {
+  if (url.endsWith('/admin/api/cms/site')) {
+    return json({ site: null }, 404)
+  }
+  if (url.endsWith('/admin/api/cms/site/publish-status')) {
+    return json({ ok: false }, 404)
+  }
+  return undefined
+}
+
+const now = '2026-05-07T10:00:00.000Z'
+
+function adminUser(): CmsCurrentUser {
+  return {
+    id: 'plugin-manager',
+    email: 'admin@example.com',
+    displayName: 'Plugin Manager',
+    status: 'active',
+    role: {
+      id: 'admin',
+      slug: 'admin',
+      name: 'Admin',
+      description: '',
+      isSystem: true,
+      capabilities: ['site.read', 'site.edit', 'plugins.manage'],
+    },
+    capabilities: ['site.read', 'site.edit', 'plugins.manage'],
+    lastLoginAt: null,
+    failedLoginCount: 0,
+    lockedUntil: null,
+    avatarMediaId: null,
+    avatarUrl: null,
+    gravatarHash: '',
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
+function Wrapper({ children }: { children: ReactNode }) {
+  return (
+    <MemoryRouter>
+      <AdminSessionProvider user={adminUser()}>
+        <StepUpProvider>{children}</StepUpProvider>
+      </AdminSessionProvider>
+    </MemoryRouter>
+  )
+}
+
 beforeEach(() => {
   localStorage.clear()
   setupEditorState()
@@ -112,13 +169,15 @@ describe('PluginsPage', () => {
       if (url === '/admin/api/cms/plugins/local.map' && init?.method === 'DELETE') {
         return json({ ok: true })
       }
+      const ambient = ambientFetchFallback(url)
+      if (ambient) return ambient
       return json({ error: `Unhandled ${url}` }, 500)
     }
 
     render(
-      <MemoryRouter>
+      <Wrapper>
         <PluginsPage />
-      </MemoryRouter>,
+      </Wrapper>,
     )
 
     expect(await screen.findByText('Map Studio')).toBeDefined()
@@ -160,13 +219,15 @@ describe('PluginsPage', () => {
       if (url === '/admin/api/cms/plugins' && init?.method === 'POST') {
         return json({ plugin: pluginRow(true), adminPages: [] }, 201)
       }
+      const ambient = ambientFetchFallback(url)
+      if (ambient) return ambient
       return json({ error: `Unhandled ${url}` }, 500)
     }
 
     render(
-      <MemoryRouter>
+      <Wrapper>
         <PluginsPage />
-      </MemoryRouter>,
+      </Wrapper>,
     )
 
     expect(await screen.findByText('No plugins installed yet.')).toBeDefined()
@@ -211,13 +272,15 @@ describe('PluginsPage', () => {
       if (url === '/admin/api/cms/plugins' && init?.method === 'POST') {
         return json({ plugin: pluginRow(true), adminPages: [] }, 201)
       }
+      const ambient = ambientFetchFallback(url)
+      if (ambient) return ambient
       return json({ error: `Unhandled ${url}` }, 500)
     }
 
     render(
-      <MemoryRouter>
+      <Wrapper>
         <PluginsPage />
-      </MemoryRouter>,
+      </Wrapper>,
     )
 
     expect(await screen.findByText('No plugins installed yet.')).toBeDefined()
@@ -261,13 +324,15 @@ describe('PluginsPage', () => {
           adminPages: [],
         })
       }
+      const ambient = ambientFetchFallback(url)
+      if (ambient) return ambient
       return json({ error: `Unhandled ${url}` }, 500)
     }
 
     render(
-      <MemoryRouter>
+      <Wrapper>
         <PluginsPage />
-      </MemoryRouter>,
+      </Wrapper>,
     )
 
     expect(await screen.findByText('Map Studio')).toBeDefined()
