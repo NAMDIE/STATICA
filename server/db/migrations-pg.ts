@@ -468,4 +468,63 @@ export const pgMigrations: Migration[] = [
       end $$;
     `,
   },
+  {
+    id: '002_plugin_schedules',
+    sql: `
+      -- ─── Plugin scheduled jobs ────────────────────────────────────────────
+      --
+      -- One row per (plugin_id, schedule_id) registered via
+      -- api.cms.schedule.register(...). The cadence is stored as a JSON
+      -- payload (interval kind + parameters) — the host computes next_run_at
+      -- after each fire. running_token + lock_until coordinate a single
+      -- active run per schedule, even across HA host instances (Postgres
+      -- advisory locks gate which instance ticks; row-level locks gate which
+      -- schedule fires next).
+
+      create table if not exists plugin_schedules (
+        plugin_id text not null references installed_plugins(id) on delete cascade,
+        schedule_id text not null,
+        cadence_json jsonb not null,
+        overlap text not null default 'skip',
+        max_duration_ms integer not null default 5000,
+        enabled boolean not null default true,
+        consecutive_failures integer not null default 0,
+        last_run_at timestamptz,
+        last_finished_at timestamptz,
+        last_status text,
+        last_error text,
+        last_duration_ms integer,
+        next_run_at timestamptz not null,
+        running_token text,
+        lock_until timestamptz,
+        claimed_at timestamptz,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        primary key (plugin_id, schedule_id)
+      );
+
+      create index if not exists plugin_schedules_due_idx
+        on plugin_schedules (enabled, next_run_at);
+
+      -- History — bounded growth via app-level rolling delete in the
+      -- scheduler tick. Each tick keeps the latest 200 rows per (plugin_id,
+      -- schedule_id) so an admin "Recent runs" list always has data
+      -- without unbounded storage.
+
+      create table if not exists plugin_schedule_runs (
+        id text primary key,
+        plugin_id text not null,
+        schedule_id text not null,
+        started_at timestamptz not null,
+        finished_at timestamptz,
+        status text not null,
+        error text,
+        duration_ms integer,
+        triggered_by text not null default 'tick'
+      );
+
+      create index if not exists plugin_schedule_runs_lookup_idx
+        on plugin_schedule_runs (plugin_id, schedule_id, started_at desc);
+    `,
+  },
 ]

@@ -55,6 +55,7 @@ api.plugin.id           // string — namespaced, e.g. "acme.workflow"
 api.plugin.version      // string — manifest version
 api.plugin.permissions  // string[] — granted permissions
 api.plugin.log(...)     // routes to the host's [plugin:<id>] log prefix
+api.plugin.assetUrl(p)  // URL for a static file shipped in the plugin zip
 
 // HTTP routes — requires `cms.routes`
 api.cms.routes.get('/status', 'plugins.manage', handler)
@@ -82,6 +83,11 @@ api.cms.loops.registerSource({ id: 'acme.workflow.items', /* ... */ })
 api.cms.settings.get('apiKey')          // read current value
 api.cms.settings.getAll()                // snapshot of all settings
 await api.cms.settings.replace({ apiKey: 'new-value' })
+
+// Scheduled jobs — requires `cms.schedule`. See scheduled-jobs.md
+api.cms.schedule.daily('cleanup', '03:00', async () => { /* ... */ })
+api.cms.schedule.hourly('refresh', async () => { /* ... */ })
+api.cms.schedule.every(5, 'poll', async () => { /* ... */ })
 
 // Outbound HTTP — requires `network.outbound` + manifest's `networkAllowedHosts`
 const res = await fetch('https://api.example.com/data')

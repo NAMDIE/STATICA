@@ -279,7 +279,21 @@ export function createEditorPluginApi(
   manifest: PluginManifest,
   fetchImpl: FetchLike,
 ): EditorPluginApi {
+  const baseAsset = (manifest.assetBasePath ?? `/uploads/plugins/${manifest.id}/${manifest.version}`)
+    .replace(/\/+$/g, '')
   return {
+    plugin: {
+      id: manifest.id,
+      version: manifest.version,
+      permissions: [...(manifest.grantedPermissions ?? [])],
+      assetUrl(path) {
+        if (typeof path !== 'string' || path.length === 0) {
+          throw new TypeError('assetUrl: path must be a non-empty string')
+        }
+        const rel = path.replace(/^\/+/g, '')
+        return `${baseAsset}/${rel}`
+      },
+    },
     editor: {
       commands: {
         register(command) {

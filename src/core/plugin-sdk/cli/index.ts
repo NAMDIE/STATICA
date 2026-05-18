@@ -18,6 +18,7 @@ import { resolve } from 'node:path'
 import { buildPlugin } from './build'
 import { runPluginDev } from './dev'
 import { runPluginInit } from './init'
+import { lintPlugin } from './lint'
 
 interface ParsedArgs {
   command: string
@@ -52,6 +53,7 @@ function printHelp(): void {
 
 Commands:
   init <name>             Scaffold a new plugin in <name>/
+  lint  [<plugin-dir>]    Validate manifest, sources, and bundles
   build [<plugin-dir>]    Build the plugin → dist/ + .plugin.zip
   dev   [<plugin-dir>]    Watch sources, rebuild, and sync into the host CMS
 
@@ -63,6 +65,7 @@ Options for \`dev\`:
 
 Examples:
   pb-plugin init acme.confetti
+  pb-plugin lint examples/plugins/showcase
   pb-plugin build examples/plugins/showcase
   pb-plugin dev examples/plugins/ui-kit
   pb-plugin dev --uploads ../page-builder/uploads
@@ -95,6 +98,28 @@ async function main(): Promise<void> {
     console.log(`✓ Built ${result.pluginId}`)
     console.log(`  dist: ${result.outputDir}`)
     if (result.zipPath) console.log(`  zip:  ${result.zipPath}`)
+    return
+  }
+
+  if (command === 'lint') {
+    const sourceDir = resolve(positional[0] ?? process.cwd())
+    const result = await lintPlugin(sourceDir)
+    const errors = result.findings.filter((f) => f.severity === 'error')
+    const warnings = result.findings.filter((f) => f.severity === 'warning')
+    for (const finding of result.findings) {
+      const tag = finding.severity === 'error' ? '✗' : '!'
+      const fileSuffix = finding.file ? ` (${finding.file})` : ''
+      console.log(`${tag} [${finding.scope}] ${finding.message}${fileSuffix}`)
+    }
+    if (errors.length === 0 && warnings.length === 0) {
+      console.log(`✓ ${result.pluginId}: no issues found`)
+      return
+    }
+    console.log(
+      `\n${errors.length} error${errors.length === 1 ? '' : 's'}, ` +
+      `${warnings.length} warning${warnings.length === 1 ? '' : 's'} for ${result.pluginId}`,
+    )
+    if (errors.length > 0) process.exit(1)
     return
   }
 

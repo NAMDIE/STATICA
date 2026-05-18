@@ -435,4 +435,55 @@ export const sqliteMigrations: Migration[] = [
         add column avatar_media_id text references media_assets(id) on delete set null;
     `,
   },
+  {
+    id: '002_plugin_schedules',
+    sql: `
+      -- ─── Plugin scheduled jobs ────────────────────────────────────────────
+      --
+      -- SQLite mirror of the Postgres schema with dialect-translated types
+      -- (text instead of jsonb / timestamptz, integer instead of boolean —
+      -- the adapter handles JSON encode/decode for the *_json column-suffix
+      -- convention enforced by the db-json-column architecture gate).
+
+      create table if not exists plugin_schedules (
+        plugin_id text not null references installed_plugins(id) on delete cascade,
+        schedule_id text not null,
+        cadence_json text not null,
+        overlap text not null default 'skip',
+        max_duration_ms integer not null default 5000,
+        enabled integer not null default 1,
+        consecutive_failures integer not null default 0,
+        last_run_at text,
+        last_finished_at text,
+        last_status text,
+        last_error text,
+        last_duration_ms integer,
+        next_run_at text not null,
+        running_token text,
+        lock_until text,
+        claimed_at text,
+        created_at text not null default current_timestamp,
+        updated_at text not null default current_timestamp,
+        primary key (plugin_id, schedule_id)
+      );
+
+      create index if not exists plugin_schedules_due_idx
+        on plugin_schedules (enabled, next_run_at);
+
+      create table if not exists plugin_schedule_runs (
+        id text primary key,
+        plugin_id text not null,
+        schedule_id text not null,
+        started_at text not null,
+        finished_at text,
+        status text not null,
+        error text,
+        duration_ms integer,
+        triggered_by text not null default 'tick'
+      );
+
+      create index if not exists plugin_schedule_runs_lookup_idx
+        on plugin_schedule_runs (plugin_id, schedule_id, started_at desc);
+    `,
+  },
 ]

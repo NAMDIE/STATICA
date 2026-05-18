@@ -48,6 +48,12 @@ import {
   handlePluginRecordsCollection,
 } from './records'
 import { handlePluginEventsStream } from './events'
+import {
+  handlePluginSchedulePause,
+  handlePluginScheduleResume,
+  handlePluginScheduleRunNow,
+  handlePluginSchedulesList,
+} from './schedules'
 
 // ---------------------------------------------------------------------------
 // Route patterns
@@ -60,6 +66,10 @@ const PLUGIN_RUNTIME_PATTERN = /^\/admin\/api\/cms\/plugins\/([^/]+)\/runtime(?:
 const PLUGIN_PACK_INSTALL_PATTERN = /^\/admin\/api\/cms\/plugins\/([^/]+)\/pack\/install$/
 const PLUGIN_SETTINGS_PATTERN = /^\/admin\/api\/cms\/plugins\/([^/]+)\/settings$/
 const PLUGIN_RESTART_PATTERN = /^\/admin\/api\/cms\/plugins\/([^/]+)\/restart$/
+const PLUGIN_SCHEDULES_PATTERN = /^\/admin\/api\/cms\/plugins\/([^/]+)\/schedules$/
+const PLUGIN_SCHEDULE_RUN_NOW_PATTERN = /^\/admin\/api\/cms\/plugins\/([^/]+)\/schedules\/([^/]+)\/run-now$/
+const PLUGIN_SCHEDULE_PAUSE_PATTERN = /^\/admin\/api\/cms\/plugins\/([^/]+)\/schedules\/([^/]+)\/pause$/
+const PLUGIN_SCHEDULE_RESUME_PATTERN = /^\/admin\/api\/cms\/plugins\/([^/]+)\/schedules\/([^/]+)\/resume$/
 const PLUGIN_EVENTS_PATH = '/admin/api/cms/plugins/events'
 
 // ---------------------------------------------------------------------------
@@ -92,6 +102,13 @@ function requiresStepUp(method: string, pathname: string): boolean {
   if (method === 'POST' && PLUGIN_RESTART_PATTERN.test(pathname)) return true
   if (method === 'POST' && PLUGIN_PACK_INSTALL_PATTERN.test(pathname)) return true
   if (method === 'PUT' && PLUGIN_SETTINGS_PATTERN.test(pathname)) return true
+
+  // Schedule mutations — run-now fires arbitrary plugin code immediately;
+  // pause/resume change which schedules tick. All three deserve a fresh
+  // password window on top of `plugins.manage`.
+  if (method === 'POST' && PLUGIN_SCHEDULE_RUN_NOW_PATTERN.test(pathname)) return true
+  if (method === 'POST' && PLUGIN_SCHEDULE_PAUSE_PATTERN.test(pathname)) return true
+  if (method === 'POST' && PLUGIN_SCHEDULE_RESUME_PATTERN.test(pathname)) return true
 
   return false
 }
@@ -167,6 +184,41 @@ export async function handlePluginsRoutes(
   const restartMatch = pathname.match(PLUGIN_RESTART_PATTERN)
   if (restartMatch) {
     return handlePluginRestart(req, db, options, user, decodeURIComponent(restartMatch[1]))
+  }
+
+  // Schedule routes — read-only list, plus mutation endpoints
+  // (run-now / pause / resume). The mutation ones are step-up-gated
+  // above; the list is read-only and only needs `plugins.manage`.
+  const scheduleRunNowMatch = pathname.match(PLUGIN_SCHEDULE_RUN_NOW_PATTERN)
+  if (scheduleRunNowMatch) {
+    return handlePluginScheduleRunNow(
+      req,
+      db,
+      decodeURIComponent(scheduleRunNowMatch[1]),
+      decodeURIComponent(scheduleRunNowMatch[2]),
+    )
+  }
+  const schedulePauseMatch = pathname.match(PLUGIN_SCHEDULE_PAUSE_PATTERN)
+  if (schedulePauseMatch) {
+    return handlePluginSchedulePause(
+      req,
+      db,
+      decodeURIComponent(schedulePauseMatch[1]),
+      decodeURIComponent(schedulePauseMatch[2]),
+    )
+  }
+  const scheduleResumeMatch = pathname.match(PLUGIN_SCHEDULE_RESUME_PATTERN)
+  if (scheduleResumeMatch) {
+    return handlePluginScheduleResume(
+      req,
+      db,
+      decodeURIComponent(scheduleResumeMatch[1]),
+      decodeURIComponent(scheduleResumeMatch[2]),
+    )
+  }
+  const schedulesMatch = pathname.match(PLUGIN_SCHEDULES_PATTERN)
+  if (schedulesMatch) {
+    return handlePluginSchedulesList(req, db, decodeURIComponent(schedulesMatch[1]))
   }
 
   if (pathname === PLUGIN_EVENTS_PATH) {

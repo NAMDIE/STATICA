@@ -1,0 +1,143 @@
+/**
+ * Body-only styling for PluginSchedulesDialog. Backdrop, header, footer
+ * chrome lives in @ui/components/Dialog.
+ */
+
+.empty {
+    margin: 0;
+    color: var(--editor-text-muted);
+    font-size: 13px;
+}
+
+.scheduleRow {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px;
+    border: 1px solid var(--panel-border);
+    border-radius: var(--editor-radius);
+    background: var(--editor-surface);
+}
+
+.scheduleHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.scheduleTitle {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--editor-text);
+    font-family: var(--font-mono);
+}
+
+.scheduleMeta {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    column-gap: 12px;
+    row-gap: 4px;
+    margin: 0;
+    font-size: 12px;
+    color: var(--editor-text-muted);
+}
+
+.scheduleMeta dt {
+    font-weight: 500;
+}
+
+.scheduleMeta dd {
+    margin: 0;
+    color: var(--editor-text);
+    font-variant-numeric: tabular-nums;
+}
+
+.scheduleActions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.statusBadge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: var(--editor-radius-sm);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.statusOk {
+    background: var(--editor-success-bg);
+    color: var(--editor-success-green);
+}
+
+.statusError,
+.statusTimeout {
+    background: var(--editor-danger-bg);
+    color: var(--editor-danger);
+}
+
+.statusNever {
+    background: var(--panel-border);
+    color: var(--editor-text-muted);
+}
+
+.statusPaused {
+    background: var(--editor-warning-bg);
+    color: var(--editor-warning);
+}
+
+.errorLine {
+    margin: 0;
+    padding: 8px 10px;
+    background: var(--editor-danger-bg);
+    border-left: 3px solid var(--editor-danger);
+    border-radius: var(--editor-radius-sm);
+    color: var(--editor-text);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    word-break: break-word;
+    white-space: pre-wrap;
+}
+
+.recentRunsHeading {
+    margin: 8px 0 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--editor-text-muted);
+}
+
+.recentRuns {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.recentRuns li {
+    display: grid;
+    grid-template-columns: max-content 1fr max-content;
+    gap: 8px;
+    align-items: center;
+    padding: 4px 0;
+    font-size: 11px;
+    color: var(--editor-text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.recentRuns li[data-status="error"],
+.recentRuns li[data-status="timeout"] {
+    color: var(--editor-danger);
+}
+
+.recentRuns li[data-status="ok"] {
+    color: var(--editor-text);
+}

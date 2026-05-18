@@ -61,6 +61,10 @@ export const PLUGIN_PERMISSION_VALUES = [
   // calls to hosts outside the allowlist are rejected at the host bridge
   // even when the permission is granted.
   'network.outbound',
+  // Scheduled jobs — register handlers fired on a cadence (`daily`,
+  // `hourly`, `every: { minutes }`, …) by the host's scheduler tick.
+  // The handler runs inside the same QuickJS sandbox as everything else.
+  'cms.schedule',
   // Reserved
   'unstable.internals',
 ] as const
@@ -513,6 +517,22 @@ export interface RegisteredPluginCanvasOverlay extends PluginCanvasOverlay {
 }
 
 export interface EditorPluginApi {
+  /**
+   * Plugin metadata available to editor entrypoints. Mirrors the shape of
+   * `ServerPluginApi.plugin` for consistency, minus `log` (editor code can
+   * use the browser console directly).
+   */
+  plugin: {
+    id: string
+    version: string
+    permissions: PluginPermission[]
+    /**
+     * Build a URL for a static file the plugin shipped in its zip. See
+     * `ServerPluginApi.plugin.assetUrl` for semantics — both forms return
+     * the same `/uploads/plugins/<id>/<version>/<path>` URL.
+     */
+    assetUrl: (path: string) => string
+  }
   editor: {
     commands: {
       register: (command: PluginCommand) => void
@@ -682,12 +702,96 @@ export interface ServerPluginSettingsApi {
   replace: (next: Record<string, unknown>) => Promise<void>
 }
 
+// ---------------------------------------------------------------------------
+// Scheduled jobs — `api.cms.schedule.*`
+// ---------------------------------------------------------------------------
+
+/**
+ * Cadence shapes the plugin can register. All times are interpreted in
+ * UTC. The full set is restricted to a small enum of common intervals —
+ * full cron strings are intentionally not supported. Plugin authors who
+ * need irregular cadences ("every 13 minutes during business hours") can
+ * implement that inside a handler that runs `every: { minutes: 1 }` and
+ * gates internally.
+ */
+export type PluginScheduleCadence =
+  | { interval: 'hourly' }
+  | { interval: 'daily'; at: string }
+  | { interval: 'weekly'; at: string; day: 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun' }
+  | { interval: 'monthly'; at: string; dayOfMonth: number }
+  | { interval: 'every'; minutes: number }
+
+export type PluginScheduleOverlapPolicy = 'skip' | 'queue' | 'parallel'
+
+export interface PluginScheduleDefinition {
+  /**
+   * Schedule id within the plugin's namespace. Final id is
+   * `<pluginId>.<scheduleId>`. Must be unique per plugin.
+   */
+  id: string
+  cadence: PluginScheduleCadence
+  /**
+   * What to do when a fire arrives while the previous run is still in
+   * progress:
+   *   - `'skip'`     — drop the new fire (default; safest)
+   *   - `'queue'`    — FIFO queue, capped at 10
+   *   - `'parallel'` — run concurrently (handler must be safe under it)
+   */
+  overlap?: PluginScheduleOverlapPolicy
+  /**
+   * Wall-clock budget for one fire of the handler. Defaults to 5_000ms.
+   * Bounded by the host to 5 minutes to prevent any single plugin from
+   * monopolising a worker.
+   */
+  maxDurationMs?: number
+  /** Async handler — receives no arguments. Use closure scope for state. */
+  handler: () => void | Promise<void>
+}
+
+export interface ServerPluginScheduleApi {
+  /**
+   * Register or update a scheduled job. Idempotent on re-activation —
+   * calling with the same `id` keeps last-run history while replacing the
+   * cadence + handler with whatever the latest `activate()` declared.
+   */
+  register: (def: PluginScheduleDefinition) => void
+  /**
+   * Cancel a previously-registered schedule. Removes the handler from the
+   * VM and disables the row in the host. The row stays for audit; future
+   * `register` calls re-enable it.
+   */
+  cancel: (scheduleId: string) => void
+  /** Short form for `register({ id, cadence: { interval: 'daily', at }, handler })`. */
+  daily: (id: string, at: string, handler: () => void | Promise<void>) => void
+  /** Short form for `register({ id, cadence: { interval: 'hourly' }, handler })`. */
+  hourly: (id: string, handler: () => void | Promise<void>) => void
+  /** Short form for `register({ id, cadence: { interval: 'every', minutes }, handler })`. */
+  every: (minutes: number, id: string, handler: () => void | Promise<void>) => void
+}
+
 export interface ServerPluginApi {
   plugin: {
     id: string
     version: string
     permissions: PluginPermission[]
     log: (...args: unknown[]) => void
+    /**
+     * Build a public URL for a static file the plugin ships in its zip.
+     *
+     * Plugin packages can include any number of static assets (images,
+     * CSS, fonts, JSON, …) alongside the bundled JS entrypoints. They are
+     * extracted to `/uploads/plugins/<id>/<version>/<path>` at install
+     * time and served by the host's static handler.
+     *
+     * This helper returns the canonical URL for the given package-relative
+     * path. It works inside the sandbox AND from admin / editor / frontend
+     * bundles (which receive the same context through their host wrappers).
+     *
+     * @example
+     *   const url = api.plugin.assetUrl('icon.svg')
+     *   // → "/uploads/plugins/acme.template/1.0.0/icon.svg"
+     */
+    assetUrl: (path: string) => string
   }
   cms: {
     routes: {
@@ -720,6 +824,15 @@ export interface ServerPluginApi {
       }
     }
     hooks: ServerPluginHooksApi
+    /**
+     * Register handlers that fire on a cadence. Requires the
+     * `cms.schedule` permission. Handlers run inside the same QuickJS
+     * sandbox as the rest of the plugin's server code, with a per-fire
+     * wall-clock budget (default 5_000ms, configurable per schedule).
+     * The host's scheduler tick (`server/plugins/scheduler.ts`) drives
+     * dispatch and persists last-run state across restarts.
+     */
+    schedule: ServerPluginScheduleApi
   }
 }
 

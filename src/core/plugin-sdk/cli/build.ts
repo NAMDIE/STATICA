@@ -102,6 +102,16 @@ interface BundleOptions {
    * resolved. Bundle locally (or stick to `window.__pb`).
    */
   frontendBundle?: boolean
+  /**
+   * Extra bare specifiers to externalize on top of the host-runtime defaults.
+   * Used for frontend bundles that lean on the published-page runtime
+   * importmap — e.g. a Three.js plugin imports `three` and
+   * `three/examples/jsm/...`, and both must stay as bare imports so the
+   * browser's importmap resolves them to the host's locally-installed copy.
+   * Subpath imports are matched via `<name>/*` glob so the addon files
+   * (`three/examples/jsm/controls/OrbitControls.js`) also survive bundling.
+   */
+  externalSpecifiers?: string[]
 }
 
 /**
@@ -109,8 +119,29 @@ interface BundleOptions {
  * a `globalThis.<slot>` so the QuickJS sandbox can find it. The user's
  * source is left untouched; this facade is bundled WITH it.
  *
- * For 'server' sandboxes, the entire export namespace becomes the slot
- * value (so `export function activate` → `globalThis.__plugin_exports.activate`).
+ * For 'server' sandboxes the runner expects `__plugin_exports.activate`
+ * etc. as direct properties — but plugin authors reasonably write either:
+ *
+ *   // shape A: named exports
+ *   export function activate(api) { … }
+ *   export function deactivate(api) { … }
+ *
+ *   // shape B: single default export — much more common in TS+ESM code
+ *   const mod = { install, activate, deactivate, uninstall }
+ *   export default mod
+ *
+ * Shape A maps cleanly to `import * as __plugin` (every named export shows
+ * up as a property). Shape B does NOT — `__plugin.default` holds the
+ * module object, and `__plugin.activate` is undefined, so the runner
+ * silently no-ops the lifecycle hook. That's exactly the symptom we hit
+ * with the uptime-monitor demo: install reported success but no schedules
+ * landed because activate was never invoked.
+ *
+ * The facade therefore detects shape B at runtime and unwraps it. If the
+ * default export looks like a plugin module (at least one of the known
+ * lifecycle hooks is a function on it), we promote the default — falling
+ * back to the namespace so shape A still works unchanged.
+ *
  * For 'modules' sandboxes, only the default export is exfiltrated (the
  * SDK's `definePack` builder default-exports the array of modules).
  */
@@ -120,7 +151,13 @@ function generateSandboxFacade(entrypointAbsolutePath: string, kind: 'server' | 
   if (kind === 'server') {
     return [
       `import * as __plugin from ${importPath};`,
-      `globalThis.__plugin_exports = __plugin;`,
+      `const __default = __plugin && __plugin.default;`,
+      `const __isPluginModule = (v) => v && typeof v === 'object' && (`,
+      `  typeof v.install === 'function' || typeof v.activate === 'function' ||`,
+      `  typeof v.deactivate === 'function' || typeof v.uninstall === 'function' ||`,
+      `  typeof v.migrate === 'function'`,
+      `);`,
+      `globalThis.__plugin_exports = __isPluginModule(__default) ? __default : __plugin;`,
     ].join('\n')
   }
   return [
@@ -134,9 +171,29 @@ async function bundleEntrypoint(
   outFile: string,
   options: BundleOptions = {},
 ): Promise<void> {
-  const external = options.sandbox || options.frontendBundle
-    ? []
-    : HOST_RUNTIME_EXTERNALS
+  // Externals layering, from most → least restrictive:
+  //  - Sandboxed bundles (server / modules) get NO externals: they run in a
+  //    QuickJS VM with no module resolver, so every dep must be inlined.
+  //  - Frontend bundles default to NO externals (published pages have no
+  //    import map of their own), but the caller can opt into runtime-resolved
+  //    externals via `externalSpecifiers` — used when the host is going to
+  //    emit an `<script type="importmap">` for the page's locked deps.
+  //  - Admin / editor bundles share the host's React + design system via
+  //    `HOST_RUNTIME_EXTERNALS` resolved by the editor's import map.
+  const externalSet = new Set<string>()
+  if (!options.sandbox) {
+    if (!options.frontendBundle) {
+      for (const name of HOST_RUNTIME_EXTERNALS) externalSet.add(name)
+    }
+    for (const specifier of options.externalSpecifiers ?? []) {
+      externalSet.add(specifier)
+      // Bun.build (and esbuild) treat `name/*` as a glob — required to
+      // externalize subpath imports like `three/examples/jsm/...` while
+      // letting the bare `three` resolve via the same external.
+      externalSet.add(`${specifier}/*`)
+    }
+  }
+  const external = [...externalSet]
 
   // Sandboxed bundles go through a generated facade so the bundler can
   // resolve the user's entrypoint normally and we just hand-write the
@@ -320,10 +377,19 @@ export async function buildPlugin(
     await bundleEntrypoint(serverSource, join(distDir, 'server', 'index.js'), { sandbox: 'server' })
   }
   if (frontendSource && frontendOutputPath) {
+    // Collect every package any module declared as a runtime dependency.
+    // Frontend bundles that import those packages should leave the bare
+    // specifier in place — the published page's `<script type="importmap">`
+    // (emitted by the publisher from the site's lock) resolves them to
+    // host-served URLs at runtime, so multiple plugins share one copy.
+    const runtimeExternals = collectRuntimeExternals(definition.modules)
     await bundleEntrypoint(
       frontendSource,
       join(distDir, frontendOutputPath),
-      { frontendBundle: true },
+      {
+        frontendBundle: true,
+        ...(runtimeExternals.length > 0 ? { externalSpecifiers: runtimeExternals } : {}),
+      },
     )
   }
 
@@ -364,6 +430,24 @@ export async function buildPlugin(
     outputDir: distDir,
     zipPath,
   }
+}
+
+/**
+ * Collect every non-dev package declared by any module in this plugin as a
+ * runtime site dependency. These are the bare specifiers that the plugin's
+ * frontend bundle should leave un-bundled — the published page resolves
+ * them through its `<script type="importmap">`.
+ */
+function collectRuntimeExternals(modules: PluginDefinition['modules']): string[] {
+  const externals = new Set<string>()
+  for (const mod of modules) {
+    const deps = mod.dependencies ?? {}
+    for (const [name, spec] of Object.entries(deps)) {
+      const dev = typeof spec === 'string' ? false : Boolean(spec.dev)
+      if (!dev) externals.add(name)
+    }
+  }
+  return [...externals].sort()
 }
 
 /**

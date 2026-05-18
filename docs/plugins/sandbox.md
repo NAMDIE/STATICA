@@ -20,11 +20,13 @@ Page Builder is self-hosted. Site operators install plugins they downloaded from
 ### The SDK
 
 - `api.plugin.{id, version, permissions, log}`
+- `api.plugin.assetUrl(path)` — build a URL for a static file your plugin shipped in its zip (`'/uploads/plugins/<id>/<version>/<path>'`)
 - `api.cms.routes.{get, post, patch, delete, getPublic}` — register HTTP routes under `/admin/api/cms/plugins/<id>/runtime/…`
 - `api.cms.storage.collection(id).{list, create, update, delete}` — plugin-owned records
 - `api.cms.hooks.{on, filter, emit}` — pub/sub event bus
 - `api.cms.loops.registerSource` — register a loop entity source
 - `api.cms.settings.{get, getAll, replace}` — plugin settings
+- `api.cms.schedule.{register, cancel, daily, hourly, every}` — scheduled jobs (cadence-driven handlers). See [scheduled-jobs.md](./scheduled-jobs.md).
 
 ### Standard JavaScript
 
@@ -100,7 +102,74 @@ The VM ships a minimal `fetch` polyfill that returns a Response-like object with
 - `.json()` → `Promise<unknown>`
 - `.arrayBuffer()` → `Promise<ArrayBuffer>`
 
-It does NOT support: streaming bodies, `FormData` request bodies, `AbortSignal`, or introspectable redirects. Add an issue if you need them.
+It DOES support `init.signal` — `AbortSignal` cancellation threads through to the host's real `fetch`, so an aborted call tears down the upstream socket instead of waiting for the response to dribble in.
+
+```ts
+export async function activate(api) {
+  // Per-request timeout via AbortSignal.timeout.
+  const res = await fetch('https://api.weather.example.com/today', {
+    signal: AbortSignal.timeout(5_000),
+  })
+  api.plugin.log(await res.json())
+}
+```
+
+It does NOT support: streaming bodies, `FormData` request bodies, or introspectable redirects. Add an issue if you need them.
+
+### Timers, microtasks, and AbortController
+
+The VM ships polyfills for the standard async/cancellation surface:
+
+- `setTimeout(fn, ms)` / `clearTimeout(id)`
+- `setInterval(fn, ms)` / `clearInterval(id)` (4ms floor)
+- `queueMicrotask(fn)`
+- `AbortController`, `AbortSignal`, `AbortSignal.abort(reason)`, `AbortSignal.timeout(ms)`, `AbortSignal.any(signals)`
+
+Timers are real wall-clock timers — the wait is performed by the host's worker, not faked inside the VM — so a plugin can use them for debouncing, periodic polling, or per-request timeouts as it would in Node or the browser.
+
+Two caveats:
+
+1. **Scheduled-job deadlines still apply.** A scheduled handler that uses `setTimeout` inside its own body must finish all timer-driven work within the schedule's `maxDurationMs`. The QuickJS interrupt handler aborts the whole fire if it runs over.
+2. **Timers are tied to the VM lifecycle.** When a plugin is uninstalled, upgraded, or its worker crashes, every pending timer is cancelled — fires after that point are dropped, not delivered into a dead VM.
+
+## Static assets
+
+Plugins can ship any static file alongside their bundled JS — images, CSS, fonts, JSON, audio, anything. Put them in the plugin zip at any path and the host serves them at `/uploads/plugins/<id>/<version>/<path>` automatically.
+
+To reference an asset from plugin code, use `api.plugin.assetUrl(path)`:
+
+```ts
+// server entrypoint
+export async function activate(api) {
+  api.cms.routes.getPublic('/og.png', async () => ({
+    __response: true,
+    status: 302,
+    headers: { Location: api.plugin.assetUrl('og-image.png') },
+  }))
+}
+
+// editor / admin / frontend bundles
+import type { EditorPluginApi } from '@pagebuilder/plugin-sdk'
+export const activate = (api: EditorPluginApi) => {
+  document.body.style.backgroundImage = `url(${api.plugin.assetUrl('bg.svg')})`
+}
+```
+
+`assetUrl` works identically in server, editor, admin, and frontend contexts.
+
+## Resource limits
+
+Each plugin VM has hard caps to keep runaways from degrading the host:
+
+| Limit | Default | Behavior when exceeded |
+|---|---|---|
+| Heap memory | 64 MB | Allocation throws `OutOfMemory` inside the VM |
+| WASM stack | 1 MB | Deep recursion throws `StackOverflow` inside the VM |
+| Wall-clock per eval | 5 s | The VM is aborted with `InternalError: interrupted` |
+
+The wall-clock budget applies to every entry point: lifecycle hooks, route handlers, hook listeners, loop fetches, settings updates. If your plugin legitimately needs more time for an external call, emit progress hooks and let the operation chunk — don't block in a tight loop.
+
+These limits live in `server/plugins/quickjsHost.ts`. They are not yet configurable per plugin; if your plugin hits a ceiling, open an issue.
 
 ## Build-time validation
 

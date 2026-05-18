@@ -216,3 +216,92 @@ export async function installCmsPluginPack(
   const body = (await res.json()) as CmsPluginPackInstallSummary
   return body
 }
+
+// ---------------------------------------------------------------------------
+// Scheduled jobs
+// ---------------------------------------------------------------------------
+
+export interface CmsPluginScheduleSummary {
+  pluginId: string
+  scheduleId: string
+  enabled: boolean
+  cadence: unknown
+  overlap: 'skip' | 'queue' | 'parallel'
+  maxDurationMs: number
+  consecutiveFailures: number
+  lastRunAt: string | null
+  lastFinishedAt: string | null
+  lastStatus: 'ok' | 'error' | 'timeout' | 'never_run'
+  lastError: string | null
+  lastDurationMs: number | null
+  nextRunAt: string
+}
+
+export interface CmsPluginScheduleRunSummary {
+  id: string
+  startedAt: string
+  finishedAt: string | null
+  status: 'ok' | 'error' | 'timeout' | 'never_run'
+  error: string | null
+  durationMs: number | null
+  triggeredBy: 'tick' | 'run-now'
+}
+
+export interface CmsPluginSchedulesResponse {
+  schedules: CmsPluginScheduleSummary[]
+  recent: Record<string, CmsPluginScheduleRunSummary[]>
+}
+
+export async function listCmsPluginSchedules(
+  pluginId: string,
+  fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
+  basePath = '/admin/api/cms',
+): Promise<CmsPluginSchedulesResponse> {
+  const res = await fetchImpl(`${basePath}/plugins/${encodeURIComponent(pluginId)}/schedules`, {
+    credentials: 'include',
+  })
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, `CMS plugin schedules list failed with ${res.status}`))
+  }
+  return (await res.json()) as CmsPluginSchedulesResponse
+}
+
+export async function runCmsPluginScheduleNow(
+  pluginId: string,
+  scheduleId: string,
+  fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
+  basePath = '/admin/api/cms',
+): Promise<{ outcome: { ok: boolean; status: string; error?: string; durationMs: number } }> {
+  const url = `${basePath}/plugins/${encodeURIComponent(pluginId)}/schedules/${encodeURIComponent(scheduleId)}/run-now`
+  const res = await fetchImpl(url, { method: 'POST', credentials: 'include' })
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, `CMS plugin schedule run-now failed with ${res.status}`))
+  }
+  return (await res.json()) as { outcome: { ok: boolean; status: string; error?: string; durationMs: number } }
+}
+
+export async function pauseCmsPluginSchedule(
+  pluginId: string,
+  scheduleId: string,
+  fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
+  basePath = '/admin/api/cms',
+): Promise<void> {
+  const url = `${basePath}/plugins/${encodeURIComponent(pluginId)}/schedules/${encodeURIComponent(scheduleId)}/pause`
+  const res = await fetchImpl(url, { method: 'POST', credentials: 'include' })
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, `CMS plugin schedule pause failed with ${res.status}`))
+  }
+}
+
+export async function resumeCmsPluginSchedule(
+  pluginId: string,
+  scheduleId: string,
+  fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
+  basePath = '/admin/api/cms',
+): Promise<void> {
+  const url = `${basePath}/plugins/${encodeURIComponent(pluginId)}/schedules/${encodeURIComponent(scheduleId)}/resume`
+  const res = await fetchImpl(url, { method: 'POST', credentials: 'include' })
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, `CMS plugin schedule resume failed with ${res.status}`))
+  }
+}

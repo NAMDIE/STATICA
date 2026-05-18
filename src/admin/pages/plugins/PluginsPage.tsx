@@ -40,10 +40,33 @@ import { AdminPageLayout } from "@admin/layouts";
 import { notifyCmsPluginsChanged } from "./utils/pluginEvents";
 import { CMS_SITE_RELOAD_EVENT } from "@site/hooks/usePersistence";
 import { PluginSettingsDialog } from "./components/PluginSettingsDialog/PluginSettingsDialog";
+import { PluginSchedulesDialog } from "./components/PluginSchedulesDialog/PluginSchedulesDialog";
+import { StepUpCancelledMessage, useStepUp } from "@admin/shared/StepUp";
 import styles from "./PluginsPage.module.css";
 
 function notifyCmsSiteReload(): void {
   window.dispatchEvent(new Event(CMS_SITE_RELOAD_EVENT));
+}
+
+/**
+ * Heuristic — does this error message look like it came from the plugin
+ * sandbox layer? The install-time literal scan and the QuickJS runtime
+ * both surface specific phrases; if any are present, we attach a "learn
+ * more" link to `docs/plugins/sandbox.md` so the site owner has a clear
+ * next step beyond the bare error.
+ */
+function isSandboxRelatedError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes('sandbox') ||
+    lower.includes("'node:") ||
+    lower.includes('"node:') ||
+    lower.includes("'bun:") ||
+    lower.includes("could not load module") ||
+    lower.includes('forbidden literal') ||
+    lower.includes('requires permission') ||
+    lower.includes('networkallowedhosts')
+  );
 }
 
 const emptyPayload: CmsPluginsPayload = { plugins: [], adminPages: [] };
@@ -102,6 +125,7 @@ function pluginStatus(plugin: InstalledPlugin): {
 
 export function PluginsPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const { runStepUp } = useStepUp();
 
   // Auto-open the file picker when the spotlight queued a `plugins.install`
   // action from another workspace. Defer to the next tick so the input ref
@@ -122,6 +146,7 @@ export function PluginsPage() {
     null,
   );
   const [settingsPluginId, setSettingsPluginId] = useState<string | null>(null);
+  const [schedulesPluginId, setSchedulesPluginId] = useState<string | null>(null);
   const [pendingRemove, setPendingRemove] = useState<InstalledPlugin | null>(null);
 
   // Editor-side activation failures (per pluginId → error message). Populated
@@ -225,9 +250,15 @@ export function PluginsPage() {
     setUploading(true);
     setError(null);
     try {
-      const result = pending.file
-        ? await installCmsPluginPackage(pending.file, grantedPermissions)
-        : await installCmsPluginManifest(pending.manifest, grantedPermissions);
+      // Installing / upgrading a plugin is a sensitive action — the server
+      // requires a fresh `step_up` auth window. `runStepUp` runs the action
+      // optimistically first; if the server replies `step_up_required`, it
+      // pops a password-confirm dialog and retries.
+      const result = await runStepUp(() =>
+        pending.file
+          ? installCmsPluginPackage(pending.file as File, grantedPermissions)
+          : installCmsPluginManifest(pending.manifest, grantedPermissions),
+      );
       if (result.plugins.length > 0) {
         setPayload({ plugins: result.plugins, adminPages: result.adminPages });
       } else if (result.plugin) {
@@ -249,6 +280,8 @@ export function PluginsPage() {
       }
       setPendingInstall(null);
     } catch (err) {
+      // User dismissed the step-up dialog — treat as no-op, not an error.
+      if (err instanceof Error && err.message === StepUpCancelledMessage) return;
       setError(err instanceof Error ? err.message : "Could not install plugin");
     } finally {
       setUploading(false);
@@ -259,7 +292,7 @@ export function PluginsPage() {
     setBusyPluginId(plugin.id);
     setError(null);
     try {
-      const result = await setCmsPluginEnabled(plugin.id, !plugin.enabled);
+      const result = await runStepUp(() => setCmsPluginEnabled(plugin.id, !plugin.enabled));
       if (result.plugins.length > 0) {
         setPayload({ plugins: result.plugins, adminPages: result.adminPages });
       } else if (result.plugin) {
@@ -269,6 +302,7 @@ export function PluginsPage() {
       }
       notifyCmsPluginsChanged();
     } catch (err) {
+      if (err instanceof Error && err.message === StepUpCancelledMessage) return;
       setError(err instanceof Error ? err.message : "Could not update plugin");
     } finally {
       setBusyPluginId(null);
@@ -285,7 +319,7 @@ export function PluginsPage() {
     setBusyPluginId(plugin.id);
     setError(null);
     try {
-      const result = await restartCmsPlugin(plugin.id);
+      const result = await runStepUp(() => restartCmsPlugin(plugin.id));
       if (result.plugins.length > 0) {
         setPayload({ plugins: result.plugins, adminPages: result.adminPages });
       } else if (result.plugin) {
@@ -295,6 +329,7 @@ export function PluginsPage() {
       }
       notifyCmsPluginsChanged();
     } catch (err) {
+      if (err instanceof Error && err.message === StepUpCancelledMessage) return;
       setError(err instanceof Error ? err.message : "Could not restart plugin");
     } finally {
       setBusyPluginId(null);
@@ -305,7 +340,7 @@ export function PluginsPage() {
     setBusyPluginId(plugin.id);
     setError(null);
     try {
-      const summary = await installCmsPluginPack(plugin.id);
+      const summary = await runStepUp(() => installCmsPluginPack(plugin.id));
       const installedCount =
         summary.installed.visualComponents.length +
         summary.installed.pages.length +
@@ -324,6 +359,7 @@ export function PluginsPage() {
       // without a full browser reload.
       notifyCmsSiteReload();
     } catch (err) {
+      if (err instanceof Error && err.message === StepUpCancelledMessage) return;
       setError(err instanceof Error ? err.message : "Could not install plugin pack");
     } finally {
       setBusyPluginId(null);
@@ -334,7 +370,7 @@ export function PluginsPage() {
     setBusyPluginId(plugin.id);
     setError(null);
     try {
-      await removeCmsPlugin(plugin.id);
+      await runStepUp(() => removeCmsPlugin(plugin.id));
       setPayload((current) => ({
         plugins: current.plugins.filter(
           (candidate) => candidate.id !== plugin.id,
@@ -345,6 +381,9 @@ export function PluginsPage() {
       }));
       notifyCmsPluginsChanged();
     } catch (err) {
+      if (err instanceof Error && err.message === StepUpCancelledMessage) {
+        return;
+      }
       // The host's DELETE handler runs the plugin's `uninstall` lifecycle
       // hook, removes runtime registrations, drops the DB row, and deletes
       // the on-disk asset folder. If that flow returns an error we'd land
@@ -388,9 +427,22 @@ export function PluginsPage() {
     >
       <div className={styles.pluginsBody} data-testid="plugins-admin-canvas">
             {error && (
-              <p className={styles.error} role="alert">
-                {error}
-              </p>
+              <div role="alert">
+                <p className={styles.error}>{error}</p>
+                {isSandboxRelatedError(error) && (
+                  <p className={styles.errorHint}>
+                    This looks like a plugin sandbox issue. See the{' '}
+                    <a
+                      href="https://github.com/davidbabinec/page-builder/blob/main/docs/plugins/sandbox.md"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      sandbox documentation
+                    </a>
+                    {' '}for what's allowed inside plugin code.
+                  </p>
+                )}
+              </div>
             )}
 
             {pendingInstall && (
@@ -459,6 +511,17 @@ export function PluginsPage() {
                               aria-label={`Edit settings for ${plugin.name}`}
                             >
                               <span>Settings</span>
+                            </Button>
+                          )}
+                          {plugin.grantedPermissions.includes("cms.schedule") && (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              disabled={busyPluginId === plugin.id}
+                              onClick={() => setSchedulesPluginId(plugin.id)}
+                              aria-label={`View schedules for ${plugin.name}`}
+                            >
+                              <span>Schedules</span>
                             </Button>
                           )}
                           {plugin.manifest.pack &&
@@ -628,6 +691,17 @@ export function PluginsPage() {
                   notifyCmsPluginsChanged();
                   void loadPlugins();
                 }}
+              />
+            )}
+
+            {schedulesPluginId && (
+              <PluginSchedulesDialog
+                pluginId={schedulesPluginId}
+                pluginName={
+                  payload.plugins.find((p) => p.id === schedulesPluginId)?.name ??
+                  schedulesPluginId
+                }
+                onClose={() => setSchedulesPluginId(null)}
               />
             )}
 

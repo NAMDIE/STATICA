@@ -86,7 +86,3 @@ const mod: ServerPluginModule = {
 }
 
 export default mod
-export const install = mod.install!
-export const activate = mod.activate!
-export const deactivate = mod.deactivate!
-export const uninstall = mod.uninstall!

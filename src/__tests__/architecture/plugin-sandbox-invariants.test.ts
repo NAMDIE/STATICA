@@ -130,11 +130,14 @@ describe('plugin sandbox invariants', () => {
       'cms.hooks.on',
       'cms.loops.registerSource',
       'cms.routes.register',
+      'cms.schedule.cancel',
+      'cms.schedule.register',
       'cms.settings.replace',
       'cms.storage.create',
       'cms.storage.delete',
       'cms.storage.list',
       'cms.storage.update',
+      'network.abort',
       'network.fetch',
     ])
   })

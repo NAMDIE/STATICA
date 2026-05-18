@@ -27,6 +27,8 @@ export const permissions = {
   visualComponentsRegister: 'visualComponents.register',
   frontendScripts: 'frontend.scripts',
   frontendTracker: 'frontend.tracker',
+  networkOutbound: 'network.outbound',
+  cmsSchedule: 'cms.schedule',
   unstableInternals: 'unstable.internals',
 } as const satisfies Record<string, PluginPermission>
 
