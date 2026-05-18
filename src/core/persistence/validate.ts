@@ -194,9 +194,27 @@ function filterCyclicVCs(vcs: SiteDocument['visualComponents']): SiteDocument['v
 // ---------------------------------------------------------------------------
 // Domain post-checks
 // ---------------------------------------------------------------------------
+//
+// The driver below runs each rule in order. New rules: add a helper, add one
+// call line. Order matters where called out in the helper docstrings.
 
 function runDomainPostChecks(site: SiteDocument): SiteDocument {
-  // 1 & 2: Page slug syntax + uniqueness
+  validatePageSlugs(site)
+  validatePageRootNodes(site)
+  normalizeSiteFiles(site)
+  dedupeVisualComponentsByName(site)
+  dropCyclicVisualComponents(site)
+  syncVisualComponentSlots(site)
+  stripDanglingVCRefs(site)
+  sanitizeAllRichtextProps(site)
+  normalizeSitePackage(site)
+  normalizeSiteRuntimeBlock(site)
+  normalizeFrameworkColors(site)
+  return site
+}
+
+/** Rule 1 & 2: every page slug parses + slugs are unique within the site. */
+function validatePageSlugs(site: SiteDocument): void {
   for (let i = 0; i < site.pages.length; i++) {
     const { slug, id } = site.pages[i]
     const slugErr = pageSlugError(slug)
@@ -204,8 +222,10 @@ function runDomainPostChecks(site: SiteDocument): SiteDocument {
     const dupErr = pageSlugDuplicateError(slug, site.pages, id)
     if (dupErr) throw new SiteValidationError(`duplicate slug: ${dupErr}`, `site.pages[${i}].slug`)
   }
+}
 
-  // Referential integrity: rootNodeId must exist in the page's nodes map
+/** Referential integrity: every page.rootNodeId must resolve in its nodes map. */
+function validatePageRootNodes(site: SiteDocument): void {
   for (let i = 0; i < site.pages.length; i++) {
     const page = site.pages[i]
     if (!page.nodes[page.rootNodeId]) {
@@ -215,78 +235,88 @@ function runDomainPostChecks(site: SiteDocument): SiteDocument {
       )
     }
   }
+}
 
-  // 3: SiteFile path safety + deduplication (first-wins on normalized path)
-  const seenPaths = new Set<string>()
+/** Rule 3: filter SiteFiles to safe, deduplicated, normalized paths (first-wins). */
+function normalizeSiteFiles(site: SiteDocument): void {
+  const seen = new Set<string>()
   site.files = site.files.filter((file) => {
     const normalized = normalizePath(file.path)
-    if (!isSafePath(normalized) || seenPaths.has(normalized)) return false
-    seenPaths.add(normalized)
+    if (!isSafePath(normalized) || seen.has(normalized)) return false
+    seen.add(normalized)
     file.path = normalized
     return true
   })
+}
 
-  // 4: VC name validation + deduplication (first-wins on name)
-  const seenVCNames = new Set<string>()
+/** Rule 4: drop VisualComponents with invalid or duplicate names (first-wins). */
+function dedupeVisualComponentsByName(site: SiteDocument): void {
+  const seen = new Set<string>()
   site.visualComponents = site.visualComponents.filter((vc) => {
     if (!validateComponentName(vc.name, []).ok) return false
-    if (seenVCNames.has(vc.name)) return false
-    seenVCNames.add(vc.name)
+    if (seen.has(vc.name)) return false
+    seen.add(vc.name)
     return true
   })
+}
 
-  // 5: VC recursion prevention — drop VCs that form dependency cycles
+/** Rule 5: drop VisualComponents that form dependency cycles. */
+function dropCyclicVisualComponents(site: SiteDocument): void {
   site.visualComponents = filterCyclicVCs(site.visualComponents)
+}
 
-  // 5b: Passive slot sync — idempotent reconciliation of slot-instance children
-  // on every VC ref. Runs after VC filtering so we only reference live VCs.
-  // This fixes any slot-instance drift that may have occurred before Task 4 was
-  // wired into all mutation paths (e.g. legacy data, direct DB edits).
-  {
-    const vcById = new Map(site.visualComponents.map((vc) => [vc.id, vc]))
-    for (const page of site.pages) {
-      for (const node of Object.values(page.nodes)) {
-        if (node.moduleId !== 'base.visual-component-ref') continue
-        const componentId = node.props.componentId
-        if (typeof componentId !== 'string' || !componentId) continue
-        const vc = vcById.get(componentId)
-        if (!vc) continue
-        const treeNodes = page.nodes as Record<string, BaseNode>
-        const syncResult = syncSlotInstances(node as BaseNode, vc, treeNodes)
-        if (syncResult.ops.length > 0 || Object.keys(syncResult.newNodes).length > 0) {
-          applySlotSyncResult(treeNodes, syncResult, node.id)
-        }
+/**
+ * Rule 5b: idempotently reconcile slot-instance children on every VC ref so the
+ * page tree matches each VC's current slot params. Heals drift from data
+ * predating the mutation-side slot sync.
+ *
+ * Runs after `dropCyclicVisualComponents` so refs to dropped VCs aren't synced.
+ */
+function syncVisualComponentSlots(site: SiteDocument): void {
+  const vcById = new Map(site.visualComponents.map((vc) => [vc.id, vc]))
+  for (const page of site.pages) {
+    for (const node of Object.values(page.nodes)) {
+      if (node.moduleId !== 'base.visual-component-ref') continue
+      const componentId = node.props.componentId
+      if (typeof componentId !== 'string' || !componentId) continue
+      const vc = vcById.get(componentId)
+      if (!vc) continue
+      const treeNodes = page.nodes as Record<string, BaseNode>
+      const syncResult = syncSlotInstances(node as BaseNode, vc, treeNodes)
+      if (syncResult.ops.length > 0 || Object.keys(syncResult.newNodes).length > 0) {
+        applySlotSyncResult(treeNodes, syncResult, node.id)
       }
     }
   }
+}
 
-  // 5c: Strip dangling VC refs — remove base.visual-component-ref nodes whose
-  // componentId doesn't resolve to a known VC (can arise from old delete bugs).
-  // Runs after slot sync (5b) so we don't strip refs added by sync.
-  stripDanglingVCRefs(site)
-
-  // 6: Richtext sanitization — page nodes (flat map) and VC node trees (flat map)
+/** Rule 6: sanitize richtext-keyed props on every node in every page and VC tree. */
+function sanitizeAllRichtextProps(site: SiteDocument): void {
   for (const page of site.pages) {
     for (const node of Object.values(page.nodes)) sanitizeNodeProps(node)
   }
   for (const vc of site.visualComponents) {
     for (const node of Object.values(vc.tree.nodes)) sanitizeNodeProps(node)
   }
+}
 
-  // 7: SitePackageJson name sanitization (filters unsafe npm package names)
+/** Rule 7: filter unsafe npm names out of the site's package.json. */
+function normalizeSitePackage(site: SiteDocument): void {
   site.packageJson = normalizeSitePackageJson(site.packageJson)
+}
 
-  // 8: SiteRuntimeConfig normalization (filters unsafe names in dep-lock, normalizes scripts)
+/** Rule 8: normalize site runtime config (dep-lock safety, script shape). */
+function normalizeSiteRuntimeBlock(site: SiteDocument): void {
   site.runtime = normalizeSiteRuntimeConfig(site.runtime)
+}
 
-  // 9: Framework color slug normalization + default dark color generation
-  if (site.settings.framework?.colors) {
-    site.settings.framework.colors.tokens = site.settings.framework.colors.tokens.map((token) => ({
-      ...token,
-      slug: normalizeFrameworkColorSlug(token.slug),
-      darkValue: token.darkValue || generateDefaultDarkColor(token.lightValue),
-    }))
-  }
-
-  return site
+/** Rule 9: normalize framework color slugs + generate default dark values. */
+function normalizeFrameworkColors(site: SiteDocument): void {
+  const colors = site.settings.framework?.colors
+  if (!colors) return
+  colors.tokens = colors.tokens.map((token) => ({
+    ...token,
+    slug: normalizeFrameworkColorSlug(token.slug),
+    darkValue: token.darkValue || generateDefaultDarkColor(token.lightValue),
+  }))
 }
