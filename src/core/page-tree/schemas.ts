@@ -57,10 +57,20 @@ export type Breakpoint = Static<typeof BreakpointSchema>
  * - `parentEntry` — one frame below the top. Inside a loop nested in a
  *   single-entry template, this lets a node refer to the outer template
  *   entry (e.g. "Related to {parentEntry.title}").
+ * - `page` — fields of the page being rendered (title, slug, permalink, …).
+ *   Always present on every render — no loop or template needed.
+ * - `site` — site-level fields (name, baseUrl, settings.*). Always present.
+ * - `viewer` — fields of the currently authenticated user, or `null` for
+ *   anonymous renders. Bindings resolve to empty when null.
+ * - `route` — URL frame (path, slug, segments). Always present.
  */
 const DynamicBindingSourceSchema = Type.Union([
   Type.Literal('currentEntry'),
   Type.Literal('parentEntry'),
+  Type.Literal('page'),
+  Type.Literal('site'),
+  Type.Literal('viewer'),
+  Type.Literal('route'),
 ])
 type DynamicBindingSource = Static<typeof DynamicBindingSourceSchema>
 
@@ -101,7 +111,7 @@ type TemplateCondition = Static<typeof TemplateConditionSchema>
 const PageTemplateConfigSchema = Type.Object({
   enabled: Type.Literal(true),
   context: TemplateContextSchema,
-  collectionId: Type.String({ minLength: 1 }),
+  tableSlug: Type.String({ minLength: 1 }),
   /**
    * Falls back to 0 when missing or not a finite number —
    * handled in parsePageTemplate.
@@ -514,7 +524,14 @@ export type SiteDocument = Static<typeof SiteDocumentSchema>
 function parseDynamicPropBinding(raw: unknown): DynamicPropBinding | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
   const r = raw as Record<string, unknown>
-  const VALID_SOURCES: DynamicBindingSource[] = ['currentEntry', 'parentEntry']
+  const VALID_SOURCES: DynamicBindingSource[] = [
+    'currentEntry',
+    'parentEntry',
+    'page',
+    'site',
+    'viewer',
+    'route',
+  ]
   if (!VALID_SOURCES.includes(r.source as DynamicBindingSource)) return null
   if (typeof r.field !== 'string' || r.field.length === 0) return null
 
@@ -543,14 +560,14 @@ function parsePageTemplate(raw: unknown): PageTemplateConfig | null {
   const r = raw as Record<string, unknown>
   if (r.enabled !== true) return null
   if (r.context !== 'entry') return null
-  if (typeof r.collectionId !== 'string' || r.collectionId.length === 0) return null
+  if (typeof r.tableSlug !== 'string' || r.tableSlug.length === 0) return null
 
   const priority = typeof r.priority === 'number' && isFinite(r.priority) ? r.priority : 0
   const conditions = Array.isArray(r.conditions)
     ? r.conditions.flatMap((c) => Value.Check(TemplateConditionSchema, c) ? [c as TemplateCondition] : [])
     : []
 
-  return { enabled: true, context: 'entry', collectionId: r.collectionId, priority, conditions }
+  return { enabled: true, context: 'entry', tableSlug: r.tableSlug as string, priority, conditions }
 }
 
 /**
@@ -592,13 +609,32 @@ function parsePageNode(raw: unknown, nodePath: string): PageNode {
 
   const propBindings = parsePropBindings(r.propBindings)
 
-  // Parse dynamicBindings: silently drop invalid entries (per-entry tolerance)
+  // Parse dynamicBindings: silently drop invalid entries (per-entry tolerance).
+  //
+  // Phase 4 migration: any binding whose target prop holds a STRING value
+  // is converted in-place to a `{source.field}` token in that prop value,
+  // and the binding entry is dropped. This makes the legacy single-binding
+  // form for string props disappear — string props go through token
+  // interpolation only, which matches how the picker writes them today.
+  //
+  // Non-string-valued props (number, boolean, undefined) keep the legacy
+  // single-binding form because tokens can't carry non-string values.
   let dynamicBindings: Record<string, DynamicPropBinding> | undefined = undefined
   if (r.dynamicBindings && typeof r.dynamicBindings === 'object' && !Array.isArray(r.dynamicBindings)) {
     const result: Record<string, DynamicPropBinding> = {}
     for (const [k, v] of Object.entries(r.dynamicBindings as Record<string, unknown>)) {
       const parsed = parseDynamicPropBinding(v)
-      if (parsed) result[k] = parsed
+      if (!parsed) continue
+      // Migrate string-prop bindings to inline tokens. The prop value
+      // becomes `{source.field}`; if the prop was unset, we still seed
+      // it as a string so token interpolation has something to walk.
+      const target = props[k]
+      const targetIsString = typeof target === 'string' || target === undefined
+      if (targetIsString) {
+        props[k] = `{${parsed.source}.${parsed.field}}`
+        continue
+      }
+      result[k] = parsed
     }
     if (Object.keys(result).length > 0) dynamicBindings = result
   }

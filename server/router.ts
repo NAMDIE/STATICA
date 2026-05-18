@@ -3,12 +3,12 @@ import { handleCmsRequest } from './handlers/cms'
 import { handlePublicTrackerRequest, isPublicTrackerPath } from './handlers/cms/tracker'
 import type { DbClient } from './db/client'
 import {
-  getContentEntryRedirectByRoute,
-  getPublishedContentEntryByRoute,
-} from './repositories/content'
-import { renderContentDocumentHtml } from './publish/contentRenderer'
+  getDataRowRedirectByRoute,
+  getPublishedDataRowByRoute,
+} from './repositories/data/publish'
 import { getLatestPublishedSiteSnapshot, getPublishedPageBySlug } from './repositories/publish'
-import { renderPublishedContentTemplate, renderPublishedSnapshot } from './publish/publicRenderer'
+import { renderPublishedDataRowTemplate, renderPublishedSnapshot } from './publish/publicRenderer'
+import { renderDataRowDocumentHtml } from './publish/dataRenderer'
 import { getSetupStatus } from './repositories/setup'
 import { getPublishedRuntimeAsset } from './repositories/runtimeAsset'
 import { handleLoopRequest, isLoopRuntimeAssetPath, serveLoopRuntimeAsset } from './handlers/cms/loop'
@@ -35,12 +35,12 @@ function publicSlugFromPath(pathname: string): string {
   return trimmed === '' ? 'index' : trimmed
 }
 
-function contentRouteFromPath(pathname: string): { collectionRouteBase: string; entrySlug: string } | null {
+function contentRouteFromPath(pathname: string): { tableRouteBase: string; rowSlug: string } | null {
   const parts = pathname.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean)
   if (parts.length < 2) return null
   return {
-    collectionRouteBase: `/${parts.slice(0, -1).map((part) => decodeURIComponent(part)).join('/')}`,
-    entrySlug: decodeURIComponent(parts[parts.length - 1]),
+    tableRouteBase: `/${parts.slice(0, -1).map((part) => decodeURIComponent(part)).join('/')}`,
+    rowSlug: decodeURIComponent(parts[parts.length - 1]),
   }
 }
 
@@ -124,30 +124,37 @@ async function tryServePublishedPage(db: DbClient, url: URL): Promise<Response |
 }
 
 /**
- * Resolve a URL like `/posts/hello-world` against the content registry.
- * - If the entry exists at its current route, render it through the site
- *   template (or fall back to the standalone document renderer).
- * - Otherwise consult the redirect table and 301 to the entry's new home.
+ * Resolve a URL like `/posts/hello-world` against the data row registry.
+ * - If the row exists at its current route, render it through the site
+ *   template (or fall back to a 404 when no template matches).
+ * - Otherwise consult the redirect table and 301 to the row's new home.
  *
- * Returns `null` for paths that don't carry at least a `/collection/slug`
+ * Returns `null` for paths that don't carry at least a `/table/slug`
  * shape; the dispatcher then continues to the setup-wizard redirect.
  */
 async function tryServeContentRoute(db: DbClient, url: URL): Promise<Response | null> {
   const route = contentRouteFromPath(url.pathname)
   if (!route) return null
 
-  const entry = await getPublishedContentEntryByRoute(db, route.collectionRouteBase, route.entrySlug)
-  if (entry) {
+  const row = await getPublishedDataRowByRoute(db, route.tableRouteBase, route.rowSlug)
+  if (row) {
     const siteSnapshot = await getLatestPublishedSiteSnapshot(db)
-    const html = siteSnapshot
-      ? await renderPublishedContentTemplate(siteSnapshot, entry, { db, url })
+    const templateHtml = siteSnapshot
+      ? await renderPublishedDataRowTemplate(siteSnapshot, row, { db, url })
       : null
-    return new Response(html ?? renderContentDocumentHtml(entry), {
+    // Pass the published site + URL through so the fallback document
+    // can build proper page/site/route frames and resolve tokens like
+    // `{site.name}` and `{route.path}` in row cells.
+    const html = templateHtml ?? renderDataRowDocumentHtml(row, {
+      site: siteSnapshot?.site,
+      url,
+    })
+    return new Response(html, {
       headers: { 'content-type': 'text/html; charset=utf-8' },
     })
   }
 
-  const redirect = await getContentEntryRedirectByRoute(db, route.collectionRouteBase, route.entrySlug)
+  const redirect = await getDataRowRedirectByRoute(db, route.tableRouteBase, route.rowSlug)
   if (redirect) {
     return new Response(null, {
       status: 301,

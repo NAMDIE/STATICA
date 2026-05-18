@@ -148,14 +148,16 @@ function makeFakeDb() {
       }
     }
     // recordLoginAttempt — append-only audit. Bind shape:
-    // values[0]=id, values[1]=emailNorm, values[2]=ip, values[3]=userId, values[4]=result.
+    // values[0]=id, values[1]=emailNorm, values[2]=ip, values[3]=userAgent,
+    // values[4]=userId, values[5]=result.
     if (normalized.includes('insert into login_attempts')) {
       loginAttempts.push({
         id: values[0],
         email_norm: values[1],
         ip_address: values[2],
-        user_id: values[3],
-        result: values[4],
+        user_agent: values[3],
+        user_id: values[4],
+        result: values[5],
         attempted_at: new Date().toISOString(),
       })
       return { rows: [], rowCount: 1 }

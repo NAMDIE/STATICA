@@ -1,15 +1,19 @@
 import { useEffect, useId, useState } from 'react'
-import { createHeadingBlock, createParagraphBlock, serializeMarkdownBlocks } from '@core/content/markdown'
+import { createHeadingBlock, createParagraphBlock, serializeMarkdownBlocks } from '@core/markdown/blockModel'
+import { readTitleCell } from '@core/data/cells'
 import type {
-  ContentCollection,
-  ContentEntry,
-  ContentEntryStatus,
-  UpdateContentCollectionInput,
-} from '@core/content/schemas'
+  DataTable,
+  DataRow,
+  DataRowStatus,
+  UpdateDataTableInput,
+} from '@core/data/schemas'
 import { useEditorStore } from '@site/store/store'
 import { HeadingIcon } from 'pixel-art-icons/icons/heading'
 import { ImagesSolidIcon } from 'pixel-art-icons/icons/images-solid'
 import { TextPlusIcon } from 'pixel-art-icons/icons/text-plus'
+import { BracesIcon } from 'pixel-art-icons/icons/braces'
+import { BindingPickerDialog } from '@site/property-controls/DynamicBindingControl'
+import { bindingToToken } from '@core/templates/tokenInterpolation'
 import { AdminCanvasLayout } from '@admin/layouts'
 import { MediaExplorerPanel } from '@site/panels/MediaExplorerPanel'
 import type { CanvasNotchAction } from '@site/canvas/CanvasNotch'
@@ -70,6 +74,11 @@ export function ContentPage() {
   // bumping them re-runs the focus effect inside the canvas / body editor.
   const [focusTitleSignal, setFocusTitleSignal] = useState(0)
   const [focusBodySignal, setFocusBodySignal] = useState(0)
+  // Token binding picker — opened from the notch's "Bind" action so
+  // authors can drop a `{currentEntry.field}` token into their post
+  // body. Picker confirms by appending a paragraph block with the token
+  // (caret-aware insert is a Stage B follow-up).
+  const [tokenPickerOpen, setTokenPickerOpen] = useState(false)
   const slugId = useId()
   const seoTitleId = useId()
   const seoDescriptionId = useId()
@@ -123,7 +132,7 @@ export function ContentPage() {
     }
   }
 
-  async function handleMoveEntryCollection(collectionId: string) {
+  async function handleMoveEntryCollection(tableId: string) {
     if (!canEditSelectedEntry) {
       workspace.setError('Your role cannot move this entry')
       return
@@ -131,7 +140,7 @@ export function ContentPage() {
     draft.setSaveMessage('saving')
     workspace.setError(null)
     try {
-      const entry = await workspace.moveSelectedEntryToCollection(collectionId)
+      const entry = await workspace.moveSelectedEntryToCollection(tableId)
       if (entry) draft.applySelectedEntry(entry)
       draft.setSaveMessage('saved')
     } catch (err) {
@@ -160,8 +169,8 @@ export function ContentPage() {
   }
 
   async function handleUpdateCollection(
-    collection: ContentCollection,
-    input: UpdateContentCollectionInput,
+    collection: DataTable,
+    input: UpdateDataTableInput,
   ) {
     if (!canManageCollections) {
       workspace.setError('Your role cannot manage content collections')
@@ -176,7 +185,7 @@ export function ContentPage() {
     }
   }
 
-  async function handleDeleteCollection(collection: ContentCollection) {
+  async function handleDeleteCollection(collection: DataTable) {
     if (!canManageCollections) {
       workspace.setError('Your role cannot manage content collections')
       return
@@ -194,8 +203,8 @@ export function ContentPage() {
   }
 
   async function handleRenameEntry(
-    entry: ContentEntry,
-    input: Pick<ContentEntry, 'title' | 'slug'>,
+    entry: DataRow,
+    input: { title: string; slug: string },
   ) {
     if (!canEditContentEntry(permissionUser, entry)) {
       workspace.setError('Your role cannot edit this entry')
@@ -207,10 +216,13 @@ export function ContentPage() {
       const entrySnapshot = workspace.selectedEntry?.id === entry.id
         ? {
             ...entry,
-            bodyMarkdown: serializeMarkdownBlocks(draft.blocks),
-            featuredMediaId: draft.featuredMediaId,
-            seoTitle: draft.seoTitle,
-            seoDescription: draft.seoDescription,
+            cells: {
+              ...entry.cells,
+              body: serializeMarkdownBlocks(draft.blocks),
+              featuredMedia: draft.featuredMediaId,
+              seoTitle: draft.seoTitle,
+              seoDescription: draft.seoDescription,
+            },
           }
         : entry
       const updatedEntry = await workspace.renameEntry(entrySnapshot, input)
@@ -225,7 +237,7 @@ export function ContentPage() {
     }
   }
 
-  async function handleDeleteEntry(entry: ContentEntry) {
+  async function handleDeleteEntry(entry: DataRow) {
     if (!canEditContentEntry(permissionUser, entry)) {
       workspace.setError('Your role cannot delete this entry')
       return
@@ -242,7 +254,7 @@ export function ContentPage() {
     }
   }
 
-  async function handleDuplicateEntry(entry: ContentEntry) {
+  async function handleDuplicateEntry(entry: DataRow) {
     if (!canCreateEntries) {
       workspace.setError('Your role cannot create content entries')
       return
@@ -258,11 +270,14 @@ export function ContentPage() {
       const source = workspace.selectedEntry?.id === entry.id
         ? {
             ...entry,
-            bodyMarkdown: serializeMarkdownBlocks(draft.blocks),
-            featuredMediaId: draft.featuredMediaId,
-            seoTitle: draft.seoTitle,
-            seoDescription: draft.seoDescription,
-            title: draft.title || entry.title,
+            cells: {
+              ...entry.cells,
+              body: serializeMarkdownBlocks(draft.blocks),
+              featuredMedia: draft.featuredMediaId,
+              seoTitle: draft.seoTitle,
+              seoDescription: draft.seoDescription,
+              title: draft.title || readTitleCell(entry.cells),
+            },
           }
         : entry
       const duplicated = await workspace.duplicateEntry(source)
@@ -275,15 +290,15 @@ export function ContentPage() {
     }
   }
 
-  async function handleMoveEntryToCollection(entry: ContentEntry, collectionId: string) {
-    if (entry.collectionId === collectionId) return
+  async function handleMoveEntryToCollection(entry: DataRow, tableId: string) {
+    if (entry.tableId === tableId) return
     if (!canEditContentEntry(permissionUser, entry)) {
       workspace.setError('Your role cannot move this entry')
       return
     }
     workspace.setError(null)
     try {
-      const updatedEntry = await workspace.moveEntryToCollection(entry, collectionId)
+      const updatedEntry = await workspace.moveEntryToCollection(entry, tableId)
       if (workspace.selectedEntry?.id === entry.id) {
         draft.applySelectedEntry(updatedEntry)
       }
@@ -293,7 +308,7 @@ export function ContentPage() {
     }
   }
 
-  async function handlePublishEntry(entry: ContentEntry) {
+  async function handlePublishEntry(entry: DataRow) {
     if (!canPublishContentEntry(permissionUser, entry)) {
       workspace.setError('Your role cannot publish this entry')
       return
@@ -326,7 +341,7 @@ export function ContentPage() {
     }
   }
 
-  async function handleStatusChange(status: ContentEntryStatus) {
+  async function handleStatusChange(status: DataRowStatus) {
     const entry = workspace.selectedEntry
     if (!entry || status === entry.status) return
 
@@ -343,7 +358,7 @@ export function ContentPage() {
     await draft.handleStatusChange(status)
   }
 
-  async function handleConvertEntryToDraft(entry: ContentEntry) {
+  async function handleConvertEntryToDraft(entry: DataRow) {
     if (!canEditContentEntry(permissionUser, entry)) {
       workspace.setError('Your role cannot edit this entry')
       return
@@ -385,6 +400,12 @@ export function ContentPage() {
       label: 'Media',
       icon: ImagesSolidIcon,
       onClick: () => void mediaPicker.openMediaPicker('media'),
+    },
+    {
+      id: 'bind',
+      label: 'Insert data token',
+      icon: BracesIcon,
+      onClick: () => setTokenPickerOpen(true),
     },
   ]
 
@@ -489,7 +510,7 @@ export function ContentPage() {
             mediaError={mediaPicker.mediaError}
             featuredMediaId={draft.featuredMediaId}
             featuredMediaAsset={mediaPicker.featuredMediaAsset}
-            onCollectionChange={(collectionId) => void handleMoveEntryCollection(collectionId)}
+            onCollectionChange={(tableId) => void handleMoveEntryCollection(tableId)}
             onAuthorChange={(authorUserId) => void handleUpdateEntryAuthor(authorUserId)}
             onSlugChange={draft.setSlug}
             onSeoTitleChange={draft.setSeoTitle}
@@ -529,6 +550,31 @@ export function ContentPage() {
           }}
         />
       )}
+
+      {/*
+        Token binding picker — opens from the notch's "Bind" action.
+        Confirm appends a paragraph block containing the `{source.field}`
+        token text to the post body. Caret-aware insertion is a Stage B
+        follow-up (would require lifting the focused block's textarea ref
+        into the page state).
+
+        We pass a minimal `text` control so the field-compatibility
+        filter accepts any string-typed source field. `loopTableId` is
+        deliberately omitted — the content editor isn't inside a loop;
+        authors should pick what they want from the regular left pane.
+      */}
+      <BindingPickerDialog
+        open={tokenPickerOpen}
+        label="post body"
+        control={{ type: 'text', label: 'post body' }}
+        insertMode
+        onClose={() => setTokenPickerOpen(false)}
+        onSet={(binding) => {
+          const token = bindingToToken(binding.source, binding.field)
+          draft.setBlocks((current) => [...current, createParagraphBlock(token)])
+          setTokenPickerOpen(false)
+        }}
+      />
     </>
   )
 }

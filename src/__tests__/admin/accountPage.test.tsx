@@ -2,11 +2,14 @@
  * AccountPage — `/admin/account` self-targeted user settings.
  *
  * Verifies:
- *   - All four tab buttons render (Profile / Sessions / Security / Activity)
+ *   - All four tab buttons render (Profile / Active devices / Security /
+ *     Sign-in history)
  *   - Profile tab is the default and shows the current user's identity
- *   - Switching to Sessions renders the device list (current pinned)
+ *   - Switching to Active devices renders the live session list (current pinned)
  *   - Switching to Security renders the four placeholder cards
- *   - Switching to Activity renders the empty state when there's nothing to show
+ *   - Switching to Sign-in history renders the empty state when there's
+ *     nothing to show, surfaces the suspicious banner on `locked` events,
+ *     and shows the failed-attempt chip when there are recent failures
  *   - The Account workspace is accessible to a viewer-role user (no
  *     capability gating — self-targeted)
  */
@@ -360,6 +363,7 @@ describe('AccountPage', () => {
               attemptedAt: recentLockTimestamp,
               emailNorm: 'owner@example.com',
               ipAddress: '198.51.100.99',
+              deviceLabel: 'Chrome on macOS',
               userId: 'owner_1',
               result: 'locked',
             },
@@ -375,5 +379,61 @@ describe('AccountPage', () => {
     await waitFor(() => {
       expect(screen.getByTestId('account-activity-suspicious')).toBeTruthy()
     })
+  })
+
+  it('Activity tab shows a failed-attempt count chip and the Device column', async () => {
+    const recentFailure = new Date(Date.now() - 5 * 60_000).toISOString()
+    const recentSuccess = new Date(Date.now() - 60_000).toISOString()
+    globalThis.fetch = makeAccountFetch((url) => {
+      if (url.endsWith('/admin/api/cms/auth/activity')) {
+        return jsonResponse({
+          events: [
+            {
+              id: 'a1',
+              attemptedAt: recentFailure,
+              emailNorm: 'owner@example.com',
+              ipAddress: '198.51.100.99',
+              deviceLabel: 'Firefox on Linux',
+              userId: 'owner_1',
+              result: 'bad_password',
+            },
+            {
+              id: 'a2',
+              attemptedAt: recentFailure,
+              emailNorm: 'owner@example.com',
+              ipAddress: '198.51.100.99',
+              deviceLabel: '',
+              userId: 'owner_1',
+              result: 'bad_password',
+            },
+            {
+              id: 'a3',
+              attemptedAt: recentSuccess,
+              emailNorm: 'owner@example.com',
+              ipAddress: '198.51.100.10',
+              deviceLabel: 'Chrome on macOS',
+              userId: 'owner_1',
+              result: 'success',
+            },
+          ],
+        })
+      }
+      return undefined
+    })
+
+    renderWithUser(makeUser())
+    fireEvent.click(screen.getByTestId('account-tab-activity'))
+
+    await waitFor(() => {
+      // The chip counts only failure outcomes within the 24h window. The
+      // single successful login is excluded.
+      expect(screen.getByTestId('account-activity-failed-count').textContent).toBe('2 failed in last 24h')
+    })
+    // Known device label is rendered as-is.
+    expect(screen.getByText('Firefox on Linux')).toBeTruthy()
+    // Successful event also gets a device label rendered.
+    expect(screen.getByText('Chrome on macOS')).toBeTruthy()
+    // Empty deviceLabel falls back to the "Unknown device" placeholder.
+    expect(screen.getAllByText('Unknown device').length).toBeGreaterThan(0)
   })
 })

@@ -1,11 +1,15 @@
 /**
- * Account → Sessions tab.
+ * Account → Active devices tab.
  *
  * Lists every live session the current user has across browsers and devices,
  * pinning the *current* one to the top with a "This device" badge. Each
  * other row exposes a "Sign out" action that calls
  * `DELETE /admin/api/cms/auth/sessions/:id`. A "Sign out everywhere else"
  * action in the section header revokes every non-current session in one go.
+ *
+ * Mutable live state — this is the "kick a device out" surface. Past sign-in
+ * activity (including failures and lockouts) lives in the Sign-in history
+ * tab and is intentionally append-only there.
  *
  * The current session's row is intentionally non-revocable from this UI —
  * users should use the toolbar avatar's "Sign out" item to drop the cookie
@@ -142,8 +146,8 @@ export function SessionsTab() {
     <section className={styles.section} aria-labelledby="account-sessions-title">
       <div className={styles.sectionHeader}>
         <div>
-          <h2 id="account-sessions-title">Sessions</h2>
-          <p>Devices currently signed in to your account. Sign any out individually or all at once.</p>
+          <h2 id="account-sessions-title">Active devices</h2>
+          <p>Devices currently signed in to your account. Sign any out individually or all at once. For a record of past sign-in attempts (including failures), see Sign-in history.</p>
         </div>
         <Button
           type="button"

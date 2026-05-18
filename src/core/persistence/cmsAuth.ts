@@ -525,6 +525,10 @@ const CmsLoginActivityEventSchema = Type.Object({
   attemptedAt: Type.String(),
   emailNorm: Type.Union([Type.String(), Type.Null()]),
   ipAddress: Type.Union([Type.String(), Type.Null()]),
+  // Server-derived "Browser on Platform" label. Empty string when the row
+  // had no User-Agent (e.g. pre-013 rows recorded before the column existed,
+  // or non-browser clients that omitted the header).
+  deviceLabel: Type.String(),
   userId: Type.Union([Type.String(), Type.Null()]),
   result: CmsLoginActivityResultSchema,
 })

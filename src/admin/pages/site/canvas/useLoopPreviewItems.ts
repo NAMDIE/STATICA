@@ -9,14 +9,17 @@
  * sync with what the published page will emit.
  *
  * Built-in source dispatch table:
- *   - `content.entries` — fetches via `listCmsContentEntries(collectionId)`
- *     plus `listCmsMediaAssets()` to resolve featured media paths, then
- *     sorts + offsets + limits client-side.
- *   - `site.pages`      — reads pages from the in-memory site document,
+ *   - `data.rows`  — fetches real published rows via the admin endpoint
+ *     `GET /data/tables/:id/loop-preview`, which runs the same
+ *     `fetchPublishedDataRowItems` projection the publisher uses. Falls
+ *     back to a synthetic preview item from the table's field definitions
+ *     (`dataTablePreviewToLoopItem`) when the table has no published rows
+ *     yet — keeps the loop body visible so the author can lay it out.
+ *   - `site.pages` — reads pages from the in-memory site document,
  *     filters / sorts / offsets / limits client-side.
- *   - `site.media`      — fetches via `listCmsMediaAssets()`, filters by
+ *   - `site.media` — fetches via `listCmsMediaAssets()`, filters by
  *     mime prefix, sorts + offsets + limits client-side.
- *   - any other source  — falls back to the source's synchronous
+ *   - any other source — falls back to the source's synchronous
  *     `preview()` method (plugin sources can ship synthetic data;
  *     follow-up work will let plugins declare a server fetch endpoint).
  */
@@ -25,11 +28,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { useEditorStore } from '@site/store/store'
 import { loopSourceRegistry } from '@core/loops/registry'
 import type { LoopItem } from '@core/loops/types'
-import type { ContentEntry } from '@core/content/schemas'
+import type { DataTable } from '@core/data/schemas'
 import type { Page, PageNode } from '@core/page-tree/schemas'
-import { listCmsContentEntries } from '@core/persistence/cmsContent'
+import { getCmsDataTable, previewCmsDataLoopItems } from '@core/persistence/cmsData'
 import { listCmsMediaAssets, type CmsMediaAsset } from '@core/persistence/cmsMedia'
-import { contentEntryToLoopItem } from '@core/templates/templatePreviewData'
+import { dataTablePreviewToLoopItem } from '@core/templates/templatePreviewData'
 
 // ---------------------------------------------------------------------------
 // Loop prop reader
@@ -84,33 +87,6 @@ function dateMs(value: string | null | undefined): number {
 
 function applyDirection<T>(cmp: (a: T, b: T) => number, direction: 'asc' | 'desc') {
   return direction === 'asc' ? cmp : (a: T, b: T) => -cmp(a, b)
-}
-
-function sortContentEntries(
-  entries: ContentEntry[],
-  orderBy: string,
-  direction: 'asc' | 'desc',
-): ContentEntry[] {
-  const out = [...entries]
-  let cmp: (a: ContentEntry, b: ContentEntry) => number
-  switch (orderBy) {
-    case 'createdAt':
-      cmp = (a, b) => dateMs(a.createdAt) - dateMs(b.createdAt)
-      break
-    case 'updatedAt':
-      cmp = (a, b) => dateMs(a.updatedAt) - dateMs(b.updatedAt)
-      break
-    case 'title':
-      cmp = (a, b) => a.title.localeCompare(b.title)
-      break
-    case 'publishedAt':
-    default:
-      cmp = (a, b) => dateMs(a.publishedAt) - dateMs(b.publishedAt)
-      break
-  }
-  // descending = newest first for date columns; descending = Z→A for title
-  out.sort(applyDirection(cmp, direction))
-  return out
 }
 
 function sortPages(pages: Page[], orderBy: string, direction: 'asc' | 'desc'): Page[] {
@@ -171,7 +147,7 @@ function pageToLoopItem(page: Page): LoopItem {
       slug: page.slug,
       permalink,
       isTemplate: page.template?.enabled === true,
-      templateCollectionId: page.template?.enabled ? page.template.collectionId : null,
+      templateTableSlug: page.template?.enabled ? page.template.tableSlug : null,
     },
   }
 }
@@ -199,7 +175,7 @@ export function useLoopPreviewItems(node: PageNode): LoopItem[] {
   // keeps referentially stable until the user actually edits it. Either way
   // the downstream memo can depend on `filters` directly without thrashing.
   const { sourceId, filters, orderBy, direction, offset, limit } = readLoopProps(node)
-  const collectionId = typeof filters.collectionId === 'string' ? filters.collectionId : ''
+  const tableId = typeof filters.tableId === 'string' ? filters.tableId : ''
   const mimePrefix = typeof filters.mimePrefix === 'string' ? filters.mimePrefix : ''
 
   // Subscribe reactively so site.pages updates trigger re-renders.
@@ -207,37 +183,50 @@ export function useLoopPreviewItems(node: PageNode): LoopItem[] {
   const sitePages = useEditorStore((s) => s.site?.pages ?? null)
 
   // Raw fetched data for async sources — sort/offset/limit applied below.
-  const [asyncEntries, setAsyncEntries] = useState<ContentEntry[]>([])
+  const [asyncDataTable, setAsyncDataTable] = useState<DataTable | null>(null)
+  const [asyncDataRowItems, setAsyncDataRowItems] = useState<LoopItem[]>([])
   const [asyncMedia, setAsyncMedia] = useState<CmsMediaAsset[]>([])
-  const [asyncMediaAssetsForEntries, setAsyncMediaAssetsForEntries] = useState<CmsMediaAsset[]>([])
 
-  // ── Async fetch: content.entries ────────────────────────────────────
-  // When the active source isn't `content.entries`, the useMemo below
-  // never reads `asyncEntries`, so we don't need to clear stale state
-  // synchronously inside the effect (doing so would cascade an extra
-  // render). Stale data is naturally overwritten by the next fetch.
+  // ── Async fetch: data.rows ────────────────────────────────────────────
+  // Two fetches in parallel:
+  //   1. The table schema — used to synthesize a fallback preview item
+  //      via `dataTablePreviewToLoopItem` when the table has no published
+  //      rows yet, so the loop body stays visible while the author wires
+  //      up dynamic bindings.
+  //   2. Real published rows projected as LoopItems via the admin
+  //      `/data/tables/:id/loop-preview` endpoint. This is the same
+  //      projection the publisher uses (`fetchPublishedDataRowItems`),
+  //      so what the canvas shows matches what the published page emits.
   useEffect(() => {
-    if (sourceId !== 'content.entries' || !collectionId) return
+    // Bail out when this loop isn't bound to data.rows. The memo below
+    // gates on `sourceId === 'data.rows'`, so stale state from a previous
+    // selection is never read — no need to reset it synchronously here
+    // (which would violate react-hooks/set-state-in-effect).
+    if (sourceId !== 'data.rows' || !tableId) return
     let cancelled = false
-    Promise.all([
-      listCmsContentEntries(collectionId),
-      listCmsMediaAssets().catch(() => [] as CmsMediaAsset[]),
-    ])
-      .then(([entries, mediaAssets]) => {
-        if (cancelled) return
-        setAsyncEntries(entries)
-        setAsyncMediaAssetsForEntries(mediaAssets)
+    getCmsDataTable(tableId)
+      .then((table) => {
+        if (!cancelled) setAsyncDataTable(table)
       })
       .catch(() => {
-        if (!cancelled) {
-          setAsyncEntries([])
-          setAsyncMediaAssetsForEntries([])
-        }
+        if (!cancelled) setAsyncDataTable(null)
+      })
+    previewCmsDataLoopItems(tableId, {
+      orderBy: orderBy || 'publishedAt',
+      direction,
+      limit,
+      offset,
+    })
+      .then((result) => {
+        if (!cancelled) setAsyncDataRowItems(result.items)
+      })
+      .catch(() => {
+        if (!cancelled) setAsyncDataRowItems([])
       })
     return () => {
       cancelled = true
     }
-  }, [sourceId, collectionId])
+  }, [sourceId, tableId, orderBy, direction, limit, offset])
 
   // ── Async fetch: site.media ─────────────────────────────────────────
   useEffect(() => {
@@ -260,12 +249,17 @@ export function useLoopPreviewItems(node: PageNode): LoopItem[] {
   return useMemo(() => {
     if (!sourceId) return []
 
-    if (sourceId === 'content.entries') {
-      if (asyncEntries.length === 0) return []
-      const sorted = sortContentEntries(asyncEntries, orderBy || 'publishedAt', direction)
-      return sorted
-        .slice(offset, offset + limit)
-        .map((entry) => contentEntryToLoopItem(entry, asyncMediaAssetsForEntries))
+    if (sourceId === 'data.rows') {
+      // Prefer real published rows (server already applied orderBy /
+      // direction / offset / limit via `fetchPublishedDataRowItems`).
+      if (asyncDataRowItems.length > 0) return asyncDataRowItems
+      // No published rows yet (or fetch in flight) — synthesise placeholder
+      // items from the table's field definitions so the loop body stays
+      // visible in the canvas. The author can lay out the template; once
+      // rows are published the preview switches over automatically.
+      if (!asyncDataTable) return []
+      const previewItem = dataTablePreviewToLoopItem(asyncDataTable)
+      return Array.from({ length: Math.min(limit, 3) }, () => previewItem)
     }
 
     if (sourceId === 'site.media') {
@@ -296,8 +290,8 @@ export function useLoopPreviewItems(node: PageNode): LoopItem[] {
     }
   }, [
     sourceId,
-    asyncEntries,
-    asyncMediaAssetsForEntries,
+    asyncDataTable,
+    asyncDataRowItems,
     asyncMedia,
     sitePages,
     site,

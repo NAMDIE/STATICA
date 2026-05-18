@@ -1,49 +1,80 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Page } from '@core/page-tree'
 import type { TemplateRenderDataContext } from '@core/templates/dynamicBindings'
-import {
-  contentEntryToLoopItem,
-  selectLatestTemplatePreviewEntry,
-} from '@core/templates/templatePreviewData'
-import { listCmsContentEntries } from '@core/persistence/cmsContent'
-import { listCmsMediaAssets } from '@core/persistence/cmsMedia'
+import { dataTablePreviewToLoopItem } from '@core/templates/templatePreviewData'
+import { getCmsDataTableBySlug } from '@core/persistence/cmsData'
+import { buildPageFrame, buildRouteFrame, buildSiteFrame } from '@core/templates/contextFrames'
+import { useEditorStore } from '@site/store/store'
 
+/**
+ * Build the canvas-side render context used by `resolveDynamicProps`.
+ *
+ * Always returns a populated context so bindings resolve live in the
+ * editor without needing preview mode:
+ *   - `page`, `site`, `route` — built from the in-memory site document
+ *     and the currently active page. Match the values the publisher
+ *     will compute at render time.
+ *   - `viewer` — `null` in the editor canvas. There's no public viewer
+ *     in design mode; bindings against `viewer.*` resolve to empty.
+ *     Future work: surface the current admin user here when previewing.
+ *   - `entryStack` — populated only for template pages, with a single
+ *     synthetic preview row from the table's schema. Loop iterations
+ *     push/pop on top of this stack via `NodeRenderer`'s loop branch.
+ */
 export function useTemplatePreviewContext(page: Page | null): TemplateRenderDataContext | undefined {
+  // Read site once; the page argument is already reactive via the caller.
+  const site = useEditorStore((s) => s.site)
+
+  // ── Template-page entry-stack seed (synthetic preview row) ───────────
   const template = page?.template
-  const collectionId = template?.enabled && template.context === 'entry'
-    ? template.collectionId
+  const tableSlug = template?.enabled && template.context === 'entry'
+    ? template.tableSlug
     : null
   const [previewState, setPreviewState] = useState<{
-    collectionId: string
-    context: TemplateRenderDataContext | undefined
+    tableSlug: string
+    entryStack: TemplateRenderDataContext['entryStack']
   } | null>(null)
 
   useEffect(() => {
-    if (!collectionId) return
-
+    if (!tableSlug) return
     let cancelled = false
-    Promise.all([
-      listCmsContentEntries(collectionId),
-      listCmsMediaAssets().catch(() => []),
-    ])
-      .then(([entries, mediaAssets]) => {
+    getCmsDataTableBySlug(tableSlug)
+      .then((table) => {
         if (cancelled) return
-        const latestEntry = selectLatestTemplatePreviewEntry(entries)
         setPreviewState({
-          collectionId,
-          context: latestEntry
-            ? { entryStack: [contentEntryToLoopItem(latestEntry, mediaAssets)] }
-            : undefined,
+          tableSlug,
+          entryStack: table ? [dataTablePreviewToLoopItem(table)] : [],
         })
       })
       .catch(() => {
-        if (!cancelled) setPreviewState({ collectionId, context: undefined })
+        if (!cancelled) setPreviewState({ tableSlug, entryStack: [] })
       })
-
     return () => {
       cancelled = true
     }
-  }, [collectionId])
+  }, [tableSlug])
 
-  return previewState?.collectionId === collectionId ? previewState.context : undefined
+  // ── Compose the full context ─────────────────────────────────────────
+  // The template entry stack is only valid for the currently-loaded
+  // tableSlug; outside that, the stack stays empty so bindings against
+  // currentEntry stay empty until the loop interceptor pushes a real
+  // iteration on top.
+  return useMemo<TemplateRenderDataContext | undefined>(() => {
+    if (!page || !site) return undefined
+    const entryStack: TemplateRenderDataContext['entryStack'] =
+      tableSlug && previewState?.tableSlug === tableSlug ? previewState.entryStack : []
+    const pageFrame = buildPageFrame(page)
+    return {
+      entryStack,
+      page: pageFrame,
+      site: buildSiteFrame(site),
+      // Anonymous in the canvas. Live `viewer.*` previews would need
+      // hooking into the admin session, which is a deliberate follow-up.
+      viewer: null,
+      // Route frame mirrors what the published page will see. Editor
+      // doesn't have the real request URL, so we derive from the page's
+      // permalink — same shape, same fields.
+      route: buildRouteFrame(pageFrame.permalink),
+    }
+  }, [page, site, tableSlug, previewState])
 }

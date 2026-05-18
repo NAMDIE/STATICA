@@ -1,14 +1,53 @@
+/**
+ * dynamicBindingControl.test.tsx
+ *
+ * Integration tests for DynamicBindingControl via PropertiesPanel.
+ * Uses globalThis.fetch to mock the DataMeta endpoint so the picker dialog
+ * can load the table/field catalog.
+ */
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import React from 'react'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { PropertiesPanel } from '@site/panels/PropertiesPanel/PropertiesPanel'
 import { DynamicBindingControl } from '@site/property-controls/DynamicBindingControl'
+import { clearDataMetaCache } from '@site/property-controls/DynamicBindingControl.cache'
 import { useEditorStore } from '@site/store/store'
 import { makeNode, makePage, makeSite } from '../fixtures'
 import type { DynamicPropBinding } from '@core/page-tree'
 import '@modules/base/index'
 
-afterEach(cleanup)
+// ---------------------------------------------------------------------------
+// Fixture DataMeta
+// ---------------------------------------------------------------------------
+
+const postsTable = {
+  id: 'posts-id',
+  slug: 'posts',
+  name: 'Posts',
+  kind: 'postType',
+  singularLabel: 'Post',
+  pluralLabel: 'Posts',
+  primaryFieldId: 'title',
+  routable: true,
+  versioned: true,
+  fields: [
+    { id: 'title', label: 'Title', type: 'text' },
+    { id: 'authorName', label: 'Author name', type: 'text' },
+    { id: 'slug', label: 'Slug', type: 'text' },
+    { id: 'body', label: 'Body', type: 'richText' },
+    { id: 'featuredMedia', label: 'Featured media', type: 'media', mediaKind: 'image' },
+    { id: 'firstImage', label: 'First image', type: 'media', mediaKind: 'image' },
+    { id: 'seoTitle', label: 'SEO title', type: 'text' },
+    { id: 'seoDescription', label: 'SEO description', type: 'longText' },
+  ],
+}
+
+// ---------------------------------------------------------------------------
+// Setup / teardown
+// ---------------------------------------------------------------------------
+
+const originalFetch = globalThis.fetch
 
 function resetStore() {
   localStorage.clear()
@@ -46,7 +85,7 @@ function loadTemplateWithTextNode() {
     template: {
       enabled: true,
       context: 'entry',
-      collectionId: 'posts',
+      tableSlug: 'posts',
       priority: 100,
       conditions: [],
     },
@@ -59,70 +98,121 @@ function loadTemplateWithTextNode() {
   } as Parameters<typeof useEditorStore.setState>[0])
 }
 
-beforeEach(resetStore)
+beforeEach(() => {
+  clearDataMetaCache()
+  resetStore()
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    if (String(input).includes('/data/_meta')) {
+      return new Response(
+        JSON.stringify({ meta: { tables: [postsTable] } }),
+        { status: 200 },
+      )
+    }
+    return new Response(JSON.stringify({ error: 'not found' }), { status: 404 })
+  }) as typeof fetch
+})
+
+afterEach(() => {
+  cleanup()
+  clearDataMetaCache()
+  globalThis.fetch = originalFetch
+})
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
 
 describe('dynamic binding controls', () => {
-  it('binds and unbinds compatible module fields inside template context', () => {
+  it('inserts a {currentEntry.field} token into the text prop value', async () => {
     loadTemplateWithTextNode()
     render(<PropertiesPanel />)
 
-    fireEvent.focus(screen.getByLabelText('Text'))
-    expect(screen.getByRole('menuitem', { name: /current post author name/i })).toBeDefined()
-    expect(screen.queryByRole('menuitem', { name: /author id/i })).toBeNull()
-    fireEvent.click(screen.getByRole('menuitem', { name: /current post title/i }))
+    // Phase 4: string-typed controls (text) use insert mode — the
+    // affordance button's aria-label reads "Insert binding for …".
+    fireEvent.click(screen.getByRole('button', { name: /insert binding for text/i }))
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeDefined())
 
-    let node = useEditorStore.getState().site?.pages[0].nodes['text-1']
-    expect(node?.props.text).toBe('Static fallback')
-    expect(node?.dynamicBindings?.text).toMatchObject({
-      source: 'currentEntry',
-      field: 'title',
-    })
-    expect(screen.getByRole('button', { name: /current post title/i })).toBeDefined()
+    // Auto-scoped to Posts — left pane is hidden, fields shown directly
+    await waitFor(() => expect(screen.getByText('Author name')).toBeDefined())
 
-    fireEvent.click(screen.getByRole('button', { name: /remove binding for text/i }))
+    // Pick "Author name" field
+    const authorNameBtn = screen.getAllByRole('button').find((b) =>
+      b.textContent?.includes('Author name'),
+    )
+    expect(authorNameBtn).toBeDefined()
+    fireEvent.click(authorNameBtn!)
 
-    node = useEditorStore.getState().site?.pages[0].nodes['text-1']
-    expect(node?.dynamicBindings).toBeUndefined()
+    // Confirm — insert-mode dialog reads "Insert" not "Confirm"
+    fireEvent.click(screen.getByRole('button', { name: /^insert$/i }))
+
+    // The prop's text value now contains a token appended to the
+    // original static text. No legacy single-binding is written.
+    const node = useEditorStore.getState().site?.pages[0].nodes['text-1']
+    expect(node?.props.text).toBe('Static fallback {currentEntry.authorName}')
+    expect(node?.dynamicBindings?.text).toBeUndefined()
   })
 
-  it('binds template text controls to the current post author name', () => {
+  it('inserts a {currentEntry.title} token for the title field', async () => {
     loadTemplateWithTextNode()
     render(<PropertiesPanel />)
 
-    fireEvent.focus(screen.getByLabelText('Text'))
-    fireEvent.click(screen.getByRole('menuitem', { name: /current post author name/i }))
+    fireEvent.click(screen.getByRole('button', { name: /insert binding for text/i }))
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeDefined())
+    await waitFor(() => expect(screen.getByText('Title')).toBeDefined())
+
+    const titleBtn = screen.getAllByRole('button').find((b) =>
+      b.textContent?.includes('Title') && !b.textContent?.includes('SEO'),
+    )
+    fireEvent.click(titleBtn!)
+    fireEvent.click(screen.getByRole('button', { name: /^insert$/i }))
 
     const node = useEditorStore.getState().site?.pages[0].nodes['text-1']
-    expect(node?.dynamicBindings?.text).toMatchObject({
-      source: 'currentEntry',
-      field: 'authorName',
-    })
+    expect(node?.props.text).toBe('Static fallback {currentEntry.title}')
+    expect(node?.dynamicBindings?.text).toBeUndefined()
   })
 
-  it('offers featured media and first body image bindings for image controls', () => {
+  it('disables media fields for an image control and enables them for compatible fields', async () => {
+    // Render the image-type control directly (no store template)
     let selectedBinding: DynamicPropBinding | undefined
     render(
       <DynamicBindingControl
         propKey="src"
         label="Image"
         control={{ type: 'image', label: 'Image' }}
-        onSet={(binding) => {
-          selectedBinding = binding
-        }}
+        onSet={(binding) => { selectedBinding = binding }}
         onClear={() => {}}
       >
         <input aria-label="Image" />
       </DynamicBindingControl>,
     )
 
-    fireEvent.focus(screen.getByLabelText('Image'))
+    fireEvent.click(screen.getByRole('button', { name: /bind image/i }))
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeDefined())
 
-    expect(screen.getByRole('menuitem', { name: /current post featured media/i })).toBeDefined()
-    fireEvent.click(screen.getByRole('menuitem', { name: /current post first image/i }))
+    // Select "Posts" table
+    fireEvent.click(screen.getByRole('button', { name: /^Posts$/i }))
+    await waitFor(() => expect(screen.getByText('Featured media')).toBeDefined())
+
+    // Text fields should be aria-disabled for an image control
+    // (Button uses aria-disabled when disabled+tooltip combo is present)
+    const titleBtn = screen.getAllByRole('button').find((b) =>
+      b.textContent?.includes('Title') && !b.textContent?.includes('SEO'),
+    )
+    expect(titleBtn?.getAttribute('aria-disabled')).toBe('true')
+
+    // Featured media (mediaKind: 'image') should be enabled (not aria-disabled)
+    const featuredBtn = screen.getAllByRole('button').find((b) =>
+      b.textContent?.includes('Featured media'),
+    )
+    expect(featuredBtn?.getAttribute('aria-disabled')).not.toBe('true')
+
+    // Select featured media and confirm
+    fireEvent.click(featuredBtn!)
+    fireEvent.click(screen.getByRole('button', { name: /confirm/i }))
 
     expect(selectedBinding).toMatchObject({
       source: 'currentEntry',
-      field: 'firstImage',
+      field: 'featuredMedia',
       format: 'media',
     })
   })

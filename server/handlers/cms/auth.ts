@@ -51,6 +51,7 @@ import {
 import { loginPerIpRateLimit, loginRateLimit, mfaRateLimit } from '../../auth/rateLimit'
 import { evaluateFailedAttempt, evaluateLockState } from '../../auth/lockout'
 import { clientIp } from '../../auth/security'
+import { deriveDeviceLabel } from '../../auth/deviceLabel'
 import { findMatchingRecoveryCodeHash, verifyTotpCode } from '../../auth/mfa'
 import { jsonResponse, methodNotAllowed, readJsonObject, setCookieHeader } from '../../http'
 import { CMS_API_PREFIX, readString, requestAuditContext } from './shared'
@@ -85,6 +86,7 @@ async function recordStepUpRateLimit(
   await recordLoginAttempt(db, {
     emailNorm: user.email.toLowerCase(),
     ipAddress: ip,
+    userAgent: req.headers.get('user-agent'),
     userId: user.id,
     result: 'rate_limited',
   })
@@ -114,6 +116,7 @@ async function recordStepUpPasswordFailure(
   await recordLoginAttempt(db, {
     emailNorm: user.email.toLowerCase(),
     ipAddress: ip,
+    userAgent: req.headers.get('user-agent'),
     userId: user.id,
     result: 'bad_password',
   })
@@ -180,6 +183,7 @@ export async function handleAuthRoutes(req: Request, db: DbClient): Promise<Resp
         await recordLoginAttempt(db, {
           emailNorm: email || null,
           ipAddress: ip,
+          userAgent: req.headers.get('user-agent'),
           userId: null,
           result: 'rate_limited',
         })
@@ -211,6 +215,7 @@ export async function handleAuthRoutes(req: Request, db: DbClient): Promise<Resp
       await recordLoginAttempt(db, {
         emailNorm: email || null,
         ipAddress: ip,
+        userAgent: req.headers.get('user-agent'),
         userId: null,
         result: 'rate_limited',
       })
@@ -249,6 +254,7 @@ export async function handleAuthRoutes(req: Request, db: DbClient): Promise<Resp
       await recordLoginAttempt(db, {
         emailNorm: email || null,
         ipAddress: ip,
+        userAgent: req.headers.get('user-agent'),
         userId: user.id,
         result: 'locked',
       })
@@ -279,6 +285,7 @@ export async function handleAuthRoutes(req: Request, db: DbClient): Promise<Resp
       await recordLoginAttempt(db, {
         emailNorm: email || null,
         ipAddress: ip,
+        userAgent: req.headers.get('user-agent'),
         userId: user?.id ?? null,
         result: failureReason,
       })
@@ -359,6 +366,7 @@ export async function handleAuthRoutes(req: Request, db: DbClient): Promise<Resp
     await recordLoginAttempt(db, {
       emailNorm: email || null,
       ipAddress: ip,
+      userAgent: req.headers.get('user-agent'),
       userId: user.id,
       result: 'success',
     })
@@ -404,6 +412,7 @@ export async function handleAuthRoutes(req: Request, db: DbClient): Promise<Resp
       await recordLoginAttempt(db, {
         emailNorm: user.email.toLowerCase(),
         ipAddress: ip,
+        userAgent: req.headers.get('user-agent'),
         userId: user.id,
         result: 'rate_limited',
       })
@@ -424,6 +433,7 @@ export async function handleAuthRoutes(req: Request, db: DbClient): Promise<Resp
       await recordLoginAttempt(db, {
         emailNorm: user.email.toLowerCase(),
         ipAddress: ip,
+        userAgent: req.headers.get('user-agent'),
         userId: user.id,
         result: 'mfa_failed',
       })
@@ -454,6 +464,7 @@ export async function handleAuthRoutes(req: Request, db: DbClient): Promise<Resp
     await recordLoginAttempt(db, {
       emailNorm: user.email.toLowerCase(),
       ipAddress: ip,
+      userAgent: req.headers.get('user-agent'),
       userId: user.id,
       result: 'success',
     })
@@ -616,6 +627,7 @@ export async function handleAuthRoutes(req: Request, db: DbClient): Promise<Resp
         await recordLoginAttempt(db, {
           emailNorm: user.email.toLowerCase(),
           ipAddress: ip,
+          userAgent: req.headers.get('user-agent'),
           userId: user.id,
           result: 'rate_limited',
         })
@@ -640,6 +652,7 @@ export async function handleAuthRoutes(req: Request, db: DbClient): Promise<Resp
         await recordLoginAttempt(db, {
           emailNorm: user.email.toLowerCase(),
           ipAddress: ip,
+          userAgent: req.headers.get('user-agent'),
           userId: user.id,
           result: 'mfa_failed',
         })
@@ -688,7 +701,19 @@ export async function handleAuthRoutes(req: Request, db: DbClient): Promise<Resp
     if (req.method !== 'GET') return methodNotAllowed()
     const user = await requireAuthenticatedUser(req, db)
     if (user instanceof Response) return user
-    const events = await listLoginActivityForUser(db, user.id, user.email.toLowerCase())
+    const attempts = await listLoginActivityForUser(db, user.id, user.email.toLowerCase())
+    // Derive the human-readable device label server-side so the client never
+    // ships a UA parser. The raw `userAgent` is omitted from the wire —
+    // operators can still consult the raw column directly for forensics.
+    const events = attempts.map((attempt) => ({
+      id: attempt.id,
+      attemptedAt: attempt.attemptedAt,
+      emailNorm: attempt.emailNorm,
+      ipAddress: attempt.ipAddress,
+      deviceLabel: deriveDeviceLabel(attempt.userAgent),
+      userId: attempt.userId,
+      result: attempt.result,
+    }))
     return jsonResponse({ events })
   }
 

@@ -291,6 +291,15 @@
     color: var(--editor-danger);
 }
 
+/* Failed-attempt count chip in the Sign-in history header. Reuses the
+ * shared `.badge` base for layout/typography and only overrides the
+ * surface tokens to read as a warning rather than the default neutral
+ * muted swatch. */
+.activityFailureBadge {
+    --badge-bg: var(--editor-warning);
+    --badge-color: var(--editor-warning-text);
+}
+
 .dialogFields {
     display: grid;
     gap: 12px;

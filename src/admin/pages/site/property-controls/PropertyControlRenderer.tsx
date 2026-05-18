@@ -50,6 +50,12 @@ interface DynamicBindingRenderContext {
   availableFields?: import('@core/loops/types').LoopSourceField[]
   /** Optional human label for the binding source — shown in the picker. */
   sourceLabel?: string
+  /**
+   * When the enclosing loop is bound to a specific data table, this is its
+   * table id. The picker uses it to auto-scope to that single table instead
+   * of listing every table in the workspace.
+   */
+  loopTableId?: string | null
 }
 
 interface RenderControlOptions {
@@ -226,6 +232,21 @@ export function PropertyControlRenderer({
     )
   }
 
+  // String-typed controls use the token-insertion flow (Phase 4): picking
+  // a field appends `{source.field}` to the prop's text value. Non-string
+  // controls (number, toggle) keep the legacy "replace whole prop" flow
+  // because tokens can't carry non-string values.
+  const isStringTypedControl =
+    control.type === 'text' ||
+    control.type === 'textarea' ||
+    control.type === 'richtext' ||
+    control.type === 'url' ||
+    control.type === 'color' ||
+    control.type === 'image' ||
+    control.type === 'media' ||
+    control.type === 'select' ||
+    control.type === 'spacing'
+
   const content = dynamicBinding && !disabled ? (
     <DynamicBindingControl
       propKey={propKey}
@@ -235,8 +256,18 @@ export function PropertyControlRenderer({
       binding={dynamicBinding.binding}
       onSet={dynamicBinding.onSet}
       onClear={dynamicBinding.onClear}
+      insertMode={isStringTypedControl}
+      onInsertToken={(token) => {
+        // Append to the current string value with a leading space when
+        // the value isn't empty. Stage A — caret-position-aware
+        // insertion lands in Stage B with the chip UI.
+        const current = typeof value === 'string' ? value : ''
+        const next = current.length === 0 ? token : `${current} ${token}`
+        onChange(propKey, next)
+      }}
       availableFields={dynamicBinding.availableFields}
       sourceLabel={dynamicBinding.sourceLabel}
+      loopTableId={dynamicBinding.loopTableId}
     >
       {inner}
     </DynamicBindingControl>

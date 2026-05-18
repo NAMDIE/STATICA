@@ -2,11 +2,12 @@ import '../../src/modules/base'
 import '@core/loops/sources'
 import { registry } from '@core/module-engine/registry'
 import { publishPage } from '@core/publisher/render'
+import { buildRouteFrame } from '@core/templates/contextFrames'
 import { buildSiteCssBundle } from './siteCssBundle'
 import { selectEntryTemplate } from '@core/templates/templateMatching'
-import { prefetchLoopData, publishedContentEntryToLoopItem } from './loopPrefetch'
+import { prefetchLoopData, publishedDataRowToLoopItem } from './loopPrefetch'
 import { prefetchMediaAssets } from './mediaPrefetch'
-import type { PublishedContentEntry } from '@core/content/schemas'
+import type { PublishedDataRow } from '@core/data/schemas'
 import type { DbClient } from '../db/client'
 import type { PublishedPageSnapshot } from '../repositories/publish'
 import { hookBus } from '@core/plugins/hookBus'
@@ -50,6 +51,13 @@ export async function renderPublishedSnapshot(
     loopData,
     mediaAssets,
     loopEndpointBaseUrl: LOOP_ENDPOINT_BASE_URL,
+    // Seed route frame from the actual request URL (when available) so
+    // `{route.slug}` / `{route.path}` bindings resolve to live values.
+    // publishPage falls back to the page permalink if no templateContext
+    // is provided.
+    templateContext: ctx.url
+      ? { entryStack: [], route: buildRouteFrame(ctx.url.toString()) }
+      : undefined,
   }).html
   const withInjections = injectFrontendAssets(baseHtml, await collectFrontendInjections(ctx.db))
   const filtered = await hookBus.applyFilter('publish.html', withInjections)
@@ -57,12 +65,12 @@ export async function renderPublishedSnapshot(
   return filtered
 }
 
-export async function renderPublishedContentTemplate(
+export async function renderPublishedDataRowTemplate(
   snapshot: PublishedPageSnapshot,
-  entry: PublishedContentEntry,
+  row: PublishedDataRow,
   ctx: RenderPublishedSnapshotContext,
 ): Promise<string | null> {
-  const template = selectEntryTemplate(snapshot.site, entry.collectionId)
+  const template = selectEntryTemplate(snapshot.site, row.tableSlug)
   if (!template) return null
 
   await hookBus.emit('publish.before', { siteId: snapshot.site.id, pageId: template.id })
@@ -72,10 +80,15 @@ export async function renderPublishedContentTemplate(
     prefetchMediaAssets(template, registry, ctx.db),
   ])
   const baseHtml = publishPage(template, snapshot.site, registry, {
-    // Seed the entry stack with the published entry. Loop interceptors will
-    // push/pop iteration items on top of this frame; nodes outside any loop
-    // resolve their `currentEntry` bindings against this seed.
-    templateContext: { entryStack: [publishedContentEntryToLoopItem(entry)] },
+    // Seed the entry stack with the published row + route frame from
+    // the request URL. Loop interceptors push/pop iteration items on
+    // top of this stack; nodes outside any loop resolve their
+    // `currentEntry` bindings against this seed. page/site/viewer
+    // frames are filled by `publishPage` from the document.
+    templateContext: {
+      entryStack: [publishedDataRowToLoopItem(row)],
+      ...(ctx.url ? { route: buildRouteFrame(ctx.url.toString()) } : {}),
+    },
     runtimeAssets: snapshot.runtimeAssets,
     cssEmission: 'external',
     cssBundle,

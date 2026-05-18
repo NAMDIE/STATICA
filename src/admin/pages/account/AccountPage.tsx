@@ -7,16 +7,25 @@
  * and a section body that swaps based on the active tab.
  *
  * Four tabs:
- *   - Profile  — display name + email + role + avatar slot (read-only today)
- *   - Sessions — device list + per-row sign-out + "sign out everywhere else"
- *   - Security — password / MFA / recovery / connected sign-ins (placeholder
- *                shell with disabled CTAs until C.4)
- *   - Activity — login_attempts feed scoped to the current user
+ *   - Profile        — display name + email + role + avatar slot (read-only today)
+ *   - Active devices — live session list + per-row sign-out + "sign out
+ *                       everywhere else"
+ *   - Security       — password / MFA / recovery / connected sign-ins
+ *                       (placeholder shell with disabled CTAs until C.4)
+ *   - Sign-in history — login_attempts audit feed scoped to the current user
+ *                       (successes AND failures, with a failed-attempt count
+ *                       and suspicious-activity banner)
+ *
+ * "Active devices" answers "who is signed in right now and how do I kick
+ * them out?"; "Sign-in history" answers "has anyone been trying to break
+ * into my account?". The two tabs intentionally don't overlap — sessions
+ * are mutable live state, history is an append-only audit trail that
+ * includes attempts which never produced a session at all.
  *
  * Why a route, not a modal? The toolbar avatar dropdown stays the primary
- * entry point but Sessions + Activity are both list-heavy and benefit from
- * a full canvas. A modal would also collide with the editor's overlay
- * panels (DOM tree, properties) on the Site workspace.
+ * entry point but Active devices + Sign-in history are both list-heavy and
+ * benefit from a full canvas. A modal would also collide with the editor's
+ * overlay panels (DOM tree, properties) on the Site workspace.
  */
 import { useState } from 'react'
 import { Button } from '@ui/components/Button'
@@ -32,9 +41,9 @@ type Tab = 'profile' | 'sessions' | 'security' | 'activity'
 
 const TAB_LABELS: Record<Tab, string> = {
   profile: 'Profile',
-  sessions: 'Sessions',
+  sessions: 'Active devices',
   security: 'Security',
-  activity: 'Activity',
+  activity: 'Sign-in history',
 }
 
 const TAB_ORDER: readonly Tab[] = ['profile', 'sessions', 'security', 'activity']

@@ -205,7 +205,22 @@ export function PropertiesPanel({ variant = 'floating' }: PropertiesPanelProps) 
   const enclosingLoopSource = enclosingLoopSourceId
     ? loopSourceRegistry.get(enclosingLoopSourceId)
     : undefined
-  const dynamicBindingsEnabled = activePage?.template?.context === 'entry' || !!enclosingLoopNode
+  // Loop bound to a specific data table — pass its tableId down so the binding
+  // picker can auto-scope to that table (the only one the loop will iterate),
+  // instead of offering every table in the workspace.
+  const enclosingLoopTableId: string | null = (() => {
+    if (!enclosingLoopNode || enclosingLoopSourceId !== 'data.rows') return null
+    const filters = enclosingLoopNode.props.filters
+    if (!filters || typeof filters !== 'object' || Array.isArray(filters)) return null
+    const tableId = (filters as Record<string, unknown>).tableId
+    return typeof tableId === 'string' && tableId ? tableId : null
+  })()
+  // Bindings are always available. The picker decides which sources are
+  // meaningful in the current context (`currentEntry` / `parentEntry`
+  // only when inside a loop or template page; page / site / viewer / route
+  // are always offered). Phase 3 of the binding system refactor —
+  // see docs/superpowers/plans/2026-05-… for the broader plan.
+  const dynamicBindingsEnabled = true
 
   // ─── Prop change handler ───────────────────────────────────────────────────
   //
@@ -261,6 +276,7 @@ export function PropertiesPanel({ variant = 'floating' }: PropertiesPanelProps) 
     activeDocument,
     dynamicBindingsEnabled,
     enclosingLoopSource,
+    enclosingLoopTableId,
     handleChange,
     onSetDynamicBinding: (key, binding) => {
       if (!selectedNodeId) return
@@ -801,6 +817,7 @@ interface ModuleTabContentArgs {
   activeDocument: ActiveDocument | null
   dynamicBindingsEnabled: boolean
   enclosingLoopSource: LoopEntitySource | undefined
+  enclosingLoopTableId: string | null
   handleChange: (propKey: string, value: unknown) => void
   onSetDynamicBinding: (propKey: string, binding: DynamicPropBinding) => void
   onClearDynamicBinding: (propKey: string) => void
@@ -816,6 +833,7 @@ function renderModuleTabContent(args: ModuleTabContentArgs): React.ReactNode {
     activeDocument,
     dynamicBindingsEnabled,
     enclosingLoopSource,
+    enclosingLoopTableId,
     handleChange,
     onSetDynamicBinding,
     onClearDynamicBinding,
@@ -874,6 +892,7 @@ function renderModuleTabContent(args: ModuleTabContentArgs): React.ReactNode {
               onClear: () => onClearDynamicBinding(key),
               availableFields: enclosingLoopSource?.fields,
               sourceLabel: enclosingLoopSource?.label,
+              loopTableId: enclosingLoopTableId,
             } : undefined}
           />
         )

@@ -4,37 +4,40 @@ import { validateSite } from '@core/persistence/validate'
 import { useEditorStore } from '@site/store/store'
 
 describe('dynamic template model', () => {
-  it('validates and preserves page template metadata and node dynamic bindings', () => {
+  it('preserves page template metadata and migrates string-prop bindings to tokens', () => {
     const site = makeSite()
     const page = site.pages[0]
     const root = page.nodes[page.rootNodeId]
     page.template = {
       enabled: true,
       context: 'entry',
-      collectionId: 'posts',
+      tableSlug: 'posts',
       priority: 100,
       conditions: [],
     }
+    // Legacy single-binding form on the root's `text` prop. The prop
+    // value happens to be undefined on a fresh fixture; the migration
+    // accepts that (treats it as a string-typed slot) and converts.
     root.dynamicBindings = {
       text: { source: 'currentEntry', field: 'title', format: 'plain', fallback: 'static' },
     }
 
     const validated = validateSite(site)
 
+    // Template metadata round-trips unchanged.
     expect(validated.pages[0].template).toEqual(page.template)
-    expect(validated.pages[0].nodes[page.rootNodeId].dynamicBindings?.text).toEqual({
-      source: 'currentEntry',
-      field: 'title',
-      format: 'plain',
-      fallback: 'static',
-    })
+    // The legacy binding has been migrated: `text` prop now contains a
+    // `{currentEntry.title}` token, and `dynamicBindings.text` is gone.
+    const migrated = validated.pages[0].nodes[page.rootNodeId]
+    expect(migrated.dynamicBindings?.text).toBeUndefined()
+    expect(migrated.props.text).toBe('{currentEntry.title}')
   })
 
   it('converts a template back to a page by removing template metadata and all bindings', () => {
     const site = makeSite()
     const page = site.pages[0]
     const root = page.nodes[page.rootNodeId]
-    page.template = { enabled: true, context: 'entry', collectionId: 'posts', priority: 100, conditions: [] }
+    page.template = { enabled: true, context: 'entry', tableSlug: 'posts', priority: 100, conditions: [] }
     root.dynamicBindings = {
       text: { source: 'currentEntry', field: 'title' },
     }

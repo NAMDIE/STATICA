@@ -14,6 +14,7 @@ import type { Page, PageNode, SiteDocument } from '@core/page-tree/schemas'
 import type { IModuleRegistry } from '@core/module-engine/types'
 import { resolveProps } from '@core/page-tree/selectors'
 import { resolveDynamicProps, type TemplateRenderDataContext } from '@core/templates/dynamicBindings'
+import { buildPageFrame, buildSiteFrame, buildRouteFrame } from '@core/templates/contextFrames'
 import { classNamesForClassIds } from '@core/page-tree/classNames'
 import { sanitizeModuleCSS, collectClassCSS } from './cssCollector'
 import { PUBLISHER_RESET_CSS } from './reset'
@@ -719,12 +720,28 @@ export function publishPage(
   const { breakpointId, runtimeAssets } = options
   const cssEmission = options.cssEmission ?? 'inline'
   const cssMap = new Map<string, string>()
+
+  // Always seed page/site/route frames so bindings against those sources
+  // resolve on every render — including plain (non-template, non-loop)
+  // pages. The caller may pass its own `templateContext` to populate the
+  // entry stack (template-row renders) or the viewer/route frames (the
+  // public renderer reads the session); we overlay our defaults under
+  // whatever the caller provided so nothing they set gets clobbered.
+  const incoming = options.templateContext ?? { entryStack: [] }
+  const composedTemplateContext: TemplateRenderDataContext = {
+    entryStack: incoming.entryStack,
+    page: incoming.page ?? buildPageFrame(page),
+    site: incoming.site ?? buildSiteFrame(site),
+    viewer: incoming.viewer ?? null,
+    route: incoming.route ?? buildRouteFrame(buildPageFrame(page).permalink),
+  }
+
   const ctx: RenderContext = {
     page,
     site,
     registry,
     breakpointId,
-    templateContext: options.templateContext,
+    templateContext: composedTemplateContext,
     cssMap,
     loopData: options.loopData,
     mediaAssets: options.mediaAssets,

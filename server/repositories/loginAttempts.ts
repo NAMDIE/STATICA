@@ -13,8 +13,8 @@
  * The table is append-only by convention; cleanup (retention) is left to a
  * future change set when audit volume warrants it. Rows are tiny.
  *
- * @see server/db/migrations-pg.ts:013_auth_lockout — column definitions
- * @see server/auth/lockout.ts                       — policy that consumes this
+ * @see server/db/migrations-pg.ts:001_baseline — column definitions
+ * @see server/auth/lockout.ts                  — policy that consumes this
  */
 
 import { nanoid } from 'nanoid'
@@ -34,6 +34,7 @@ export interface LoginAttempt {
   attemptedAt: string
   emailNorm: string | null
   ipAddress: string | null
+  userAgent: string | null
   userId: string | null
   result: LoginAttemptResult
 }
@@ -43,6 +44,7 @@ interface LoginAttemptRow {
   attempted_at: Date | string
   email_norm: string | null
   ip_address: string | null
+  user_agent: string | null
   user_id: string | null
   result: LoginAttemptResult
 }
@@ -53,6 +55,7 @@ function rowToAttempt(row: LoginAttemptRow): LoginAttempt {
     attemptedAt: new Date(row.attempted_at).toISOString(),
     emailNorm: row.email_norm,
     ipAddress: row.ip_address,
+    userAgent: row.user_agent,
     userId: row.user_id,
     result: row.result,
   }
@@ -63,16 +66,18 @@ export async function recordLoginAttempt(
   input: {
     emailNorm: string | null
     ipAddress: string | null
+    userAgent: string | null
     userId: string | null
     result: LoginAttemptResult
   },
 ): Promise<void> {
   await db`
-    insert into login_attempts (id, email_norm, ip_address, user_id, result)
+    insert into login_attempts (id, email_norm, ip_address, user_agent, user_id, result)
     values (
       ${nanoid()},
       ${input.emailNorm},
       ${input.ipAddress},
+      ${input.userAgent},
       ${input.userId},
       ${input.result}
     )
@@ -85,7 +90,7 @@ export async function listLoginAttemptsForUser(
   limit = 50,
 ): Promise<LoginAttempt[]> {
   const { rows } = await db<LoginAttemptRow>`
-    select id, attempted_at, email_norm, ip_address, user_id, result
+    select id, attempted_at, email_norm, ip_address, user_agent, user_id, result
     from login_attempts
     where user_id = ${userId}
     order by attempted_at desc
@@ -116,7 +121,7 @@ export async function listLoginActivityForUser(
   limit = 50,
 ): Promise<LoginAttempt[]> {
   const { rows } = await db<LoginAttemptRow>`
-    select id, attempted_at, email_norm, ip_address, user_id, result
+    select id, attempted_at, email_norm, ip_address, user_agent, user_id, result
     from login_attempts
     where user_id = ${userId}
        or (user_id is null and email_norm = ${emailNorm})
@@ -132,7 +137,7 @@ export async function listLoginAttemptsForIp(
   limit = 50,
 ): Promise<LoginAttempt[]> {
   const { rows } = await db<LoginAttemptRow>`
-    select id, attempted_at, email_norm, ip_address, user_id, result
+    select id, attempted_at, email_norm, ip_address, user_agent, user_id, result
     from login_attempts
     where ip_address = ${ipAddress}
     order by attempted_at desc

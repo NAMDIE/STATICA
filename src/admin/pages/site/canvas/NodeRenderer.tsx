@@ -271,7 +271,12 @@ function LoopIterationsPreview({ node, baseTemplateContext }: LoopIterationsPrev
     <>
       {items.map((item, i) => {
         const variantId = node.children[i % node.children.length]
+        // Preserve the parent's `page` / `site` / `viewer` / `route`
+        // frames so bindings against those sources keep resolving
+        // inside loop iterations. Only the entry stack changes per
+        // iteration — push the iteration item on top.
         const augmentedContext: TemplateRenderDataContext = {
+          ...baseTemplateContext,
           entryStack: [...baseStack, item],
         }
         return (

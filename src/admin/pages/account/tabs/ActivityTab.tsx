@@ -1,9 +1,17 @@
 /**
- * Account → Activity tab.
+ * Account → Sign-in history tab.
  *
  * Shows the user's recent login activity from `login_attempts` — successes,
  * failures, lockouts, and rate-limit hits, both `user_id`-matched rows and
  * pre-lookup attempts that mention the user's email.
+ *
+ * Append-only audit feed — distinct from the Active devices tab, which is a
+ * live mutable list of session cookies. A failed attempt that never produced
+ * a session still shows up here; a successful login from a device the user
+ * later signed out still shows up here. The chip in the header section
+ * surfaces a quick "N failed attempts in last 24h" forensic count so the
+ * tab is visibly different from Active devices at a glance even when both
+ * happen to contain a single row.
  *
  * The "suspicious activity" banner surfaces whenever there's a `locked` or
  * `rate_limited` event in the last 24 h — a low-cost nudge for the user to
@@ -50,11 +58,19 @@ function resultClass(result: CmsLoginActivityResult): string {
   }
 }
 
-function isRecentSuspicious(event: CmsLoginActivityEvent, now: number): boolean {
-  if (event.result !== 'locked' && event.result !== 'rate_limited') return false
+function isFailure(result: CmsLoginActivityResult): boolean {
+  return result !== 'success'
+}
+
+function isWithin24h(event: CmsLoginActivityEvent, now: number): boolean {
   const ts = Date.parse(event.attemptedAt)
   if (Number.isNaN(ts)) return false
   return now - ts < LOOKBACK_24H_MS
+}
+
+function isRecentSuspicious(event: CmsLoginActivityEvent, now: number): boolean {
+  if (event.result !== 'locked' && event.result !== 'rate_limited') return false
+  return isWithin24h(event, now)
 }
 
 function formatDateTime(value: string): string {
@@ -94,13 +110,26 @@ export function ActivityTab() {
     [events, mountedAt],
   )
 
+  const failedIn24h = useMemo(
+    () => events.filter((event) => isFailure(event.result) && isWithin24h(event, mountedAt)).length,
+    [events, mountedAt],
+  )
+
   return (
     <section className={styles.section} aria-labelledby="account-activity-title">
       <div className={styles.sectionHeader}>
         <div>
-          <h2 id="account-activity-title">Activity</h2>
-          <p>Recent sign-in attempts on your account, including failures and lockouts.</p>
+          <h2 id="account-activity-title">Sign-in history</h2>
+          <p>Recent sign-in attempts on your account, including failures and lockouts. To revoke a current session, use Active devices.</p>
         </div>
+        {failedIn24h > 0 && (
+          <span
+            className={`${styles.badge} ${styles.activityFailureBadge}`}
+            data-testid="account-activity-failed-count"
+          >
+            {failedIn24h} failed in last 24h
+          </span>
+        )}
       </div>
 
       {error && <p className={styles.error} role="alert">{error}</p>}
@@ -124,6 +153,7 @@ export function ActivityTab() {
           <DataTableHead>
             <DataTableRow>
               <DataTableHeader scope="col">When</DataTableHeader>
+              <DataTableHeader scope="col">Device</DataTableHeader>
               <DataTableHeader scope="col">IP</DataTableHeader>
               <DataTableHeader scope="col">Outcome</DataTableHeader>
             </DataTableRow>
@@ -133,6 +163,9 @@ export function ActivityTab() {
               <DataTableRow key={event.id} aria-label={`Activity ${event.result}`}>
                 <DataTableCell>
                   <span className={styles.secondaryText}>{formatDateTime(event.attemptedAt)}</span>
+                </DataTableCell>
+                <DataTableCell>
+                  <span className={styles.secondaryText}>{event.deviceLabel || 'Unknown device'}</span>
                 </DataTableCell>
                 <DataTableCell>
                   <span className={styles.secondaryText}>{event.ipAddress ?? 'unknown'}</span>
