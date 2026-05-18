@@ -1,4 +1,4 @@
-import { renderContentMarkdownToHtml } from '@core/content/renderMarkdown'
+import { renderMarkdownToHtml } from '@core/markdown/renderMarkdown'
 import { escapeHtml, safeUrl } from '@core/publisher/utils'
 
 interface RenderContentDocumentInput {
@@ -13,7 +13,7 @@ export function renderContentDocumentHtml(input: RenderContentDocumentInput): st
   const title = escapeHtml(input.title || 'Untitled')
   const seoTitle = escapeHtml(input.seoTitle || input.title || 'Untitled')
   const seoDescription = escapeHtml(input.seoDescription || '')
-  const bodyHtml = renderContentMarkdownToHtml(input.bodyMarkdown)
+  const bodyHtml = renderMarkdownToHtml(input.bodyMarkdown)
   const featuredMedia = input.featuredMediaPath
     ? `<img class="featured-media" src="${safeUrl(input.featuredMediaPath)}" alt="" loading="lazy">`
     : ''
@@ -38,7 +38,7 @@ export function renderContentDocumentHtml(input: RenderContentDocumentInput): st
     article h3 { font-size: 24px; }
     article p { margin: 0 0 1.1em; }
     article a { color: #3346d3; }
-    article img, article video { display: block; max-width: 100%; margin: 28px 0; border-radius: 8px; }
+    article img, article video { display: block; max-width: 100%; height: auto; margin: 28px 0; border-radius: 8px; }
   </style>
 </head>
 <body>

@@ -60,7 +60,17 @@ export const PUBLISHER_RESET_CSS = [
 
   // Media defaults — block-level + responsive by default, so images don't
   // overflow their containers and don't sit on a baseline by accident.
-  ':where(img, picture, video, canvas, svg) { display: block; max-width: 100%; }',
+  // `height: auto` is critical: the publisher emits `width` and `height`
+  // HTML attributes (intrinsic dimensions for CLS prevention), which the
+  // UA stylesheet maps to BOTH `width: Xpx` and `height: Ypx` as
+  // presentational hints. Without `height: auto`, `max-width: 100%`
+  // clamps the width to the container but leaves `height` pinned at the
+  // intrinsic pixel value — i.e. a 5504×3072 image renders 300px wide
+  // and 3072px tall (stretched). `height: auto` lets the established
+  // `aspect-ratio` (from the attributes) scale the height with the
+  // width. This is the canonical fix used by every modern reset
+  // (Andy Bell, Tailwind preflight, normalize.css 9+).
+  ':where(img, picture, video, canvas, svg) { display: block; max-width: 100%; height: auto; }',
 
   // Form controls inherit typography from their parent. Without this, browsers
   // use their own font stack for `<button>` / `<input>` which collides with the
@@ -136,9 +146,11 @@ export function scopedPublisherResetCss(scopeSelector: string): string {
   lines.push(`${trimmedScope} :where(*, *::before, *::after) { box-sizing: border-box; }`)
   lines.push(`${trimmedScope} :where(*) { margin: 0; padding: 0; }`)
 
-  // Media inside the canvas viewport.
+  // Media inside the canvas viewport. `height: auto` matches the
+  // unscoped reset — see PUBLISHER_RESET_CSS above for why it's
+  // required when the published HTML carries `width`/`height` attrs.
   lines.push(
-    `${trimmedScope} :where(img, picture, video, canvas, svg) { display: block; max-width: 100%; }`,
+    `${trimmedScope} :where(img, picture, video, canvas, svg) { display: block; max-width: 100%; height: auto; }`,
   )
 
   // Form controls.
