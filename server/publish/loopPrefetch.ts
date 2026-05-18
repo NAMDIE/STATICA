@@ -18,10 +18,10 @@ import type {
   SourceFetchContext,
 } from '@core/loops/types'
 import { loopSourceRegistry } from '@core/loops/registry'
-import { firstImagePathFromMarkdown } from '@core/content/renderMarkdown'
+import { firstImagePathFromMarkdown } from '@core/markdown/renderMarkdown'
 import { normalizeRouteBase } from '@core/templates/templateMatching'
-import { publicContentUserFromParts } from '@core/content/publicContentUser'
-import type { PublishedContentEntry } from '@core/content/schemas'
+import { publicDataUserFromParts } from '@core/data/publicDataUser'
+import type { PublishedDataRow } from '@core/data/schemas'
 import type { DbClient } from '../db/client'
 
 /**
@@ -38,34 +38,46 @@ export interface ResolvedLoopData extends LoopFetchResult {
 export type LoopDataMap = Map<string, ResolvedLoopData>
 
 /**
- * Project a published content entry into a LoopItem. The single-entry
- * route uses this to seed the publisher's entry stack with one frame
- * representing the entry being viewed.
+ * Project a published data row into a LoopItem. The single-row route uses
+ * this to seed the publisher's entry stack with one frame representing the
+ * row being viewed.
+ *
+ * `cells` are spread first so all table-defined fields are available in
+ * bindings by their field id. System fields (id, tableId, author, etc.)
+ * are overlaid after so they can never be shadowed by a user-defined cell.
  */
-export function publishedContentEntryToLoopItem(entry: PublishedContentEntry): LoopItem {
-  const collectionRouteBase = normalizeRouteBase(
-    entry.collectionRouteBase || `/${entry.collectionSlug}`,
-  )
-  const permalink = `${collectionRouteBase === '/' ? '' : collectionRouteBase}/${entry.slug}`
-  const firstImagePath = firstImagePathFromMarkdown(entry.bodyMarkdown)
-  const author = publicContentUserFromParts(entry.authorName, entry.authorRoleSlug, entry.authorRoleName)
-  const publishedBy = publicContentUserFromParts(
-    entry.publishedByName,
-    entry.publishedByRoleSlug,
-    entry.publishedByRoleName,
+export function publishedDataRowToLoopItem(row: PublishedDataRow): LoopItem {
+  const tableRouteBase = normalizeRouteBase(row.tableRouteBase || `/${row.tableSlug}`)
+  const permalink = `${tableRouteBase === '/' ? '' : tableRouteBase}/${row.slug}`
+
+  // For post-type rows the `body` cell holds markdown — extract the first
+  // inline image to populate the `firstImage` aliases.
+  const bodyValue = row.cells['body']
+  const firstImagePath = typeof bodyValue === 'string'
+    ? firstImagePathFromMarkdown(bodyValue)
+    : null
+
+  const author = publicDataUserFromParts(row.authorName, row.authorRoleSlug, row.authorRoleName)
+  const publishedBy = publicDataUserFromParts(
+    row.publishedByName,
+    row.publishedByRoleSlug,
+    row.publishedByRoleName,
   )
 
   return {
-    id: entry.id,
+    id: row.rowId,
     fields: {
-      // Identity
-      id: entry.entryId,
-      entryId: entry.entryId,
-      versionId: entry.id,
-      versionNumber: entry.versionNumber,
-      collectionId: entry.collectionId,
-      collectionSlug: entry.collectionSlug,
-      collectionRouteBase,
+      // Cells — primary data, spread first so bindings can reference any
+      // user-defined field by its fieldId.
+      ...row.cells,
+      // System identity (overlay after cells so these are never shadowed)
+      id: row.rowId,
+      rowId: row.rowId,
+      versionId: row.id,
+      versionNumber: row.versionNumber,
+      tableId: row.tableId,
+      tableSlug: row.tableSlug,
+      // People
       author,
       authorName: author?.displayName ?? null,
       authorRoleSlug: author?.roleSlug ?? null,
@@ -74,25 +86,18 @@ export function publishedContentEntryToLoopItem(entry: PublishedContentEntry): L
       publishedByName: publishedBy?.displayName ?? null,
       publishedByRoleSlug: publishedBy?.roleSlug ?? null,
       publishedByRoleName: publishedBy?.roleName ?? null,
-      // Content
-      title: entry.title,
-      slug: entry.slug,
-      body: entry.bodyMarkdown,
-      bodyMarkdown: entry.bodyMarkdown,
-      // Media — every alias resolves to the same path
-      featuredMediaId: entry.featuredMediaId,
-      featuredMedia: entry.featuredMediaPath,
-      featuredMediaPath: entry.featuredMediaPath,
-      featuredMediaUrl: entry.featuredMediaPath,
+      // Media aliases — denormalized from the row for resolved paths
+      featuredMediaId: row.featuredMediaId,
+      featuredMedia: row.featuredMediaPath,
+      featuredMediaPath: row.featuredMediaPath,
+      featuredMediaUrl: row.featuredMediaPath,
       firstImage: firstImagePath,
       firstImagePath,
       firstImageUrl: firstImagePath,
-      // SEO + dates
-      seoTitle: entry.seoTitle,
-      seoDescription: entry.seoDescription,
-      publishedAt: entry.publishedAt,
-      createdAt: entry.createdAt,
-      // Routing
+      // Dates / routing
+      slug: row.slug,
+      publishedAt: row.publishedAt,
+      createdAt: row.createdAt,
       permalink,
     },
   }
