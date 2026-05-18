@@ -83,13 +83,28 @@ describe('UndoRedoButtons — WCAG aria-disabled pattern (Guideline #224)', () =
   })
 
   it('aria-keyshortcuts attributes are present for screen readers', () => {
+    // Post-spotlight refactor: shortcut values come from the keybindings
+    // registry (keybindings.ts) rather than being hardcoded in JSX. We assert
+    // the JSX wires aria-keyshortcuts to the registry-resolved binding, AND
+    // that the registry itself declares the canonical ⌘Z / ⌘⇧Z labels so
+    // screen readers still receive "Meta+Z" / "Meta+Shift+Z" on macOS.
     const { readFileSync } = require('fs')
     const src = readFileSync(
       new URL('../../admin/pages/site/canvas/UndoRedoButtons.tsx', import.meta.url),
       'utf-8',
     )
-    expect(src).toContain('aria-keyshortcuts="Meta+Z"')
-    expect(src).toContain('aria-keyshortcuts="Meta+Shift+Z"')
+    expect(src).toContain('aria-keyshortcuts={kbUndo?.ariaKeyshortcuts}')
+    expect(src).toContain('aria-keyshortcuts={kbRedo?.ariaKeyshortcuts}')
+
+    // Confirm the registry resolves the canonical shortcuts the buttons rely on.
+    const registrySrc = readFileSync(
+      new URL('../../admin/spotlight/keybindings.ts', import.meta.url),
+      'utf-8',
+    )
+    expect(registrySrc).toContain("commandId: 'editor.undo'")
+    expect(registrySrc).toContain("commandId: 'editor.redo'")
+    expect(registrySrc).toContain("'Meta+Z' : 'Control+Z'")
+    expect(registrySrc).toContain("'Meta+Shift+Z' : 'Control+Shift+Z'")
   })
 
   it('keyboard shortcut handler guards against text input targets', () => {
@@ -115,14 +130,18 @@ describe('UndoRedoButtons — WCAG aria-disabled pattern (Guideline #224)', () =
   })
 
   it('handler supports both Cmd+Z (undo) and Cmd+Shift+Z / Cmd+Y (redo)', () => {
+    // Post-spotlight refactor: the keydown handler delegates undo/redo matching
+    // to the keybindings registry via `kb.match(e)`. The Ctrl+Y Windows alias
+    // stays inline because the canonical Redo binding is ⌘⇧Z — Ctrl+Y is just
+    // a convenience escape hatch.
     const { readFileSync } = require('fs')
     const src = readFileSync(
       new URL('../../admin/pages/site/canvas/UndoRedoButtons.tsx', import.meta.url),
       'utf-8',
     )
-    expect(src).toContain("e.key === 'z' && !e.shiftKey")
-    expect(src).toContain("e.key === 'z' && e.shiftKey")
-    // Also support Ctrl+Y (Windows redo)
+    expect(src).toContain('kbUndo?.match(e)')
+    expect(src).toContain('kbRedo?.match(e)')
+    // Also support Ctrl+Y (Windows redo) — handled inline as an alias.
     expect(src).toContain("e.key === 'y'")
   })
 })
