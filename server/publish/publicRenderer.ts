@@ -11,7 +11,7 @@ import type { PublishedDataRow } from '@core/data/schemas'
 import type { DbClient } from '../db/client'
 import type { PublishedPageSnapshot } from '../repositories/publish'
 import { hookBus } from '@core/plugins/hookBus'
-import { collectFrontendInjections } from './frontendInjections'
+import { collectFrontendInjections, injectFrontendAssets } from './frontendInjections'
 
 /**
  * URL prefix where the Bun server exposes the per-site CSS bundle. Mirrors
@@ -45,6 +45,7 @@ export async function renderPublishedSnapshot(
   ])
   const baseHtml = publishPage(page, snapshot.site, registry, {
     runtimeAssets: snapshot.runtimeAssets,
+    runtimePackageImportmap: snapshot.runtimePackageImportmap,
     cssEmission: 'external',
     cssBundle,
     cssAssetBaseUrl: CSS_ASSET_BASE_URL,
@@ -90,6 +91,7 @@ export async function renderPublishedDataRowTemplate(
       ...(ctx.url ? { route: buildRouteFrame(ctx.url.toString()) } : {}),
     },
     runtimeAssets: snapshot.runtimeAssets,
+    runtimePackageImportmap: snapshot.runtimePackageImportmap,
     cssEmission: 'external',
     cssBundle,
     cssAssetBaseUrl: CSS_ASSET_BASE_URL,
@@ -103,45 +105,6 @@ export async function renderPublishedDataRowTemplate(
   return filtered
 }
 
-/**
- * Inject `<script>` and `<link>` tags supplied by `frontend.scripts` /
- * `frontend.tracker` plugins. Tags are placed just before `</body>` so they
- * don't block layout. If the document has no `</body>` (defensive), tags
- * are appended.
- *
- * When any body tags are injected, also relax the publisher CSP so the
- * inline tracker runtime + plugin script tags can actually execute. The
- * publisher emits `script-src 'none'` for pages with no first-party
- * runtime scripts; plugin injections override that to `'self' 'unsafe-inline'`.
- */
-function injectFrontendAssets(
-  html: string,
-  injections: { headTags: string[]; bodyTags: string[] },
-): string {
-  let next = html
-  if (injections.headTags.length > 0) {
-    const headTag = injections.headTags.join('\n')
-    next = next.includes('</head>')
-      ? next.replace('</head>', `${headTag}\n</head>`)
-      : `${headTag}\n${next}`
-  }
-  if (injections.bodyTags.length > 0) {
-    const bodyTag = injections.bodyTags.join('\n')
-    next = next.includes('</body>')
-      ? next.replace('</body>', `${bodyTag}\n</body>`)
-      : `${next}\n${bodyTag}`
-    next = relaxCspForFrontendPlugins(next)
-  }
-  return next
-}
-
-const CSP_META_PATTERN = /<meta http-equiv="Content-Security-Policy"\s+content="([^"]*)"\s*\/?>/i
-
-function relaxCspForFrontendPlugins(html: string): string {
-  return html.replace(CSP_META_PATTERN, (full, content: string) => {
-    let next = content
-    next = next.replace(/script-src [^;]*;/i, `script-src 'self' 'unsafe-inline';`)
-    next = next.replace(/worker-src [^;]*;/i, `worker-src 'self' blob:;`)
-    return full.replace(content, next)
-  })
-}
+// `injectFrontendAssets` lives in `frontendInjections.ts` so the preview
+// runtime (`buildRuntimePreviewDocument`) can call the same helper — both
+// surfaces must yield identical HTML + CSP so previews match published.

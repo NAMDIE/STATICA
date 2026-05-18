@@ -25,7 +25,9 @@ import type {
 } from '@core/module-engine/types'
 import type { PluginManifest } from '@core/plugin-sdk'
 import type {
+  PluginEditorRuntime,
   PluginModuleDefinition,
+  PluginModuleDependencies,
   PluginModulePackEntrypoint,
   PluginModulesEntrypointModule,
 } from '@core/plugin-sdk'
@@ -128,6 +130,10 @@ export interface SandboxedModulePack {
     canHaveChildren?: boolean
     htmlTag?: string
     hasPreview: boolean
+    /** Package dependencies declared by the module — surfaced in the Dependencies Panel. */
+    dependencies?: PluginModuleDependencies
+    /** Optional iframe-backed editor preview source. */
+    editorRuntime?: PluginEditorRuntime
   }>
   render(moduleId: string, props: Record<string, unknown>, children: string[]): { html: string; css?: string }
   preview(moduleId: string, props: Record<string, unknown>, children: string[]): { html: string; css?: string }
@@ -168,6 +174,8 @@ export function activateSandboxedPluginModulePack(
       schema: meta.schema as unknown as PluginModuleDefinition['schema'],
       canHaveChildren: meta.canHaveChildren,
       htmlTag: meta.htmlTag,
+      ...(meta.dependencies ? { dependencies: meta.dependencies } : {}),
+      ...(meta.editorRuntime ? { editorRuntime: meta.editorRuntime } : {}),
       render: (props, children) => pack.render(meta.id, props, children),
       preview: meta.hasPreview
         ? (props, children) => pack.preview(meta.id, props, children)

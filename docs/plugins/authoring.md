@@ -4,9 +4,12 @@ Plugins are TypeScript projects that ship as zip packages. The Plugin SDK lives 
 
 ```bash
 bun pb-plugin init my-plugin   # scaffold a new plugin
+bun pb-plugin lint              # validate manifest + sources + bundles
 bun pb-plugin build             # produce dist/ + .plugin.zip
 bun pb-plugin dev               # watch + sync into a running CMS
 ```
+
+> 🩺 **`pb-plugin lint`** runs the same sandbox scan, manifest validator, and permission/allowlist coherence checks the host applies at install time — but in your terminal, before you upload. Run it whenever you change a manifest, a permissions list, or anything that touches `network.outbound`.
 
 > 🔒 **Plugin code runs inside a QuickJS-WASM sandbox.** Your server entrypoint and canvas modules have no access to Node, Bun, the file system, environment variables, or the network — anything beyond pure JavaScript goes through the SDK. `pb-plugin build` catches sandbox-incompatible code (`import 'node:fs'`, `Bun.spawn`, `process.env`, etc.) and fails the build with a clear error. **Read [sandbox.md](./sandbox.md) before authoring anything that touches the network or expects host APIs.**
 

@@ -20,6 +20,101 @@ import { listInstalledPlugins } from '../repositories/plugins'
 export interface FrontendInjections {
   headTags: string[]
   bodyTags: string[]
+  /**
+   * Union of `networkAllowedHosts` declared by every enabled plugin that
+   * contributed a body tag. Used by `injectFrontendAssets` to extend the
+   * page CSP's `connect-src` so visitor-side fetches from those plugins
+   * (e.g. a glTF model viewer pulling from a CDN) aren't blocked by the
+   * page's strict default of `connect-src 'self'`.
+   *
+   * Plain hostnames (`api.example.com`) match exactly; the leading `*.`
+   * wildcard matches one subdomain segment — same semantics the manifest
+   * schema enforces.
+   */
+  networkAllowedHosts: string[]
+}
+
+/**
+ * Inject `<script>` / `<link>` tags from enabled `frontend.scripts` /
+ * `frontend.tracker` plugins into a publisher-rendered HTML document.
+ *
+ * Same shape applies to both real-publish output (`renderPublishedSnapshot`)
+ * AND the editor's preview iframe (`buildRuntimePreviewDocument`) — both
+ * paths must end up with identical injections + CSP so previews match
+ * what visitors will see on the deployed page.
+ *
+ * Side effects:
+ *   • Inline tracker runtime relaxes script-src to `'self' 'unsafe-inline'`
+ *     (the tracker IIFE is inline and needs to execute on the page).
+ *   • `networkAllowedHosts` aggregated by `collectFrontendInjections` get
+ *     appended to `connect-src` and `img-src` so plugin frontend code
+ *     can reach the hosts the manifest declared.
+ */
+export function injectFrontendAssets(
+  html: string,
+  injections: FrontendInjections,
+): string {
+  let next = html
+  if (injections.headTags.length > 0) {
+    const headTag = injections.headTags.join('\n')
+    next = next.includes('</head>')
+      ? next.replace('</head>', `${headTag}\n</head>`)
+      : `${headTag}\n${next}`
+  }
+  if (injections.bodyTags.length > 0) {
+    const bodyTag = injections.bodyTags.join('\n')
+    next = next.includes('</body>')
+      ? next.replace('</body>', `${bodyTag}\n</body>`)
+      : `${next}\n${bodyTag}`
+    next = relaxCspForFrontendPlugins(next, injections.networkAllowedHosts)
+  }
+  return next
+}
+
+const CSP_META_PATTERN = /<meta http-equiv="Content-Security-Policy"\s+content="([^"]*)"\s*\/?>/i
+
+function relaxCspForFrontendPlugins(html: string, allowedHosts: string[]): string {
+  return html.replace(CSP_META_PATTERN, (full, content: string) => {
+    let next = content
+    next = next.replace(/script-src [^;]*;/i, `script-src 'self' 'unsafe-inline';`)
+    next = next.replace(/worker-src [^;]*;/i, `worker-src 'self' blob:;`)
+    if (allowedHosts.length > 0) {
+      next = appendOrSetCspDirective(next, 'connect-src', ["'self'", ...toCspHostSources(allowedHosts)])
+      next = appendOrSetCspDirective(next, 'img-src', ["'self'", 'data:', 'https:'])
+    }
+    return full.replace(content, next)
+  })
+}
+
+/**
+ * Translate manifest-style host patterns (`api.example.com`, `*.example.com`)
+ * to CSP source expressions. CSP wildcards use `*.example.com` with the
+ * scheme implicit — `https://*.example.com` is the safest form because the
+ * publisher already forces HTTPS at the publish layer.
+ */
+function toCspHostSources(hosts: string[]): string[] {
+  return hosts.map((host) => `https://${host}`)
+}
+
+/**
+ * Replace the named CSP directive's source list (if present) or append a
+ * new directive at the end. Idempotent on identical inputs — keeps the
+ * directive value sorted-and-deduped via a Set so repeated re-renders
+ * produce the same string.
+ */
+function appendOrSetCspDirective(policy: string, directive: string, sources: string[]): string {
+  const sourceSet = new Set(sources)
+  const sourcesValue = [...sourceSet].join(' ')
+  const pattern = new RegExp(`${directive}\\s+[^;]*;`, 'i')
+  if (pattern.test(policy)) {
+    return policy.replace(pattern, (existing) => {
+      const existingValue = existing.replace(new RegExp(`^${directive}\\s+`, 'i'), '').replace(/;\s*$/, '')
+      for (const part of existingValue.split(/\s+/).filter(Boolean)) sourceSet.add(part)
+      return `${directive} ${[...sourceSet].join(' ')};`
+    })
+  }
+  const trimmed = policy.trim().replace(/;\s*$/, '')
+  return `${trimmed}; ${directive} ${sourcesValue};`
 }
 
 const TRACKER_RUNTIME = `<script>(function(){
@@ -78,6 +173,7 @@ export async function collectFrontendInjections(db: DbClient): Promise<FrontendI
   const plugins = await listInstalledPlugins(db)
   const headTags: string[] = []
   const bodyTags: string[] = []
+  const networkAllowedHostsSet = new Set<string>()
 
   let anyTracker = false
   for (const plugin of plugins) {
@@ -91,6 +187,14 @@ export async function collectFrontendInjections(db: DbClient): Promise<FrontendI
     ) {
       const url = `${plugin.manifest.assetBasePath.replace(/\/+$/g, '')}/${plugin.manifest.entrypoints.frontend.replace(/^\/+/g, '')}`
       bodyTags.push(`<script type="module" defer src="${escapeHtmlAttribute(url)}" data-plugin-id="${escapeHtmlAttribute(plugin.id)}"></script>`)
+      // Frontend plugins declare external fetch targets through the same
+      // `networkAllowedHosts` field as the server-side QuickJS bridge.
+      // Each enabled frontend plugin contributes its hosts to the page's
+      // CSP `connect-src` so visitor-side `fetch()` / `XMLHttpRequest` /
+      // `import()` calls to those hosts aren't blocked.
+      for (const host of plugin.manifest.networkAllowedHosts ?? []) {
+        if (host) networkAllowedHostsSet.add(host)
+      }
     }
   }
 
@@ -100,7 +204,11 @@ export async function collectFrontendInjections(db: DbClient): Promise<FrontendI
     bodyTags.unshift(TRACKER_RUNTIME)
   }
 
-  return { headTags, bodyTags }
+  return {
+    headTags,
+    bodyTags,
+    networkAllowedHosts: [...networkAllowedHostsSet].sort(),
+  }
 }
 
 function escapeHtmlAttribute(value: string): string {

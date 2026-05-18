@@ -37,6 +37,13 @@ function makeFakeDb(): DbClient {
     if (normalized.includes('update sessions') && normalized.includes('last_seen_at')) {
       return { rows: [], rowCount: 1 }
     }
+    // `buildRuntimePreviewDocument` now mirrors the published-page path
+    // and queries enabled plugins so frontend script tags + CSP relaxations
+    // match what visitors will see. The preview tests don't install any
+    // plugin, so an empty result is the right answer.
+    if (normalized.includes('from installed_plugins')) {
+      return { rows: [], rowCount: 0 }
+    }
     throw new Error(`Unhandled SQL: ${sql}`)
   }
 

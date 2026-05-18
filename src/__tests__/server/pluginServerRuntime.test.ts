@@ -418,4 +418,48 @@ describe('server plugin runtime SDK', () => {
       await rm(uploadsDir, { recursive: true, force: true })
     }
   })
+
+  it('aborts a plugin that hangs in an infinite loop instead of blocking the worker', async () => {
+    // Direct sandbox-level test — go straight at the VM so we can assert the
+    // 5-second deadline kills the runaway. Going through the full install
+    // flow would just propagate the same error wrapped in lifecycle prose.
+    const { createPluginVm } = await import('../../../server/plugins/quickjsHost')
+    const vm = await createPluginVm({
+      pluginSource: `
+        ;(function () {
+          const __plugin_exports = (globalThis.__plugin_exports = {});
+          __plugin_exports.activate = function activate() {
+            // Tight loop with no escape — deadline must abort it.
+            while (true) {}
+          };
+        })();
+      `,
+      env: {
+        pluginId: 'acme.runaway',
+        manifestVersion: '1.0.0',
+        grantedPermissions: [],
+        assetBasePath: '/uploads/plugins/acme.runaway/1.0.0',
+        settings: {},
+        hostCall: async () => null,
+        log: () => {},
+      },
+    })
+    try {
+      const start = Date.now()
+      let caught: unknown = null
+      try {
+        await vm.runLifecycle('activate')
+      } catch (err) {
+        caught = err
+      }
+      const elapsed = Date.now() - start
+      // The QuickJS interrupt handler aborts with `InternalError: interrupted`.
+      // We don't depend on the exact message — just that the call threw and
+      // returned within roughly the deadline window (5s + a bit of slack).
+      expect(caught).not.toBeNull()
+      expect(elapsed).toBeLessThan(8_000)
+    } finally {
+      vm.dispose()
+    }
+  }, 15_000)
 })

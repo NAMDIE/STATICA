@@ -2,6 +2,7 @@ export type {
   LockedSiteDependency,
   PublishedPageRuntimeAssets,
   RuntimePackageDependencyUsage,
+  RuntimePackageImportmap,
   SiteDependencyLock,
   SiteRuntimeDiagnostic,
   SiteScriptPlacement,

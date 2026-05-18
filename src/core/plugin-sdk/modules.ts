@@ -52,6 +52,48 @@ export type PluginRenderFn = (
 ) => PluginRenderOutput
 
 // ---------------------------------------------------------------------------
+// Module dependencies — flow into the site's package.json automatically
+// ---------------------------------------------------------------------------
+
+export interface PluginModuleDependencySpec {
+  /** Semver/range tracked for dependency-backed module runtimes. */
+  version: string
+  /** true writes to devDependencies; false/omitted writes to dependencies. */
+  dev?: boolean
+}
+
+/**
+ * Package dependencies declared by a plugin module. When a site author inserts
+ * the module, the host writes these into the site's package.json so they appear
+ * in the Dependencies Panel. Use string shorthand for runtime deps
+ * (`{ three: '^0.169.0' }`) or the spec form for devDependencies
+ * (`{ vite: { version: '^5.1.0', dev: true } }`). Same shape as the host's
+ * `ModuleDependencies` (`@core/module-engine/types`).
+ */
+export type PluginModuleDependencies = Record<string, string | PluginModuleDependencySpec>
+
+// ---------------------------------------------------------------------------
+// Editor runtime — opt-in iframe sandbox with auto-built import map
+// ---------------------------------------------------------------------------
+
+export interface PluginSandboxRuntime {
+  /**
+   * ESM source executed inside an isolated editor iframe. The module should
+   * export `mount(root, context)`. `mount()` may return a cleanup function or
+   * `{ update, cleanup }`. Exporting `update(root, context)` is also supported.
+   * The iframe's import map is auto-built from the module's `dependencies` so
+   * `import * as THREE from 'three'` resolves to the locked CDN URL.
+   */
+  source: string
+  /** Minimum editor-frame height before class/module CSS overrides apply. */
+  minHeight?: number
+}
+
+export interface PluginEditorRuntime {
+  sandbox?: PluginSandboxRuntime
+}
+
+// ---------------------------------------------------------------------------
 // Module definition
 // ---------------------------------------------------------------------------
 
@@ -82,6 +124,21 @@ export interface PluginModuleDefinition {
   preview?: PluginRenderFn
   /** Optional concrete root tag for layer/DOM tree display. */
   htmlTag?: string
+  /**
+   * Package dependencies required when this module is inserted into a page.
+   * Auto-written into the site's `package.json` so the Dependencies Panel
+   * lists them. Used by the editor iframe runtime to build an import map
+   * that resolves `import * as THREE from 'three'` to the locked CDN URL.
+   */
+  dependencies?: PluginModuleDependencies
+  /**
+   * Optional iframe-backed live preview for the editor canvas. When set, the
+   * editor mounts an iframe with an import map built from `dependencies` and
+   * runs the `sandbox.source` ESM inside it. Without this, the editor falls
+   * back to dangerouslySetInnerHTML of `render()`'s HTML — fine for static
+   * markup but `<script>` tags will not execute.
+   */
+  editorRuntime?: PluginEditorRuntime
 }
 
 // ---------------------------------------------------------------------------

@@ -9,16 +9,24 @@ describe('CMS runtime client', () => {
       packages: {},
       updatedAt: 123,
     }
+    const packageImportmap = {
+      imports: { 'canvas-confetti': '/_pb/runtime/cache/abc/canvas-confetti/dist/confetti.module.mjs' },
+      lockHash: 'abc',
+    }
 
     const result = await resolveCmsRuntimeDependencies(
       { dependencies: { 'canvas-confetti': '^1.9.3' }, devDependencies: {} },
       async (input, init) => {
         calls.push({ input, init })
-        return new Response(JSON.stringify({ dependencyLock }), { status: 200 })
+        return new Response(
+          JSON.stringify({ dependencyLock, packageImportmap }),
+          { status: 200 },
+        )
       },
     )
 
-    expect(result).toEqual(dependencyLock)
+    expect(result.dependencyLock).toEqual(dependencyLock)
+    expect(result.packageImportmap).toEqual(packageImportmap)
     expect(calls[0]).toMatchObject({
       input: '/admin/api/cms/runtime/dependencies/resolve',
       init: { method: 'POST', credentials: 'include' },
@@ -26,6 +34,16 @@ describe('CMS runtime client', () => {
     expect(calls[0].init?.body).toBe(JSON.stringify({
       packageJson: { dependencies: { 'canvas-confetti': '^1.9.3' }, devDependencies: {} },
     }))
+  })
+
+  it('returns only the lock when the server skips importmap build', async () => {
+    const dependencyLock = { version: 1, packages: {}, updatedAt: 0 }
+    const result = await resolveCmsRuntimeDependencies(
+      { dependencies: {}, devDependencies: {} },
+      async () => new Response(JSON.stringify({ dependencyLock }), { status: 200 }),
+    )
+    expect(result.dependencyLock).toEqual(dependencyLock)
+    expect(result.packageImportmap).toBeUndefined()
   })
 
   it('posts site preview requests to the runtime preview endpoint', async () => {

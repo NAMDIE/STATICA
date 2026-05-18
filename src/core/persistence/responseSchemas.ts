@@ -176,6 +176,13 @@ export type CmsPublishStatus = Static<typeof CmsPublishStatusSchema>
 
 export const CmsRuntimeDependencyEnvelopeSchema = Type.Object({
   dependencyLock: Type.Unknown(),
+  /**
+   * Precomputed importmap built by the server from the freshly installed
+   * dependency cache. Optional because the server may skip the install
+   * step (e.g. lock resolution succeeded but install failed); the editor
+   * keeps the lock either way and falls back to deferring iframe renders.
+   */
+  packageImportmap: Type.Optional(Type.Unknown()),
 })
 
 export const CmsRuntimePreviewResponseSchema = Type.Object(

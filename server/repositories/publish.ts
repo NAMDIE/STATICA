@@ -1,11 +1,16 @@
 import { nanoid } from 'nanoid'
 import type { SiteDocument } from '@core/page-tree/schemas'
 import type { PublishedPageRuntimeAssets } from '@core/site-runtime'
+import type { PublishedRuntimePackageImportmap } from '@core/publisher/render'
 import { normalizeSiteRuntimeConfig } from '@core/site-runtime'
 import type { DbClient } from '../db/client'
 import { loadDraftSite } from './site'
 import { buildSiteRuntimeScripts } from '../publish/runtime/bundleScripts'
 import { ensureRuntimeDependencyCache } from '../publish/runtime/dependencyCache'
+import {
+  buildRuntimePackageImportmap,
+  serializeImportmapForCsp,
+} from '../publish/runtime/packageImportmap'
 import { savePublishedRuntimeAssets } from './runtimeAsset'
 
 export interface PublishedPageSnapshot {
@@ -13,6 +18,13 @@ export interface PublishedPageSnapshot {
   pageId: string
   site: SiteDocument
   runtimeAssets?: PublishedPageRuntimeAssets
+  /**
+   * Pre-serialised importmap mapping bare specifiers like `three` to URLs
+   * served from the host's runtime dependency cache. Stored verbatim in the
+   * snapshot so re-renders use the same bytes the CSP hash was computed
+   * over. Omitted when the site has no locked runtime dependencies.
+   */
+  runtimePackageImportmap?: PublishedRuntimePackageImportmap
 }
 
 interface PublishResult {
@@ -50,12 +62,14 @@ function createSnapshot(
   site: SiteDocument,
   pageId: string,
   runtimeAssets?: PublishedPageRuntimeAssets,
+  runtimePackageImportmap?: PublishedRuntimePackageImportmap,
 ): PublishedPageSnapshot {
   return {
     cmsSnapshotVersion: 1,
     pageId,
     site: structuredClone(site),
     ...(runtimeAssets && runtimeAssets.scripts.length > 0 ? { runtimeAssets } : {}),
+    ...(runtimePackageImportmap ? { runtimePackageImportmap } : {}),
   }
 }
 
@@ -115,6 +129,19 @@ export async function publishDraftSite(
     const dependencyCache = Object.keys(runtime.dependencyLock.packages).length > 0
       ? await ensureRuntimeDependencyCache(runtime.dependencyLock)
       : undefined
+    // Build the package importmap once per publish — the JSON is identical
+    // for every page sharing the same lock, so its SHA-256 stays stable
+    // across snapshots. Module plugins use bare imports (`import "three"`)
+    // and the browser resolves them through this map at page load.
+    const packageImportmap = dependencyCache
+      ? await buildRuntimePackageImportmap(runtime.dependencyLock, dependencyCache)
+      : null
+    const serializedImportmap = packageImportmap
+      ? await serializeImportmapForCsp(packageImportmap.importmap)
+      : null
+    const runtimePackageImportmap: PublishedRuntimePackageImportmap | undefined = serializedImportmap
+      ? { body: serializedImportmap.body, sha256: serializedImportmap.sha256 }
+      : undefined
     const publishedSite: SiteDocument = {
       ...site,
       pages: site.pages.map((page) => ({
@@ -149,7 +176,7 @@ export async function publishDraftSite(
           ${versionId},
           ${page.id},
           ${version},
-          ${createSnapshot(publishedSite, page.id, runtimeBuild.runtimeAssets)},
+          ${createSnapshot(publishedSite, page.id, runtimeBuild.runtimeAssets, runtimePackageImportmap)},
           ${adminUserId}
         )
       `

@@ -34,7 +34,9 @@
  * a `modules/index.{ts,js}` plugin entrypoint.
  */
 import type {
+  PluginEditorRuntime,
   PluginModuleDefinition,
+  PluginModuleDependencies,
   PluginPropertyControl,
   PluginRenderOutput,
 } from '../modules'
@@ -66,6 +68,19 @@ interface DefineModuleConfig<TDefaults extends Record<string, unknown>> {
    * published markup (e.g. show a placeholder for slow API content).
    */
   preview?: (ctx: { props: TDefaults; children: string[] }) => PluginRenderOutput
+  /**
+   * Package dependencies required when this module is inserted into a page.
+   * Auto-written into the site's `package.json` and surfaced in the
+   * Dependencies Panel. Runtime deps use string shorthand
+   * (`{ three: '^0.169.0' }`); dev deps use `{ version, dev: true }`.
+   */
+  dependencies?: PluginModuleDependencies
+  /**
+   * Optional iframe-backed live preview for the editor canvas. When set, the
+   * editor mounts a sandboxed iframe whose import map is auto-built from
+   * `dependencies` and runs the supplied `sandbox.source` ESM inside it.
+   */
+  editorRuntime?: PluginEditorRuntime
 }
 
 export function defineModule<const TDefaults extends Record<string, unknown>>(
@@ -86,6 +101,8 @@ export function defineModule<const TDefaults extends Record<string, unknown>>(
     schema: config.schema as Record<string, PluginPropertyControl>,
     canHaveChildren: config.canHaveChildren,
     htmlTag: config.htmlTag,
+    ...(config.dependencies ? { dependencies: config.dependencies } : {}),
+    ...(config.editorRuntime ? { editorRuntime: config.editorRuntime } : {}),
     render: (props, children) =>
       config.render({ props: props as TDefaults, children }),
     ...(config.preview

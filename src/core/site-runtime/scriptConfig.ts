@@ -3,6 +3,7 @@ import type { Page } from '@core/page-tree/schemas'
 import type { SiteFile } from '@core/files/schemas'
 import type {
   LockedSiteDependency,
+  RuntimePackageImportmap,
   SiteDependencyLock,
   SiteRuntimeConfig,
   SiteRuntimeTarget,
@@ -118,6 +119,22 @@ function normalizeDependencyLock(raw: unknown): SiteDependencyLock {
   }
 }
 
+function normalizePackageImportmap(raw: unknown): RuntimePackageImportmap | undefined {
+  if (!isRecord(raw)) return undefined
+  const lockHash = typeof raw.lockHash === 'string' && raw.lockHash.trim() ? raw.lockHash.trim() : ''
+  if (!lockHash) return undefined
+  const importsRaw = isRecord(raw.imports) ? raw.imports : null
+  if (!importsRaw) return undefined
+  const imports: Record<string, string> = {}
+  for (const [key, value] of Object.entries(importsRaw)) {
+    if (typeof key === 'string' && key.length > 0 && typeof value === 'string' && value.length > 0) {
+      imports[key] = value
+    }
+  }
+  if (Object.keys(imports).length === 0) return undefined
+  return { imports, lockHash }
+}
+
 export function normalizeSiteRuntimeConfig(raw: unknown): SiteRuntimeConfig {
   if (!isRecord(raw)) return { dependencyLock: { ...DEFAULT_SITE_DEPENDENCY_LOCK, packages: {} }, scripts: {} }
 
@@ -128,9 +145,11 @@ export function normalizeSiteRuntimeConfig(raw: unknown): SiteRuntimeConfig {
     }
   }
 
+  const packageImportmap = normalizePackageImportmap(raw.packageImportmap)
   return {
     dependencyLock: normalizeDependencyLock(raw.dependencyLock),
     scripts,
+    ...(packageImportmap ? { packageImportmap } : {}),
   }
 }
 

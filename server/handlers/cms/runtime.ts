@@ -18,6 +18,7 @@ import type { DbClient } from '../../db/client'
 import { requireCapability } from '../../auth/authz'
 import { resolveSiteDependencyLock } from '../../publish/runtime/dependencyResolver'
 import { ensureRuntimeDependencyCache } from '../../publish/runtime/dependencyCache'
+import { buildRuntimePackageImportmap } from '../../publish/runtime/packageImportmap'
 import { buildRuntimePreviewDocument } from '../../publish/runtime/previewRuntime'
 import { validateSite, SiteValidationError } from '@core/persistence/validate'
 import { isSafePackageName } from '@core/site-dependencies/packageNames'
@@ -90,7 +91,36 @@ export async function handleRuntimeRoutes(req: Request, db: DbClient): Promise<R
     try {
       const packageJson = runtimeRequestPackageJson(body.packageJson)
       const dependencyLock = await resolveSiteDependencyLock(packageJson)
-      return jsonResponse({ dependencyLock })
+      // Run the install + importmap build inline so the editor's iframe
+      // sandbox has a usable map as soon as the user clicks "Resolve".
+      // The cache is content-addressed by lock hash, so repeated resolves
+      // of the same lock fast-path on the sentinel-file check inside
+      // `ensureRuntimeDependencyCache` — no real-world cost.
+      let packageImportmap: Awaited<ReturnType<typeof buildRuntimePackageImportmap>> = null
+      if (Object.keys(dependencyLock.packages).length > 0) {
+        try {
+          const cache = await ensureRuntimeDependencyCache(dependencyLock)
+          packageImportmap = await buildRuntimePackageImportmap(dependencyLock, cache)
+        } catch (err) {
+          // Lock resolution succeeded but install / importmap build did
+          // not. Surface a warning in the log; the editor still gets the
+          // lock so the dep list updates, but iframe previews will defer
+          // until the user retries. Failing the whole request here would
+          // block the dependency-panel UI on a recoverable error.
+          console.warn('[runtime/dependencies/resolve] importmap build skipped:', err)
+        }
+      }
+      return jsonResponse({
+        dependencyLock,
+        ...(packageImportmap
+          ? {
+              packageImportmap: {
+                imports: packageImportmap.importmap.imports,
+                lockHash: packageImportmap.lockHash,
+              },
+            }
+          : {}),
+      })
     } catch (err) {
       return badRequest(err instanceof Error ? err.message : 'Runtime dependency resolution failed')
     }

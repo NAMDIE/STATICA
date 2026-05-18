@@ -96,12 +96,39 @@ const SiteScriptRuntimeConfigSchema = Type.Object({
 export type SiteScriptRuntimeConfig = Static<typeof SiteScriptRuntimeConfigSchema>
 
 // ---------------------------------------------------------------------------
+// RuntimePackageImportmap
+// ---------------------------------------------------------------------------
+
+/**
+ * Precomputed bare-specifier → URL map for the site's locked runtime
+ * dependencies. Built once on the server by `buildRuntimePackageImportmap`
+ * after `bun install` populates the cache, then attached to the site
+ * runtime state so the editor's iframe sandbox and the published page
+ * use identical URLs. URLs point at the host's
+ * `/_pb/runtime/cache/<lockHash>/<name>/<entry>` route.
+ */
+const RuntimePackageImportmapSchema = Type.Object({
+  /** `name` → entry-file URL, plus `name/` → package-root URL prefix. */
+  imports: Type.Record(Type.String(), Type.String()),
+  /** Cache hash this importmap was computed against. */
+  lockHash: Type.String(),
+})
+
+export type RuntimePackageImportmap = Static<typeof RuntimePackageImportmapSchema>
+
+// ---------------------------------------------------------------------------
 // SiteRuntimeConfig
 // ---------------------------------------------------------------------------
 
 export const SiteRuntimeConfigSchema = Type.Object({
   dependencyLock: SiteDependencyLockSchema,
   scripts: Type.Record(Type.String(), SiteScriptRuntimeConfigSchema),
+  /**
+   * Stored alongside the lock so the editor can reach for the iframe's
+   * import map without a round-trip — `setSiteDependencyLock` writes both
+   * together. Absent when the lock has no resolved packages.
+   */
+  packageImportmap: Type.Optional(RuntimePackageImportmapSchema),
 })
 
 export type SiteRuntimeConfig = Static<typeof SiteRuntimeConfigSchema>

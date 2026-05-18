@@ -643,6 +643,30 @@ export interface PublishPageOptions {
    * value, e.g. `'/_pb/css/'`. Defaults to `'/_pb/css/'`.
    */
   cssAssetBaseUrl?: string
+  /**
+   * Pre-serialised `<script type="importmap">` body + its SHA-256 hash.
+   *
+   * Emitted in `<head>` and the hash is added to the page's CSP
+   * `script-src` so the inline tag passes a strict policy. Built on the
+   * server side from the site's locked runtime dependencies + the populated
+   * `bun install` cache — plugins use bare imports like
+   * `import * as THREE from 'three'` and the browser resolves them to
+   * `/_pb/runtime/cache/<hash>/...` paths served from the host.
+   */
+  runtimePackageImportmap?: PublishedRuntimePackageImportmap
+}
+
+/**
+ * Pre-serialised importmap + the SHA-256 of its body, ready to drop into
+ * `<head>` and `Content-Security-Policy`. Computed once on the server by
+ * `buildRuntimePackageImportmap` so the body the browser hashes matches the
+ * body we hash for the CSP directive.
+ */
+export interface PublishedRuntimePackageImportmap {
+  /** Exact JSON text emitted inside `<script type="importmap">…</script>`. */
+  body: string
+  /** Base64-encoded SHA-256 of `body` — used as `'sha256-<value>'` in CSP. */
+  sha256: string
 }
 
 /**
@@ -805,8 +829,22 @@ export function publishPage(
   const loopRuntimeScript = hasInfiniteLoops
     ? `  <script type="module" src="/_pb/assets/loop-runtime.js" data-pb-loop-endpoint="${escapeHtml(loopEndpointBaseUrl)}" defer></script>`
     : ''
-  const anyScriptTag = hasRuntimeScripts || hasInfiniteLoops
-  const scriptSource = anyScriptTag ? "'self'" : "'none'"
+  // Site-dependency importmap. When present we emit a `<script type="importmap">`
+  // tag in `<head>` (must precede any `<script type="module">`) and pin its
+  // SHA-256 into `script-src` so the inline tag passes strict CSP.
+  const importmap = options.runtimePackageImportmap
+  const importmapTag = importmap
+    ? `  <script type="importmap">${importmap.body}</script>`
+    : ''
+  const anyScriptTag = hasRuntimeScripts || hasInfiniteLoops || Boolean(importmap)
+  // Once we have any script on the page, all module fetches need `'self'`
+  // (runtime cache URLs live under the same origin). The inline importmap
+  // additionally needs its hash listed so strict CSP doesn't reject it.
+  const scriptSourceParts: string[] = []
+  if (anyScriptTag) scriptSourceParts.push("'self'")
+  else scriptSourceParts.push("'none'")
+  if (importmap) scriptSourceParts.push(`'sha256-${importmap.sha256}'`)
+  const scriptSource = scriptSourceParts.join(' ')
   const workerSource = anyScriptTag ? "'self' blob:" : "'none'"
 
   // Constraint #227: every published page must carry a Content-Security-Policy meta tag.
@@ -829,6 +867,7 @@ export function publishPage(
     `  <meta name="viewport" content="width=device-width, initial-scale=1.0">${csp}\n` +
     `  <title>${pageTitle}</title>${metaDesc}${favicon}${fontImport}\n` +
     styleHeadHtml +
+    `${importmapTag ? `${importmapTag}\n` : ''}` +
     `${headRuntimeScripts ? `${headRuntimeScripts}\n` : ''}` +
     `</head>\n` +
     `${bodyOpenTag}\n` +

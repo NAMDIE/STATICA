@@ -13,7 +13,6 @@
         "@codemirror/language": "^6.12.3",
         "@codemirror/state": "^6.6.0",
         "@dnd-kit/core": "^6.3.1",
-        "@fallow-cli/beacon": "^0.4.3",
         "@fontsource-variable/geist": "^5.2.8",
         "@fontsource-variable/inter": "^5.2.8",
         "@lezer/highlight": "^1.2.3",
@@ -236,8 +235,6 @@
     "@eslint/object-schema": ["@eslint/object-schema@3.0.5", "", {}, "sha512-vqTaUEgxzm+YDSdElad6PiRoX4t8VGDjCtt05zn4nU810UIx/uNEV7/lZJ6KwFThKZOzOxzXy48da+No7HZaMw=="],
 
     "@eslint/plugin-kit": ["@eslint/plugin-kit@0.7.1", "", { "dependencies": { "@eslint/core": "^1.2.1", "levn": "^0.4.1" } }, "sha512-rZAP3aVgB9ds9KOeUSL+zZ21hPmo8dh6fnIFwRQj5EAZl9gzR7wxYbYXYysAM8CTqGmUGyp2S4kUdV17MnGuWQ=="],
-
-    "@fallow-cli/beacon": ["@fallow-cli/beacon@0.4.3", "", {}, "sha512-dF7ziNbNzWYJ6jzijf7E0QtL1SQSdZY8pgZEOaAXSmIFRJw2ljht+pzLVVZETLEiIMMDkXxXGt9Az5GzGVU13Q=="],
 
     "@fontsource-variable/geist": ["@fontsource-variable/geist@5.2.8", "", {}, "sha512-cJ6m9e+8MQ5dCYJsLylfZrgBh6KkG4bOLckB35Tr9J/EqdkEM6QllH5PxqP1dhTvFup+HtMRPuz9xOjxXJggxw=="],
 

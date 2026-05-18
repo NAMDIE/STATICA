@@ -12,6 +12,7 @@ import { renderDataRowDocumentHtml } from './publish/dataRenderer'
 import { getSetupStatus } from './repositories/setup'
 import { getPublishedRuntimeAsset } from './repositories/runtimeAsset'
 import { handleLoopRequest, isLoopRuntimeAssetPath, serveLoopRuntimeAsset } from './handlers/cms/loop'
+import { isRuntimePackagePath, tryServeRuntimePackage } from './publish/runtime/packageServer'
 import { jsonResponse } from './http'
 import { hardenUploadResponse, serveAdminApp, serveStaticFile } from './static'
 import { registry } from '@core/module-engine/registry'
@@ -89,7 +90,24 @@ async function tryServeUpload(
   // and (for non-inert MIMEs) `attachment` headers so a stray non-allowlisted
   // file in the uploads dir can never be top-level navigated and rendered as
   // HTML on the admin origin. See `INERT_UPLOAD_MIMES` in `static.ts`.
-  return hardenUploadResponse(upload)
+  const hardened = hardenUploadResponse(upload)
+  // Plugin bundles live under `/uploads/plugins/<id>/<version>/...`. The
+  // editor's preview iframe loads them with `sandbox="allow-scripts"` (no
+  // `allow-same-origin`), which puts the iframe in an opaque origin —
+  // module fetches across that boundary need CORS. Plugin assets are
+  // distribution code (frontend bundles, plugin-shipped images), so
+  // allow-all is correct here. Non-plugin uploads stay default-deny.
+  if (pathname.startsWith('/uploads/plugins/')) {
+    const headers = new Headers(hardened.headers)
+    headers.set('access-control-allow-origin', '*')
+    headers.set('cross-origin-resource-policy', 'cross-origin')
+    return new Response(hardened.body, {
+      status: hardened.status,
+      statusText: hardened.statusText,
+      headers,
+    })
+  }
+  return hardened
 }
 
 async function tryServeAdminApp(
@@ -235,6 +253,16 @@ export async function handleServerRequest(
 
   const runtimeAsset = await tryServeRuntimeAsset(req, db, pathname)
   if (runtimeAsset) return runtimeAsset
+
+  // Per-site runtime dependency cache — served from the hashed
+  // `bun install` workspace under `/_pb/runtime/cache/<hash>/<...path>`.
+  // The publisher emits an `<script type="importmap">` mapping bare
+  // specifiers like `three` to URLs in this namespace, so plugin module
+  // scripts and frontend bundles share a single locally-installed copy
+  // of every site dependency.
+  if (isRuntimePackagePath(pathname)) {
+    return (await tryServeRuntimePackage(req, pathname)) ?? new Response('not found', { status: 404 })
+  }
 
   // Per-site CSS bundle — `reset-<hash>.css`, `framework-<hash>.css`,
   // `style-<hash>.css`. Filenames embed a content hash, so responses can use

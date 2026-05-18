@@ -1,5 +1,6 @@
 import type {
   PublishedPageRuntimeAssets,
+  RuntimePackageImportmap,
   SiteDependencyLock,
   SiteRuntimeDiagnostic,
 } from '@core/site-runtime'
@@ -35,11 +36,23 @@ export interface CmsRuntimePreviewInput {
   templateContext?: TemplateRenderDataContext
 }
 
+export interface CmsRuntimeDependencyResolveResult {
+  dependencyLock: SiteDependencyLock
+  /**
+   * Precomputed importmap from the server's `bun install` cache. Absent
+   * when the lock has no resolvable packages or the install step skipped.
+   * Callers that get an importmap should persist it on
+   * `site.runtime.packageImportmap` so the editor iframe sandbox and the
+   * published page consume the same URLs.
+   */
+  packageImportmap?: RuntimePackageImportmap
+}
+
 export async function resolveCmsRuntimeDependencies(
   packageJson: SitePackageJson,
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
   basePath = '/admin/api/cms',
-): Promise<SiteDependencyLock> {
+): Promise<CmsRuntimeDependencyResolveResult> {
   const res = await fetchImpl(`${basePath}/runtime/dependencies/resolve`, {
     method: 'POST',
     credentials: 'include',
@@ -49,10 +62,16 @@ export async function resolveCmsRuntimeDependencies(
   if (!res.ok) {
     throw new Error(await responseErrorMessage(res, `Runtime dependency resolution failed with ${res.status}`))
   }
-  // Envelope validated; SiteDependencyLock is deep — passes through as
-  // unknown, then the cast below restores the typed surface for callers.
+  // Envelope validated; SiteDependencyLock + RuntimePackageImportmap are
+  // both deep shapes — pass through as unknown, then the casts below
+  // restore the typed surface for callers.
   const body = await parseJsonResponse(res, CmsRuntimeDependencyEnvelopeSchema)
-  return body.dependencyLock as SiteDependencyLock
+  return {
+    dependencyLock: body.dependencyLock as SiteDependencyLock,
+    ...(body.packageImportmap
+      ? { packageImportmap: body.packageImportmap as RuntimePackageImportmap }
+      : {}),
+  }
 }
 
 export async function buildCmsRuntimePreview(

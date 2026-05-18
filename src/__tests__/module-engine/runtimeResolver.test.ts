@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 import { createModuleImportMap, resolveDependencyUrl } from '@core/module-engine/runtimeResolver'
 import type { AnyModuleDefinition } from '@core/module-engine/types'
+import type { RuntimePackageImportmap } from '@core/site-runtime'
 
 function makeModule(dependencies: AnyModuleDefinition['dependencies']): AnyModuleDefinition {
   return {
@@ -18,45 +19,63 @@ function makeModule(dependencies: AnyModuleDefinition['dependencies']): AnyModul
   }
 }
 
+const SITE_IMPORTMAP: RuntimePackageImportmap = {
+  lockHash: 'abc123def456ghi789jkl012',
+  imports: {
+    three: '/_pb/runtime/cache/abc123def456ghi789jkl012/three/build/three.module.js',
+    'three/': '/_pb/runtime/cache/abc123def456ghi789jkl012/three/',
+    typescript: '/_pb/runtime/cache/abc123def456ghi789jkl012/typescript/lib/typescript.js',
+  },
+}
+
 describe('runtime dependency resolver', () => {
-  it('resolves runtime dependencies to CDN ESM URLs without app-level installs', () => {
+  it('looks up a single package URL in the site importmap', () => {
     expect(
-      resolveDependencyUrl({ name: 'three', version: '^0.184.0', dev: false }),
-    ).toBe('https://esm.sh/three@0.184.0?bundle')
+      resolveDependencyUrl({ name: 'three' }, { siteImportmap: SITE_IMPORTMAP }),
+    ).toBe('/_pb/runtime/cache/abc123def456ghi789jkl012/three/build/three.module.js')
   })
 
-  it('creates import-map entries for package root and subpaths', () => {
-    const importMap = createModuleImportMap(makeModule({ three: '^0.184.0' }))
+  it('returns null when no site importmap is provided', () => {
+    expect(resolveDependencyUrl({ name: 'three' })).toBeNull()
+  })
 
-    expect(importMap.imports.three).toBe('https://esm.sh/three@0.184.0?bundle')
-    expect(importMap.imports['three/']).toBe('https://esm.sh/three@0.184.0/')
+  it('builds an import map filtered to the module declared deps', () => {
+    const importMap = createModuleImportMap(
+      makeModule({ three: '^0.184.0' }),
+      { siteImportmap: SITE_IMPORTMAP },
+    )
+    expect(importMap.imports.three).toBe(
+      '/_pb/runtime/cache/abc123def456ghi789jkl012/three/build/three.module.js',
+    )
+    expect(importMap.imports['three/']).toBe(
+      '/_pb/runtime/cache/abc123def456ghi789jkl012/three/',
+    )
+    // typescript is in the site importmap but not in this module's deps —
+    // it stays out so the iframe surface is focused.
+    expect(importMap.imports.typescript).toBeUndefined()
+  })
+
+  it('emits an empty import map when no site importmap is provided', () => {
+    // No site importmap (= deps not resolved yet). The iframe shouldn't
+    // mount until `Resolve runtime` has run; the resolver communicates
+    // that by returning an empty map.
+    const importMap = createModuleImportMap(makeModule({ three: '^0.184.0' }))
+    expect(importMap.imports).toEqual({})
   })
 
   it('does not expose dev dependencies to the editor runtime import map', () => {
-    const importMap = createModuleImportMap(makeModule({
-      three: '^0.184.0',
-      typescript: { version: '^5.3.0', dev: true },
-    }))
-
+    const importMap = createModuleImportMap(
+      makeModule({
+        three: '^0.184.0',
+        typescript: { version: '^5.3.0', dev: true },
+      }),
+      { siteImportmap: SITE_IMPORTMAP },
+    )
     expect(importMap.imports.three).toBeDefined()
     expect(importMap.imports.typescript).toBeUndefined()
   })
 
-  it('prefers the site manifest version over the module default range', () => {
-    const importMap = createModuleImportMap(
-      makeModule({ three: '^0.184.0' }),
-      {
-        packageJson: {
-          dependencies: { three: '^0.185.0' },
-          devDependencies: {},
-        },
-      },
-    )
-
-    expect(importMap.imports.three).toBe('https://esm.sh/three@0.185.0?bundle')
-  })
-
-  it('can require dependencies to exist in the site manifest before resolving them', () => {
+  it('drops module deps absent from the site manifest in strict mode', () => {
     const importMap = createModuleImportMap(
       makeModule({ three: '^0.184.0' }),
       {
@@ -64,10 +83,10 @@ describe('runtime dependency resolver', () => {
           dependencies: {},
           devDependencies: {},
         },
+        siteImportmap: SITE_IMPORTMAP,
         strictSiteManifest: true,
       },
     )
-
     expect(importMap.imports.three).toBeUndefined()
     expect(importMap.imports['three/']).toBeUndefined()
   })
@@ -80,10 +99,10 @@ describe('runtime dependency resolver', () => {
           dependencies: {},
           devDependencies: { three: '^0.185.0' },
         },
+        siteImportmap: SITE_IMPORTMAP,
         strictSiteManifest: true,
       },
     )
-
     expect(importMap.imports.three).toBeUndefined()
   })
 })

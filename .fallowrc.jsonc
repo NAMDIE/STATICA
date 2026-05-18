@@ -25,10 +25,75 @@
   // (CM6 stamps that class on the editor root). Fallow's CSS parser doesn't
   // recognise `:global()` and would otherwise flag the class as an unused
   // export.
+  // Test helpers use `new URL('../../', import.meta.url)` and
+  // `fileURLToPath(new URL(...))` to resolve repo-relative paths at runtime.
+  // Fallow's parser mistakes the URL-constructor's first arg for an ES
+  // import specifier — disable the rule for test files where this is the
+  // only legitimate usage.
+  "overrides": [
+    {
+      "files": ["src/__tests__/**/*.ts", "src/__tests__/**/*.tsx"],
+      "rules": { "unresolved-imports": "off" }
+    }
+  ],
+
   "ignoreExports": [
     {
       "file": "src/admin/pages/site/code-editor/CodeEditorPanel.module.css",
       "exports": ["cm-editor"]
+    },
+
+    // Plugin SDK public surface — consumed by external plugin authors via
+    // `@pagebuilder/plugin-sdk`. Fallow can't see those consumers.
+    {
+      "file": "src/core/plugin-sdk/builders/index.ts",
+      "exports": [
+        "DefinePluginConfig",
+        "PluginDefinition",
+        "PluginSettingValue",
+        "PluginSettingsValues",
+        "PluginPackContents",
+        "PermissionAlias",
+        "PluginNamespace",
+        "PluginAdminAppProps",
+        "DefinePluginEditorPanelConfig",
+        "PluginEditorPanelComponent",
+        "PluginEditorPanelProps",
+        "DefinePluginCanvasOverlayConfig",
+        "PluginCanvasOverlayComponent",
+        "PluginCanvasOverlayProps"
+      ]
+    },
+    {
+      "file": "src/core/plugin-sdk/builders/permissions.ts",
+      "exports": ["PermissionAlias"]
+    },
+    {
+      "file": "src/core/plugin-sdk/types.ts",
+      "exports": ["PluginPaletteCommand", "RouteMethod", "ServerPluginModule"]
+    },
+
+    // Plugin host-ui re-exports — the `*Props` type aliases form the
+    // `@pagebuilder/host-ui` package surface that plugin authors consume.
+    {
+      "file": "src/admin/plugin-host-ui/index.ts",
+      "exports": [
+        "AlertProps",
+        "ButtonProps",
+        "CardProps",
+        "CheckboxProps",
+        "CodeProps",
+        "EmptyStateProps",
+        "HeadingProps",
+        "InputProps",
+        "SearchBarProps",
+        "SelectProps",
+        "SeparatorProps",
+        "StackProps",
+        "SwitchProps",
+        "TextProps",
+        "TextareaProps"
+      ]
     }
   ]
 }

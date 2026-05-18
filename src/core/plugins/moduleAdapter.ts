@@ -24,7 +24,9 @@ import type {
   PropertySchema,
 } from '@core/module-engine/types'
 import type {
+  PluginEditorRuntime,
   PluginModuleDefinition,
+  PluginModuleDependencies,
   PluginPropertyControl,
   PluginPropertySchema,
 } from '@core/plugin-sdk'
@@ -77,6 +79,32 @@ function translatePropertySchema(schema: PluginPropertySchema): PropertySchema {
   return out
 }
 
+function translateModuleDependencies(
+  dependencies: PluginModuleDependencies,
+): ModuleDefinition['dependencies'] {
+  // Plugin SDK shape is structurally identical to host `ModuleDependencies`
+  // (string shorthand or `{ version, dev? }` spec). Copy through verbatim —
+  // the host's `normalizeModuleDependencies` validates package names and
+  // versions at the registry boundary.
+  return { ...dependencies }
+}
+
+function maybeEditorRuntime(
+  runtime: PluginEditorRuntime | undefined,
+): Pick<ModuleDefinition, 'editorRuntime'> | Record<string, never> {
+  if (!runtime?.sandbox) return {}
+  return {
+    editorRuntime: {
+      sandbox: {
+        source: runtime.sandbox.source,
+        ...(typeof runtime.sandbox.minHeight === 'number'
+          ? { minHeight: runtime.sandbox.minHeight }
+          : {}),
+      },
+    },
+  }
+}
+
 const DEFAULT_PLUGIN_MODULE_ICON: IconComponent = BoxStackSolidIcon
 
 /**
@@ -121,6 +149,18 @@ export function pluginModuleToHostModule(
     defaults: definition.defaults,
     component: componentFactory(definition),
     htmlTag: typeof definition.htmlTag === 'string' ? definition.htmlTag : undefined,
+    // Dependencies declared by the plugin module flow into the site's
+    // package.json on insert. The host's existing
+    // `getMissingModuleDependencies`/`getSiteModuleDependencyUsage` paths
+    // then surface them in the Dependencies Panel automatically.
+    ...(definition.dependencies
+      ? { dependencies: translateModuleDependencies(definition.dependencies) }
+      : {}),
+    // Optional iframe-backed editor preview. When provided, the editor's
+    // `NodeRenderer` mounts a `ModuleSandboxFrame` with an import map built
+    // from `dependencies`, so `import * as THREE from 'three'` inside the
+    // sandbox source resolves to the locked CDN URL.
+    ...maybeEditorRuntime(definition.editorRuntime),
     // Defensive wrap — a throwing plugin render() must not crash the
     // publisher (one bad module would otherwise abort the entire publish
     // job). The editor canvas separately wraps the React preview in an

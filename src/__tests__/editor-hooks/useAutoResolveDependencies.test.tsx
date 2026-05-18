@@ -81,6 +81,17 @@ describe('useAutoResolveDependencies', () => {
         },
         updatedAt: 1,
       },
+      // The hook also fires when the lock has packages but no importmap
+      // (legacy state needs a re-resolve to populate it). Seed both
+      // alongside the lock so "in-sync + importmap populated" exercises
+      // the actual no-op path.
+      packageImportmap: {
+        lockHash: 'in-sync-hash',
+        imports: {
+          'canvas-confetti': '/_pb/runtime/cache/in-sync-hash/canvas-confetti/dist/confetti.module.mjs',
+          'canvas-confetti/': '/_pb/runtime/cache/in-sync-hash/canvas-confetti/',
+        },
+      },
     })
     useEditorStore.setState({
       siteRuntime: runtime,

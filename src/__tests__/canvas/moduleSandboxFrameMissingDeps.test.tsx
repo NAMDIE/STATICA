@@ -32,12 +32,33 @@ const MODULE: AnyModuleDefinition = {
   },
 }
 
-function seed(packageDeps: Record<string, string>) {
+/**
+ * Seed the editor store. When `installed: true`, populate the site's
+ * runtime importmap so `ModuleSandboxFrame`'s "is the importmap ready?"
+ * gate clears and the iframe mounts. Real flow: `Resolve runtime` writes
+ * both `dependencyLock` + `packageImportmap` after `bun install` runs.
+ */
+function seed(packageDeps: Record<string, string>, opts: { installed?: boolean } = {}) {
   const packageJson = { dependencies: packageDeps, devDependencies: {} }
+  const baseRuntime = normalizeSiteRuntimeConfig(undefined)
+  const runtime = opts.installed
+    ? normalizeSiteRuntimeConfig({
+      ...baseRuntime,
+      packageImportmap: {
+        lockHash: 'test-hash',
+        imports: Object.fromEntries(
+          Object.keys(packageDeps).flatMap((name) => [
+            [name, `/_pb/runtime/cache/test-hash/${name}/index.js`],
+            [`${name}/`, `/_pb/runtime/cache/test-hash/${name}/`],
+          ]),
+        ),
+      },
+    })
+    : baseRuntime
   useEditorStore.setState({
-    site: makeSite({ packageJson, runtime: normalizeSiteRuntimeConfig(undefined) }),
+    site: makeSite({ packageJson, runtime }),
     packageJson,
-    siteRuntime: normalizeSiteRuntimeConfig(undefined),
+    siteRuntime: runtime,
   } as Parameters<typeof useEditorStore.setState>[0])
 }
 
@@ -94,7 +115,7 @@ describe('ModuleSandboxFrame — missing dependency empty state', () => {
   })
 
   it('mounts the iframe once dependencies are installed', () => {
-    seed({ three: '^0.169.0' })
+    seed({ three: '^0.169.0' }, { installed: true })
 
     const { container } = render(
       <ModuleSandboxFrame
@@ -107,5 +128,24 @@ describe('ModuleSandboxFrame — missing dependency empty state', () => {
 
     expect(container.querySelector('[data-canvas-module-placeholder]')).toBeNull()
     expect(container.querySelector('iframe')).not.toBeNull()
+  })
+
+  it('keeps the placeholder while runtime cache is still resolving', () => {
+    // Dep declared in package.json but importmap hasn't been built yet
+    // (e.g. legacy persisted state, or background `bun install` running).
+    // The iframe must NOT mount — otherwise three.js fails to resolve.
+    seed({ three: '^0.169.0' })
+
+    const { container } = render(
+      <ModuleSandboxFrame
+        moduleDefinition={MODULE}
+        props={{}}
+        nodeId="node-1"
+        isSelected={false}
+      />,
+    )
+
+    expect(container.querySelector('iframe')).toBeNull()
+    expect(container.querySelector('[data-canvas-module-placeholder]')).not.toBeNull()
   })
 })
