@@ -722,6 +722,206 @@ function slugToFilename(slug: string, title: string): string {
 }
 
 /**
+ * Seed the page/site/route frames a caller may have omitted from its
+ * TemplateRenderDataContext. Every published page needs all four frames
+ * populated so dynamic bindings against those sources resolve — even on
+ * plain (non-template, non-loop) pages. Caller-provided values always
+ * win; missing slots fall back to defaults derived from the page/site.
+ */
+function composeTemplateContext(
+  page: Page,
+  site: SiteDocument,
+  incoming: TemplateRenderDataContext | undefined,
+): TemplateRenderDataContext {
+  const provided = incoming ?? { entryStack: [] }
+  const pageFrame = provided.page ?? buildPageFrame(page)
+  return {
+    entryStack: provided.entryStack,
+    page: pageFrame,
+    site: provided.site ?? buildSiteFrame(site),
+    viewer: provided.viewer ?? null,
+    route: provided.route ?? buildRouteFrame(pageFrame.permalink),
+  }
+}
+
+/**
+ * Compute the `<body>` opening tag, lifting user class names from the
+ * root PageNode onto `<body>` directly. base.body emits no wrapper
+ * element, so root-level classIds belong on `<body>` itself — clean HTML
+ * with no freeloader `<div>`.
+ */
+function computeBodyOpenTag(page: Page, site: SiteDocument): string {
+  const rootNode = page.nodes[page.rootNodeId]
+  if (!rootNode?.classIds?.length) return '<body>'
+  const classAttr = classNamesForClassIds(site.classes, rootNode.classIds)
+    .map(escapeHtml)
+    .join(' ')
+  return classAttr ? `<body class="${classAttr}">` : '<body>'
+}
+
+/**
+ * `<head>` metadata tags derived from site settings + page.
+ *
+ * - `title` falls back through metaTitle → page.title → site.name.
+ * - URL-typed settings (faviconUrl, fontImportUrl) are validated by
+ *   isSafeUrl() (blocks `javascript:` / `vbscript:` schemes) and then
+ *   escapeHtml()'d for safe attribute interpolation.
+ * - `lang` honours WCAG 2.1 AA SC 3.1.1 and escapes the BCP-47 tag
+ *   because settings.language is user-controlled.
+ */
+interface DocumentMetaTags {
+  pageTitle: string
+  metaDesc: string
+  favicon: string
+  fontImport: string
+  langAttr: string
+}
+
+function buildDocumentMetaTags(site: SiteDocument, page: Page): DocumentMetaTags {
+  const { settings } = site
+  const metaDesc = settings.metaDescription
+    ? `\n  <meta name="description" content="${escapeHtml(settings.metaDescription)}">`
+    : ''
+  const favicon =
+    settings.faviconUrl && isSafeUrl(settings.faviconUrl)
+      ? `\n  <link rel="icon" href="${escapeHtml(settings.faviconUrl)}">`
+      : ''
+  const fontImport =
+    settings.fontImportUrl && isSafeUrl(settings.fontImportUrl)
+      ? `\n  <link rel="stylesheet" href="${escapeHtml(settings.fontImportUrl)}">`
+      : ''
+  return {
+    pageTitle: escapeHtml(settings.metaTitle ?? page.title ?? site.name),
+    metaDesc,
+    favicon,
+    fontImport,
+    langAttr: escapeHtml(settings.language ?? 'en'),
+  }
+}
+
+/**
+ * Runtime / importmap / loop-runtime `<script>` tags + the flags the CSP
+ * builder needs. Centralising every "do we need a script tag?" branch in
+ * one place keeps publishPage straight-line and makes adding a new
+ * head-or-body-end runtime asset a single-file change.
+ */
+interface RuntimeAssetsBlock {
+  headRuntimeScripts: string
+  bodyEndRuntimeScripts: string
+  loopRuntimeScript: string
+  importmapTag: string
+  importmap: PublishedRuntimePackageImportmap | undefined
+  anyScriptTag: boolean
+}
+
+function buildRuntimeAssetsBlock(
+  options: PublishPageOptions,
+  ctx: RenderContext,
+): RuntimeAssetsBlock {
+  const { runtimeAssets } = options
+  const headRuntimeScripts = scriptTagsForRuntimeAssets(runtimeAssets, 'head')
+  const bodyEndRuntimeScripts = scriptTagsForRuntimeAssets(runtimeAssets, 'body-end')
+  const hasRuntimeScripts = hasPublishedRuntimeScripts(runtimeAssets)
+
+  // Loop runtime is a self-hosted script bundle served at a known fixed
+  // path; only injected when at least one loop on the page uses
+  // pagination='infinite'. This keeps the "no JS by default" line for
+  // pages that don't need it.
+  const hasInfiniteLoops = (ctx.infiniteLoopIds?.size ?? 0) > 0
+  const loopEndpointBaseUrl = options.loopEndpointBaseUrl ?? '/_pb/loop/'
+  const loopRuntimeScript = hasInfiniteLoops
+    ? `  <script type="module" src="/_pb/assets/loop-runtime.js" data-pb-loop-endpoint="${escapeHtml(loopEndpointBaseUrl)}" defer></script>`
+    : ''
+
+  // Site-dependency importmap. When present we emit a `<script type="importmap">`
+  // tag in `<head>` (must precede any `<script type="module">`) and pin its
+  // SHA-256 into `script-src` so the inline tag passes strict CSP.
+  const importmap = options.runtimePackageImportmap
+  const importmapTag = importmap
+    ? `  <script type="importmap">${importmap.body}</script>`
+    : ''
+
+  return {
+    headRuntimeScripts,
+    bodyEndRuntimeScripts,
+    loopRuntimeScript,
+    importmapTag,
+    importmap,
+    anyScriptTag: hasRuntimeScripts || hasInfiniteLoops || Boolean(importmap),
+  }
+}
+
+/**
+ * Build the Content-Security-Policy `<meta>` tag (Constraint #227).
+ *
+ * `script-src` defaults to `'none'`; if any script tag is on the page it
+ * relaxes to `'self'` (runtime cache URLs live under the same origin).
+ * The inline importmap additionally needs its base64 SHA-256 listed so
+ * strict CSP doesn't reject it.
+ */
+function buildContentSecurityPolicy(
+  anyScriptTag: boolean,
+  importmap: PublishedRuntimePackageImportmap | undefined,
+): string {
+  const scriptSourceParts: string[] = [anyScriptTag ? "'self'" : "'none'"]
+  if (importmap) scriptSourceParts.push(`'sha256-${importmap.sha256}'`)
+  const scriptSource = scriptSourceParts.join(' ')
+  const workerSource = anyScriptTag ? "'self' blob:" : "'none'"
+  return (
+    `\n  <meta http-equiv="Content-Security-Policy"` +
+    ` content="default-src 'self'; script-src ${scriptSource};` +
+    ` style-src 'self' 'unsafe-inline'; img-src 'self' data: https:;` +
+    ` frame-src 'none'; worker-src ${workerSource};">`
+  )
+}
+
+/**
+ * Optional `<head>` / body-end line that must be omitted entirely when
+ * the source string is empty. Keeps the assembled HTML free of stray
+ * blank lines when a section has no content.
+ */
+function lineOrEmpty(content: string): string {
+  return content ? `${content}\n` : ''
+}
+
+interface AssembledDocumentParts {
+  langAttr: string
+  csp: string
+  pageTitle: string
+  metaDesc: string
+  favicon: string
+  fontImport: string
+  styleHeadHtml: string
+  importmapTag: string
+  headRuntimeScripts: string
+  bodyOpenTag: string
+  bodyHtml: string
+  bodyEndRuntimeScripts: string
+  loopRuntimeScript: string
+}
+
+function assembleHtmlDocument(parts: AssembledDocumentParts): string {
+  return (
+    `<!DOCTYPE html>\n` +
+    `<html lang="${parts.langAttr}">\n` +
+    `<head>\n` +
+    `  <meta charset="UTF-8">\n` +
+    `  <meta name="viewport" content="width=device-width, initial-scale=1.0">${parts.csp}\n` +
+    `  <title>${parts.pageTitle}</title>${parts.metaDesc}${parts.favicon}${parts.fontImport}\n` +
+    parts.styleHeadHtml +
+    lineOrEmpty(parts.importmapTag) +
+    lineOrEmpty(parts.headRuntimeScripts) +
+    `</head>\n` +
+    `${parts.bodyOpenTag}\n` +
+    `${parts.bodyHtml}\n` +
+    lineOrEmpty(parts.bodyEndRuntimeScripts) +
+    lineOrEmpty(parts.loopRuntimeScript) +
+    `</body>\n` +
+    `</html>`
+  )
+}
+
+/**
  * Publish a single page to a standalone HTML document.
  *
  * - Walks the node tree bottom-up, collecting HTML and CSS.
@@ -730,47 +930,25 @@ function slugToFilename(slug: string, title: string): string {
  * - Embeds the deduplicated CSS in a single <style> block — no external stylesheets.
  * - No editor code, no React, no framework runtime in the output.
  *
- * @param page         The page to publish
- * @param site      The site (used for settings, title, tokens)
- * @param registry     The module registry
- * @param breakpointId Optional breakpoint to publish at (uses breakpoint prop overrides)
+ * Each `<head>` / body concern lives in its own helper (template-context
+ * defaulting, body-tag class injection, meta tags, runtime assets, CSP,
+ * document assembly). This function is straight-line orchestration:
+ * adding a new head feature means editing one helper, not threading
+ * another ternary through 150 lines.
  */
 export function publishPage(
   page: Page,
   site: SiteDocument,
   registry: IModuleRegistry,
-  breakpointIdOrOptions?: string | PublishPageOptions,
-  templateContext?: TemplateRenderDataContext,
+  options: PublishPageOptions = {},
 ): PublishedPage {
-  const options: PublishPageOptions =
-    typeof breakpointIdOrOptions === 'object' && breakpointIdOrOptions !== null
-      ? breakpointIdOrOptions
-      : { breakpointId: breakpointIdOrOptions, templateContext }
-  const { breakpointId, runtimeAssets } = options
-  const cssEmission = options.cssEmission ?? 'inline'
   const cssMap = new Map<string, string>()
-
-  // Always seed page/site/route frames so bindings against those sources
-  // resolve on every render — including plain (non-template, non-loop)
-  // pages. The caller may pass its own `templateContext` to populate the
-  // entry stack (template-row renders) or the viewer/route frames (the
-  // public renderer reads the session); we overlay our defaults under
-  // whatever the caller provided so nothing they set gets clobbered.
-  const incoming = options.templateContext ?? { entryStack: [] }
-  const composedTemplateContext: TemplateRenderDataContext = {
-    entryStack: incoming.entryStack,
-    page: incoming.page ?? buildPageFrame(page),
-    site: incoming.site ?? buildSiteFrame(site),
-    viewer: incoming.viewer ?? null,
-    route: incoming.route ?? buildRouteFrame(buildPageFrame(page).permalink),
-  }
-
   const ctx: RenderContext = {
     page,
     site,
     registry,
-    breakpointId,
-    templateContext: composedTemplateContext,
+    breakpointId: options.breakpointId,
+    templateContext: composeTemplateContext(page, site, options.templateContext),
     cssMap,
     loopData: options.loopData,
     mediaAssets: options.mediaAssets,
@@ -782,100 +960,30 @@ export function publishPage(
   // same data is already in the pre-built `framework.css` bundle.
   const bodyHtml = renderNode(page.rootNodeId, ctx)
 
-  // Compute the <body> class attribute from the root node's classIds.
-  // base.body emits no wrapper element, so any user classes applied to the
-  // page root land on <body> directly — clean HTML, no freeloader <div>.
-  const rootNode = page.nodes[page.rootNodeId]
-  const bodyClassAttr =
-    rootNode?.classIds?.length
-      ? classNamesForClassIds(site.classes, rootNode.classIds)
-          .map(escapeHtml)
-          .join(' ')
-      : ''
-  const bodyOpenTag = bodyClassAttr ? `<body class="${bodyClassAttr}">` : '<body>'
+  // Cascade order (both inline/external): reset → framework (tokens +
+  // generated utilities + module CSS) → user class CSS. User classes load
+  // last so they win specificity ties on identically-specific selectors.
+  const styleHeadHtml = buildStyleHead(options.cssEmission ?? 'inline', options, site, cssMap)
 
-  // Build CSS head content based on emission mode.
-  //
-  // Cascade order (both modes): reset → framework (tokens + generated
-  // utilities + module CSS) → user class CSS. User classes load last so they
-  // win specificity ties on identically-specific selectors.
-  const styleHeadHtml = buildStyleHead(cssEmission, options, site, cssMap)
+  const meta = buildDocumentMetaTags(site, page)
+  const runtime = buildRuntimeAssetsBlock(options, ctx)
+  const csp = buildContentSecurityPolicy(runtime.anyScriptTag, runtime.importmap)
 
-  const { settings } = site
-  const pageTitle = escapeHtml(settings.metaTitle ?? page.title ?? site.name)
-  const metaDesc = settings.metaDescription
-    ? `\n  <meta name="description" content="${escapeHtml(settings.metaDescription)}">`
-    : ''
-  // URL-validate icon and font URLs — isSafeUrl() blocks javascript:/vbscript: schemes.
-  // escapeHtml() then makes the validated URL safe for HTML attribute injection.
-  const favicon =
-    settings.faviconUrl && isSafeUrl(settings.faviconUrl)
-      ? `\n  <link rel="icon" href="${escapeHtml(settings.faviconUrl)}">`
-      : ''
-  const fontImport =
-    settings.fontImportUrl && isSafeUrl(settings.fontImportUrl)
-      ? `\n  <link rel="stylesheet" href="${escapeHtml(settings.fontImportUrl)}">`
-      : ''
-
-  const headRuntimeScripts = scriptTagsForRuntimeAssets(runtimeAssets, 'head')
-  const bodyEndRuntimeScripts = scriptTagsForRuntimeAssets(runtimeAssets, 'body-end')
-  const hasRuntimeScripts = hasPublishedRuntimeScripts(runtimeAssets)
-  const hasInfiniteLoops = (ctx.infiniteLoopIds?.size ?? 0) > 0
-  // Loop runtime is a self-hosted script bundle served at a known fixed
-  // path; only injected when at least one loop on the page uses
-  // pagination='infinite'. This keeps the "no JS by default" line for
-  // pages that don't need it.
-  const loopEndpointBaseUrl = options.loopEndpointBaseUrl ?? '/_pb/loop/'
-  const loopRuntimeScript = hasInfiniteLoops
-    ? `  <script type="module" src="/_pb/assets/loop-runtime.js" data-pb-loop-endpoint="${escapeHtml(loopEndpointBaseUrl)}" defer></script>`
-    : ''
-  // Site-dependency importmap. When present we emit a `<script type="importmap">`
-  // tag in `<head>` (must precede any `<script type="module">`) and pin its
-  // SHA-256 into `script-src` so the inline tag passes strict CSP.
-  const importmap = options.runtimePackageImportmap
-  const importmapTag = importmap
-    ? `  <script type="importmap">${importmap.body}</script>`
-    : ''
-  const anyScriptTag = hasRuntimeScripts || hasInfiniteLoops || Boolean(importmap)
-  // Once we have any script on the page, all module fetches need `'self'`
-  // (runtime cache URLs live under the same origin). The inline importmap
-  // additionally needs its hash listed so strict CSP doesn't reject it.
-  const scriptSourceParts: string[] = []
-  if (anyScriptTag) scriptSourceParts.push("'self'")
-  else scriptSourceParts.push("'none'")
-  if (importmap) scriptSourceParts.push(`'sha256-${importmap.sha256}'`)
-  const scriptSource = scriptSourceParts.join(' ')
-  const workerSource = anyScriptTag ? "'self' blob:" : "'none'"
-
-  // Constraint #227: every published page must carry a Content-Security-Policy meta tag.
-  // Runtime-enabled pages only allow self-hosted external script assets.
-  const csp =
-    `\n  <meta http-equiv="Content-Security-Policy"` +
-    ` content="default-src 'self'; script-src ${scriptSource};` +
-    ` style-src 'self' 'unsafe-inline'; img-src 'self' data: https:;` +
-    ` frame-src 'none'; worker-src ${workerSource};">`
-
-  // WCAG 2.1 AA SC 3.1.1: lang attribute must reflect the site's declared language.
-  // Escape the tag value — even a BCP-47 tag is user-controlled and must be safe for HTML output.
-  const langAttr = escapeHtml(settings.language ?? 'en')
-
-  const html =
-    `<!DOCTYPE html>\n` +
-    `<html lang="${langAttr}">\n` +
-    `<head>\n` +
-    `  <meta charset="UTF-8">\n` +
-    `  <meta name="viewport" content="width=device-width, initial-scale=1.0">${csp}\n` +
-    `  <title>${pageTitle}</title>${metaDesc}${favicon}${fontImport}\n` +
-    styleHeadHtml +
-    `${importmapTag ? `${importmapTag}\n` : ''}` +
-    `${headRuntimeScripts ? `${headRuntimeScripts}\n` : ''}` +
-    `</head>\n` +
-    `${bodyOpenTag}\n` +
-    `${bodyHtml}\n` +
-    `${bodyEndRuntimeScripts ? `${bodyEndRuntimeScripts}\n` : ''}` +
-    `${loopRuntimeScript ? `${loopRuntimeScript}\n` : ''}` +
-    `</body>\n` +
-    `</html>`
+  const html = assembleHtmlDocument({
+    langAttr: meta.langAttr,
+    csp,
+    pageTitle: meta.pageTitle,
+    metaDesc: meta.metaDesc,
+    favicon: meta.favicon,
+    fontImport: meta.fontImport,
+    styleHeadHtml,
+    importmapTag: runtime.importmapTag,
+    headRuntimeScripts: runtime.headRuntimeScripts,
+    bodyOpenTag: computeBodyOpenTag(page, site),
+    bodyHtml,
+    bodyEndRuntimeScripts: runtime.bodyEndRuntimeScripts,
+    loopRuntimeScript: runtime.loopRuntimeScript,
+  })
 
   return {
     filename: slugToFilename(page.slug, page.title),

@@ -62,7 +62,9 @@ export function PreviewOverlay() {
 
   if (!open || !site || !activePage) return null
 
-  const { html } = publishPage(activePage, site, registry, undefined, templatePreviewContext)
+  const { html } = publishPage(activePage, site, registry, {
+    templateContext: templatePreviewContext,
+  })
 
   return (
     <>

@@ -134,8 +134,8 @@ describe('dynamic template rendering', () => {
       },
     })
 
-    const dynamicHtml = publishPage(page, site, registry, undefined, {
-      entryStack: [currentEntry],
+    const dynamicHtml = publishPage(page, site, registry, {
+      templateContext: { entryStack: [currentEntry] },
     }).html
     const staticHtml = publishPage(page, site, registry).html
 
