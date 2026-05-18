@@ -8,6 +8,12 @@
  * layout pulling the other layout's module graph in.
  */
 import { useEffect, useState, useSyncExternalStore, type MouseEvent, type ReactNode } from 'react'
+import { ArticleSolidIcon } from 'pixel-art-icons/icons/article-solid'
+import { DatabaseSolidIcon } from 'pixel-art-icons/icons/database-solid'
+import { ImagesSolidIcon } from 'pixel-art-icons/icons/images-solid'
+import { LayoutSolidIcon } from 'pixel-art-icons/icons/layout-solid'
+import { PackageSolidIcon } from 'pixel-art-icons/icons/package-solid'
+import { UsersSolidIcon } from 'pixel-art-icons/icons/users-solid'
 import { listCmsPlugins } from '@core/persistence/cmsPlugins'
 import type { CmsCurrentUser } from '@core/persistence'
 import type { PluginAdminPageRoute } from '@core/plugin-sdk'
@@ -22,6 +28,13 @@ import {
 import { CMS_PLUGINS_CHANGED_EVENT } from '@admin/pages/plugins/utils/pluginEvents'
 import type { AdminWorkspace } from '@admin/workspace'
 import toolbarStyles from '@site/toolbar/Toolbar.module.css'
+
+/**
+ * Pixel-art icon used inside an admin nav link. Sized to match the
+ * 11px nav-label cap-height — the 13px box leaves the icon visually
+ * balanced with the text without crowding the 28px button track.
+ */
+const NAV_ICON_SIZE = 13
 
 interface AdminSectionNavigationProps {
   section: AdminWorkspace
@@ -80,25 +93,40 @@ export function AdminSectionNavigation({
   return (
     <>
       {canAccess('site') && (
-        section === 'site' ? (
-          <span className={toolbarStyles.activeSection}>Site</span>
-        ) : (
-          <AdminRouteLink to="/admin/site" onNavigateStart={onWorkspaceNavigateStart}>Site</AdminRouteLink>
-        )
+        <NavItem
+          to="/admin/site"
+          icon={<LayoutSolidIcon size={NAV_ICON_SIZE} aria-hidden="true" />}
+          label="Site"
+          active={section === 'site'}
+          onNavigateStart={onWorkspaceNavigateStart}
+        />
       )}
       {canAccess('content') && (
-        section === 'content' ? (
-          <span className={toolbarStyles.activeSection}>Content</span>
-        ) : (
-          <AdminRouteLink to="/admin/content" onNavigateStart={onWorkspaceNavigateStart}>Content</AdminRouteLink>
-        )
+        <NavItem
+          to="/admin/content"
+          icon={<ArticleSolidIcon size={NAV_ICON_SIZE} aria-hidden="true" />}
+          label="Content"
+          active={section === 'content'}
+          onNavigateStart={onWorkspaceNavigateStart}
+        />
+      )}
+      {canAccess('data') && (
+        <NavItem
+          to="/admin/data"
+          icon={<DatabaseSolidIcon size={NAV_ICON_SIZE} aria-hidden="true" />}
+          label="Data"
+          active={section === 'data'}
+          onNavigateStart={onWorkspaceNavigateStart}
+        />
       )}
       {canAccess('media') && (
-        section === 'media' ? (
-          <span className={toolbarStyles.activeSection}>Media</span>
-        ) : (
-          <AdminRouteLink to="/admin/media" onNavigateStart={onWorkspaceNavigateStart}>Media</AdminRouteLink>
-        )
+        <NavItem
+          to="/admin/media"
+          icon={<ImagesSolidIcon size={NAV_ICON_SIZE} aria-hidden="true" />}
+          label="Media"
+          active={section === 'media'}
+          onNavigateStart={onWorkspaceNavigateStart}
+        />
       )}
       {canAccess('plugins') && (
         <PluginsNavLink
@@ -107,11 +135,13 @@ export function AdminSectionNavigation({
         />
       )}
       {canAccess('users') && (
-        section === 'users' ? (
-          <span className={toolbarStyles.activeSection}>Users</span>
-        ) : (
-          <AdminRouteLink to="/admin/users" onNavigateStart={onWorkspaceNavigateStart}>Users</AdminRouteLink>
-        )
+        <NavItem
+          to="/admin/users"
+          icon={<UsersSolidIcon size={NAV_ICON_SIZE} aria-hidden="true" />}
+          label="Users"
+          active={section === 'users'}
+          onNavigateStart={onWorkspaceNavigateStart}
+        />
       )}
       {canAccessPlugins && pluginPages.map((page) => (
         <AdminRouteLink
@@ -119,10 +149,45 @@ export function AdminSectionNavigation({
           to={page.route}
           onNavigateStart={onWorkspaceNavigateStart}
         >
-          {page.navLabel ?? page.title}
+          <PackageSolidIcon size={NAV_ICON_SIZE} aria-hidden="true" />
+          <span>{page.navLabel ?? page.title}</span>
         </AdminRouteLink>
       ))}
     </>
+  )
+}
+
+/**
+ * Single first-party admin nav slot. Renders the icon + label as the
+ * non-clickable `activeSection` span when the user is already on that
+ * workspace, otherwise as a soft-navigating `AdminRouteLink`.
+ */
+function NavItem({
+  to,
+  icon,
+  label,
+  active,
+  onNavigateStart,
+}: {
+  to: string
+  icon: ReactNode
+  label: string
+  active: boolean
+  onNavigateStart?: () => void
+}) {
+  if (active) {
+    return (
+      <span className={toolbarStyles.activeSection}>
+        {icon}
+        <span>{label}</span>
+      </span>
+    )
+  }
+  return (
+    <AdminRouteLink to={to} onNavigateStart={onNavigateStart}>
+      {icon}
+      <span>{label}</span>
+    </AdminRouteLink>
   )
 }
 
@@ -156,14 +221,16 @@ function PluginsNavLink({
   if (active) {
     return (
       <span className={toolbarStyles.activeSection}>
-        Plugins
+        <PackageSolidIcon size={NAV_ICON_SIZE} aria-hidden="true" />
+        <span>Plugins</span>
         {dot}
       </span>
     )
   }
   return (
     <AdminRouteLink to="/admin/plugins" onNavigateStart={onNavigateStart}>
-      Plugins
+      <PackageSolidIcon size={NAV_ICON_SIZE} aria-hidden="true" />
+      <span>Plugins</span>
       {dot}
     </AdminRouteLink>
   )

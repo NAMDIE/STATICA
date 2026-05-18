@@ -16,6 +16,11 @@
  */
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { ArticleSolidIcon } from 'pixel-art-icons/icons/article-solid'
+import { DatabaseSolidIcon } from 'pixel-art-icons/icons/database-solid'
+import { ImagesSolidIcon } from 'pixel-art-icons/icons/images-solid'
+import { LayoutSolidIcon } from 'pixel-art-icons/icons/layout-solid'
+import { PackageSolidIcon } from 'pixel-art-icons/icons/package-solid'
 import { useEditorStore } from '@site/store/store'
 import { pluginRuntime } from '@core/plugins/runtime'
 import type { RegisteredPluginToolbarButton } from '@core/plugin-sdk'
@@ -30,6 +35,8 @@ import { cn } from '@ui/cn'
 import type { PersistenceSaveStatus } from '@site/hooks/usePersistence'
 import type { AdminWorkspace } from '@admin/workspace'
 import styles from './Toolbar.module.css'
+
+const NAV_ICON_SIZE = 13
 
 interface ToolbarProps {
   onSave?: () => void | Promise<void>
@@ -229,32 +236,64 @@ export function Toolbar({
 function DefaultAdminNavigation({ section }: { section: AdminWorkspace }) {
   return (
     <>
-      {section === 'site' ? (
-        <span className={styles.activeSection}>Site</span>
-      ) : (
-        <a className={styles.adminLink} href="/admin/site">Site</a>
-      )}
-      {section === 'content' ? (
-        <span className={styles.activeSection}>Content</span>
-      ) : (
-        <a className={styles.adminLink} href="/admin/content">Content</a>
-      )}
-      {section === 'data' ? (
-        <span className={styles.activeSection}>Data</span>
-      ) : (
-        <a className={styles.adminLink} href="/admin/data">Data</a>
-      )}
-      {section === 'media' ? (
-        <span className={styles.activeSection}>Media</span>
-      ) : (
-        <a className={styles.adminLink} href="/admin/media">Media</a>
-      )}
-      {section === 'plugins' ? (
-        <span className={styles.activeSection}>Plugins</span>
-      ) : (
-        <a className={styles.adminLink} href="/admin/plugins">Plugins</a>
-      )}
+      <DefaultNavSlot
+        href="/admin/site"
+        icon={<LayoutSolidIcon size={NAV_ICON_SIZE} aria-hidden="true" />}
+        label="Site"
+        active={section === 'site'}
+      />
+      <DefaultNavSlot
+        href="/admin/content"
+        icon={<ArticleSolidIcon size={NAV_ICON_SIZE} aria-hidden="true" />}
+        label="Content"
+        active={section === 'content'}
+      />
+      <DefaultNavSlot
+        href="/admin/data"
+        icon={<DatabaseSolidIcon size={NAV_ICON_SIZE} aria-hidden="true" />}
+        label="Data"
+        active={section === 'data'}
+      />
+      <DefaultNavSlot
+        href="/admin/media"
+        icon={<ImagesSolidIcon size={NAV_ICON_SIZE} aria-hidden="true" />}
+        label="Media"
+        active={section === 'media'}
+      />
+      <DefaultNavSlot
+        href="/admin/plugins"
+        icon={<PackageSolidIcon size={NAV_ICON_SIZE} aria-hidden="true" />}
+        label="Plugins"
+        active={section === 'plugins'}
+      />
     </>
+  )
+}
+
+function DefaultNavSlot({
+  href,
+  icon,
+  label,
+  active,
+}: {
+  href: string
+  icon: ReactNode
+  label: string
+  active: boolean
+}) {
+  if (active) {
+    return (
+      <span className={styles.activeSection}>
+        {icon}
+        <span>{label}</span>
+      </span>
+    )
+  }
+  return (
+    <a className={styles.adminLink} href={href}>
+      {icon}
+      <span>{label}</span>
+    </a>
   )
 }
 

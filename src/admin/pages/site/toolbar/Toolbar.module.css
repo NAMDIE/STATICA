@@ -42,6 +42,7 @@
 .adminLink {
     display: inline-flex;
     align-items: center;
+    gap: 6px;
     height: 28px;
     padding: 0 8px;
     border-radius: 8px;
@@ -59,6 +60,7 @@
 .activeSection {
     display: inline-flex;
     align-items: center;
+    gap: 6px;
     height: 28px;
     padding: 0 8px;
     color: var(--editor-text);
