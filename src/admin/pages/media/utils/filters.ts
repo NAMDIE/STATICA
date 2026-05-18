@@ -12,8 +12,8 @@ export type MediaSort = 'newest' | 'oldest' | 'largest' | 'smallest' | 'name-asc
 export type MediaType = 'all' | 'image' | 'video' | 'other'
 
 export interface MediaFilters {
-  /** Filter by folder. `null` → uncategorized (no folder rows). `undefined` → no filter. */
-  folderId?: string | null
+  /** Filter by folder id. `undefined` → no folder filter (all assets). */
+  folderId?: string
   type?: MediaType
   /** Free-text query — matches filename, title, alt text, caption (case-insensitive). */
   q?: string
@@ -55,7 +55,6 @@ function matchesTag(asset: CmsMediaAsset, tag: string | undefined): boolean {
 
 function matchesFolder(asset: CmsMediaAsset, filter: MediaFilters['folderId']): boolean {
   if (filter === undefined) return true
-  if (filter === null) return asset.folderIds.length === 0
   return asset.folderIds.includes(filter)
 }
 

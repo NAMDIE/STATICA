@@ -5,9 +5,8 @@
  *   - The asset list (active or trashed, never both — the panel selection
  *     drives which set is loaded).
  *   - The folder list + tree.
- *   - The current folder selection (regular folder id, `null` for
- *     Uncategorized, `'__all__'` sentinel for "All files", `'__trash__'`
- *     for the Trash view).
+ *   - The current folder selection (regular folder id, `'__all__'` sentinel
+ *     for "All files", `'__trash__'` for the Trash view).
  *   - The selected asset id (for the inspector).
  *   - The filter + sort + search state.
  *   - All async mutations (upload, rename, soft-delete, restore, purge,
@@ -47,7 +46,6 @@ import { refreshCmsMediaAssetCache } from './useCmsMediaAssetByPath'
  */
 export const FOLDER_ALL = '__all__' as const
 export const FOLDER_TRASH = '__trash__' as const
-export const FOLDER_UNCATEGORIZED = '__uncategorized__' as const
 
 /**
  * Built-in smart folder ids. Prefixed with `smart:` so we can route them
@@ -55,37 +53,62 @@ export const FOLDER_UNCATEGORIZED = '__uncategorized__' as const
  * (nanoid) folder id. Each one declares a `predicate` that runs client-side
  * over the active asset list — no extra server hit, no `media_usage_refs`
  * dependency (the "Unused" smart folder ships with M5 usage tracking).
+ *
+ * The built-in set is curated to NOT duplicate things already accessible
+ * via sort or the type chip — every entry below surfaces a state that no
+ * straight ordering can reveal.
  */
-export const SMART_RECENT = 'smart:recent' as const
 export const SMART_MISSING_ALT = 'smart:missing-alt' as const
+export const SMART_MISSING_TITLE = 'smart:missing-title' as const
+export const SMART_UNTAGGED = 'smart:untagged' as const
+export const SMART_LARGE_FILES = 'smart:large-files' as const
+export const SMART_RECENTLY_REPLACED = 'smart:recently-replaced' as const
 
-export type SmartFolderId = typeof SMART_RECENT | typeof SMART_MISSING_ALT
+export type SmartFolderId =
+  | typeof SMART_MISSING_ALT
+  | typeof SMART_MISSING_TITLE
+  | typeof SMART_UNTAGGED
+  | typeof SMART_LARGE_FILES
+  | typeof SMART_RECENTLY_REPLACED
+
+const SMART_FOLDER_IDS = new Set<string>([
+  SMART_MISSING_ALT,
+  SMART_MISSING_TITLE,
+  SMART_UNTAGGED,
+  SMART_LARGE_FILES,
+  SMART_RECENTLY_REPLACED,
+])
 
 export type FolderSelection =
   | string
   | typeof FOLDER_ALL
   | typeof FOLDER_TRASH
-  | typeof FOLDER_UNCATEGORIZED
   | SmartFolderId
 
 export function isSmartFolderId(value: FolderSelection): value is SmartFolderId {
-  return value === SMART_RECENT || value === SMART_MISSING_ALT
+  return SMART_FOLDER_IDS.has(value)
 }
 
-const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
+/**
+ * "Large files" threshold. 1 MiB picks up most page-weight offenders in
+ * practice (typical optimized hero images land at 150–400 KB; anything
+ * north of 1 MiB is usually an un-optimized PNG or a raw camera export).
+ */
+const LARGE_FILE_BYTES = 1024 * 1024
 
 function smartFolderPredicate(id: SmartFolderId): (asset: CmsMediaAsset) => boolean {
   switch (id) {
-    case SMART_RECENT: {
-      const cutoff = Date.now() - SEVEN_DAYS_MS
-      return (asset) => {
-        const ts = Date.parse(asset.createdAt)
-        return Number.isFinite(ts) && ts >= cutoff
-      }
-    }
     case SMART_MISSING_ALT:
       return (asset) =>
         asset.mimeType.startsWith('image/') && asset.altText.trim().length === 0
+    case SMART_MISSING_TITLE:
+      return (asset) => asset.title.trim().length === 0
+    case SMART_UNTAGGED:
+      return (asset) => asset.tags.length === 0
+    case SMART_LARGE_FILES:
+      return (asset) => asset.sizeBytes > LARGE_FILE_BYTES
+    case SMART_RECENTLY_REPLACED:
+      return (asset) => asset.replacedAt !== null
   }
 }
 
@@ -176,7 +199,7 @@ export function useMediaWorkspace(): UseMediaWorkspaceResult {
   const folderTree = useMemo(() => buildFolderTree(folders), [folders])
 
   // Selecting Trash flips the asset query into `?trash=1` mode. Anything else
-  // — All / Uncategorized / a real folder id — loads the active set.
+  // — All / a real folder id / a smart folder — loads the active set.
   const loadAssets = useCallback(async (selection: FolderSelection): Promise<CmsMediaAsset[]> => {
     return listCmsMediaAssets({ trash: selection === FOLDER_TRASH })
   }, [])
@@ -253,9 +276,9 @@ export function useMediaWorkspace(): UseMediaWorkspaceResult {
     // chip + the search box still work inside a smart-folder view.
     const isSmart = isSmartFolderId(folderSelection)
     const filterFolder: MediaFilters['folderId'] =
-      isSmart || folderSelection === FOLDER_ALL || folderSelection === FOLDER_TRASH ? undefined :
-      folderSelection === FOLDER_UNCATEGORIZED ? null :
-      folderSelection
+      isSmart || folderSelection === FOLDER_ALL || folderSelection === FOLDER_TRASH
+        ? undefined
+        : folderSelection
     const base = filterMediaAssets(assets, {
       folderId: filterFolder,
       type: filterType,
@@ -356,7 +379,7 @@ export function useMediaWorkspace(): UseMediaWorkspaceResult {
       typeof folderSelection === 'string' &&
       folderSelection !== FOLDER_ALL &&
       folderSelection !== FOLDER_TRASH &&
-      folderSelection !== FOLDER_UNCATEGORIZED
+      !isSmartFolderId(folderSelection)
         ? folderSelection
         : null
     uploadQueue.enqueue(files, targetFolder)

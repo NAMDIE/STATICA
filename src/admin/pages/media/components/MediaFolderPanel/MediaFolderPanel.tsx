@@ -16,10 +16,15 @@ import { useState, type FormEvent, type KeyboardEvent, type MouseEvent, type Rea
 import { Button } from '@ui/components/Button'
 import { Input } from '@ui/components/Input'
 import { EmptyState } from '@ui/components/EmptyState'
+import { BoxStackSolidIcon } from 'pixel-art-icons/icons/box-stack-solid'
+import { CircleAlertSolidIcon } from 'pixel-art-icons/icons/circle-alert-solid'
+import { EraserSolidIcon } from 'pixel-art-icons/icons/eraser-solid'
 import { FolderGlyphIcon } from 'pixel-art-icons/icons/folder-glyph'
 import { ImagesSolidIcon } from 'pixel-art-icons/icons/images-solid'
 import { PlusIcon } from 'pixel-art-icons/icons/plus'
+import { ReloadIcon } from 'pixel-art-icons/icons/reload'
 import { TrashSolidIcon } from 'pixel-art-icons/icons/trash-solid'
+import { WarningDiamondSolidIcon } from 'pixel-art-icons/icons/warning-diamond-solid'
 import type { IconComponent } from 'pixel-art-icons/types'
 import {
   ExplorerItemContextMenu,
@@ -31,17 +36,75 @@ import {
   TreeIconSlot,
   TreeLabel,
   TreeLabelGroup,
+  TreeMeta,
   TreeRow,
 } from '@admin/pages/site/ui/Tree'
+import type { CmsMediaAsset } from '@core/persistence/cmsMedia'
 import { flattenFolderTree, type MediaFolderNode } from '../../utils/folderTree'
 import {
   FOLDER_ALL,
   FOLDER_TRASH,
-  FOLDER_UNCATEGORIZED,
+  SMART_LARGE_FILES,
+  SMART_MISSING_ALT,
+  SMART_MISSING_TITLE,
+  SMART_RECENTLY_REPLACED,
+  SMART_UNTAGGED,
   type FolderSelection,
+  type SmartFolderId,
   type UseMediaWorkspaceResult,
 } from '../../hooks/useMediaWorkspace'
 import styles from './MediaFolderPanel.module.css'
+
+// Smart-folder predicates duplicated locally for row counts. Must stay
+// logically identical to `smartFolderPredicate` in `useMediaWorkspace`.
+const LARGE_FILE_BYTES = 1024 * 1024
+
+interface SmartFolderDescriptor {
+  id: SmartFolderId
+  label: string
+  icon: IconComponent
+  matches: (asset: CmsMediaAsset) => boolean
+  description: string
+}
+
+const SMART_FOLDERS: SmartFolderDescriptor[] = [
+  {
+    id: SMART_MISSING_ALT,
+    label: 'Missing alt text',
+    icon: WarningDiamondSolidIcon,
+    description: 'Image assets without a written alt text.',
+    matches: (asset) =>
+      asset.mimeType.startsWith('image/') && asset.altText.trim().length === 0,
+  },
+  {
+    id: SMART_MISSING_TITLE,
+    label: 'Missing title',
+    icon: CircleAlertSolidIcon,
+    description: 'Assets with no title — the filename leaks into the UI.',
+    matches: (asset) => asset.title.trim().length === 0,
+  },
+  {
+    id: SMART_UNTAGGED,
+    label: 'Untagged',
+    icon: EraserSolidIcon,
+    description: 'Assets with no tags assigned.',
+    matches: (asset) => asset.tags.length === 0,
+  },
+  {
+    id: SMART_LARGE_FILES,
+    label: 'Large files',
+    icon: BoxStackSolidIcon,
+    description: 'Assets larger than 1 MiB — likely page-weight offenders.',
+    matches: (asset) => asset.sizeBytes > LARGE_FILE_BYTES,
+  },
+  {
+    id: SMART_RECENTLY_REPLACED,
+    label: 'Recently replaced',
+    icon: ReloadIcon,
+    description: 'Assets whose binary has been swapped via "Replace file".',
+    matches: (asset) => asset.replacedAt !== null,
+  },
+]
 
 interface MediaFolderPanelProps {
   workspace: UseMediaWorkspaceResult
@@ -137,13 +200,22 @@ export function MediaFolderPanel({ workspace }: MediaFolderPanelProps) {
           icon={ImagesSolidIcon}
           selected={isSelected(FOLDER_ALL)}
           onSelect={() => workspace.setFolderSelection(FOLDER_ALL)}
+          meta={workspace.assets.length}
         />
-        <SentinelRow
-          label="Uncategorized"
-          icon={FolderGlyphIcon}
-          selected={isSelected(FOLDER_UNCATEGORIZED)}
-          onSelect={() => workspace.setFolderSelection(FOLDER_UNCATEGORIZED)}
-        />
+        {SMART_FOLDERS.map((descriptor) => {
+          const count = workspace.assets.filter(descriptor.matches).length
+          return (
+            <SentinelRow
+              key={descriptor.id}
+              label={descriptor.label}
+              icon={descriptor.icon}
+              selected={isSelected(descriptor.id)}
+              onSelect={() => workspace.setFolderSelection(descriptor.id)}
+              title={descriptor.description}
+              meta={count}
+            />
+          )
+        })}
       </TreeContainer>
 
       <div className={styles.sectionHeader}>
@@ -263,17 +335,25 @@ interface SentinelRowProps {
   icon: IconComponent
   selected: boolean
   onSelect: () => void
+  /** Optional hover tooltip (used by smart-folder rows for their description). */
+  title?: string
+  /** Optional right-aligned count badge (used by smart-folder rows). */
+  meta?: number
 }
 
-function SentinelRow({ label, icon, selected, onSelect }: SentinelRowProps) {
+function SentinelRow({ label, icon, selected, onSelect, title, meta }: SentinelRowProps) {
+  const ariaLabel = meta !== undefined
+    ? `${label} — ${meta} ${meta === 1 ? 'asset' : 'assets'}`
+    : label
   return (
     <TreeRow
       depth={0}
       selected={selected}
       role="treeitem"
       aria-selected={selected}
-      aria-label={label}
+      aria-label={ariaLabel}
       tabIndex={0}
+      title={title}
       onClick={onSelect}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
@@ -288,6 +368,7 @@ function SentinelRow({ label, icon, selected, onSelect }: SentinelRowProps) {
       <TreeLabelGroup>
         <TreeLabel>{label}</TreeLabel>
       </TreeLabelGroup>
+      {meta !== undefined && <TreeMeta>{meta}</TreeMeta>}
     </TreeRow>
   )
 }

@@ -2,8 +2,12 @@
  * MediaSidebar — left rail + panel slot for the Media workspace.
  *
  * Mirrors the structure of `ContentSidebar`: a panel rail with one toggle
- * per panel (folders, smart folders, trash) and a panel slot that mounts
- * the active panel body.
+ * for the Folders panel and a panel slot that mounts the panel body.
+ *
+ * The Folders panel itself owns the entire folder navigation: the regular
+ * folder tree, the built-in smart folders (Recent uploads, Missing alt
+ * text), and the Trash sentinel — all as rows in one tree. There are no
+ * separate Smart / Trash panels.
  *
  * Reuses the editor's PanelRail / LeftSidebar CSS so the visual language is
  * identical across Site / Content / Media.
@@ -11,19 +15,15 @@
 import { useRef, type CSSProperties } from 'react'
 import { Button } from '@ui/components/Button'
 import { FolderGlyphIcon } from 'pixel-art-icons/icons/folder-glyph'
-import { SparklesSolidIcon } from 'pixel-art-icons/icons/sparkles-solid'
-import { TrashSolidIcon } from 'pixel-art-icons/icons/trash-solid'
 import { useEditorStore } from '@site/store/store'
 import { SidebarResizeHandle } from '@admin/shared/SidebarResizeHandle'
-import { EmptyState } from '@ui/components/EmptyState'
 import { Panel } from '@admin/shared/Panel'
 import leftSidebarStyles from '@site/sidebars/LeftSidebar/LeftSidebar.module.css'
 import panelRailStyles from '@site/sidebars/PanelRail/PanelRail.module.css'
 import { MediaFolderPanel } from '../MediaFolderPanel/MediaFolderPanel'
-import { MediaSmartFolderPanel } from '../MediaSmartFolderPanel/MediaSmartFolderPanel'
-import { FOLDER_TRASH, type UseMediaWorkspaceResult } from '../../hooks/useMediaWorkspace'
+import type { UseMediaWorkspaceResult } from '../../hooks/useMediaWorkspace'
 
-export type MediaSidebarPanelId = 'folders' | 'smart' | 'trash'
+export type MediaSidebarPanelId = 'folders'
 
 interface MediaSidebarProps {
   workspace: UseMediaWorkspaceResult
@@ -39,14 +39,10 @@ const RAIL_ITEMS: Array<{
   accent: 'mint' | 'lilac' | 'sky' | 'peach'
 }> = [
   { id: 'folders', label: 'Folders', icon: FolderGlyphIcon, iconName: 'folder', accent: 'sky' },
-  { id: 'smart', label: 'Smart folders', icon: SparklesSolidIcon, iconName: 'sparkles', accent: 'lilac' },
-  { id: 'trash', label: 'Trash', icon: TrashSolidIcon, iconName: 'trash', accent: 'peach' },
 ]
 
 const PANEL_TITLES: Record<MediaSidebarPanelId, string> = {
   folders: 'Folders',
-  smart: 'Smart folders',
-  trash: 'Trash',
 }
 
 export function MediaSidebar({ workspace, activePanel, onActivePanelChange }: MediaSidebarProps) {
@@ -61,12 +57,6 @@ export function MediaSidebar({ workspace, activePanel, onActivePanelChange }: Me
   function handleRailToggle(panelId: MediaSidebarPanelId) {
     const next = activePanel === panelId ? null : panelId
     onActivePanelChange(next)
-    // Selecting the Trash rail jumps to the trash view; selecting Folders
-    // when on Trash bounces us back to "All files" by clearing the trash
-    // selection — the orchestrator hook decides via its own state.
-    if (panelId === 'trash') {
-      workspace.setFolderSelection(FOLDER_TRASH)
-    }
   }
 
   return (
@@ -126,19 +116,7 @@ export function MediaSidebar({ workspace, activePanel, onActivePanelChange }: Me
               onClose={() => onActivePanelChange(null)}
               body="bare"
             >
-              {activePanel === 'folders' && (
-                <MediaFolderPanel workspace={workspace} />
-              )}
-              {activePanel === 'smart' && (
-                <MediaSmartFolderPanel workspace={workspace} />
-              )}
-              {activePanel === 'trash' && (
-                <EmptyState
-                  compact
-                  title="Trash"
-                  description="Soft-deleted assets appear in the canvas. Restore from there."
-                />
-              )}
+              <MediaFolderPanel workspace={workspace} />
             </Panel>
           )}
         </div>
