@@ -18,11 +18,13 @@ import type { AuthUser } from '../../../repositories/users'
 import type { DataRow } from '@core/data/schemas'
 import { createAuditEvent } from '../../../repositories/audit'
 import {
+  cancelScheduledPublish,
   getDataRow,
   getDataTable,
   listDataAuthorOptions,
   publishDataRow,
   saveDataRowDraft,
+  scheduleDataRowPublish,
   softDeleteDataRow,
   updateDataRowAuthor,
   updateDataRowStatus,
@@ -36,6 +38,7 @@ import { badRequest, jsonResponse, methodNotAllowed } from '../../../http'
 import { CMS_API_PREFIX, readValidatedBody, requestAuditContext } from '../shared'
 import {
   RowAuthorBodySchema,
+  RowScheduleBodySchema,
   RowStatusBodySchema,
   RowTableBodySchema,
   RowUpsertBodySchema,
@@ -67,6 +70,8 @@ type DataRowAuditAction =
   | 'data.row.status'
   | 'data.row.move'
   | 'data.row.publish'
+  | 'data.row.schedule'
+  | 'data.row.schedule.cancel'
   | 'data.author.assign'
 
 async function recordRowAuditEvent(
@@ -199,6 +204,57 @@ async function handleRowPublish(
   return jsonResponse(result)
 }
 
+async function handleRowSchedule(
+  req: Request,
+  db: DbClient,
+  rowId: string,
+): Promise<Response> {
+  // Same RBAC as the existing publish endpoint — scheduling a publish
+  // is conceptually "publish later", not a new permission.
+  const user = await requireDataPublisher(req, db)
+  if (user instanceof Response) return user
+
+  const currentRow = await loadRowForAccess(db, rowId, user, canPublishDataRow)
+  if (currentRow instanceof Response) return currentRow
+
+  // POST: set / replace the schedule.
+  if (req.method === 'POST') {
+    const body = await readValidatedBody(req, RowScheduleBodySchema)
+    if (!body) return badRequest('Body must be { at: ISO datetime }')
+
+    const when = new Date(body.at)
+    if (Number.isNaN(when.getTime())) {
+      return badRequest('Invalid datetime — must be a parseable ISO 8601 string')
+    }
+    if (when.getTime() <= Date.now()) {
+      return badRequest('Scheduled time must be in the future')
+    }
+    const whenIso = when.toISOString()
+
+    const row = await scheduleDataRowPublish(db, rowId, whenIso, user.id)
+    if (!row) return rowNotFound()
+    await recordRowAuditEvent(db, user, req, 'data.row.schedule', row, {
+      scheduledPublishAt: whenIso,
+    })
+    return jsonResponse({ row })
+  }
+
+  // DELETE: cancel a pending schedule, revert the row to draft.
+  if (req.method === 'DELETE') {
+    const row = await cancelScheduledPublish(db, rowId, user.id)
+    if (!row) {
+      // Either the row doesn't exist OR it wasn't scheduled. The repo
+      // function gates on `status = 'scheduled'`, so a non-scheduled
+      // row returns null. Surface a meaningful 404.
+      return rowNotFound()
+    }
+    await recordRowAuditEvent(db, user, req, 'data.row.schedule.cancel', row)
+    return jsonResponse({ row })
+  }
+
+  return methodNotAllowed()
+}
+
 async function handleRowStatus(
   req: Request,
   db: DbClient,
@@ -292,6 +348,7 @@ async function handleRowTable(
 // ---------------------------------------------------------------------------
 
 const ROW_PUBLISH_PATTERN = /^\/admin\/api\/cms\/data\/rows\/([^/]+)\/publish$/
+const ROW_SCHEDULE_PATTERN = /^\/admin\/api\/cms\/data\/rows\/([^/]+)\/schedule$/
 const ROW_STATUS_PATTERN = /^\/admin\/api\/cms\/data\/rows\/([^/]+)\/status$/
 const ROW_AUTHOR_PATTERN = /^\/admin\/api\/cms\/data\/rows\/([^/]+)\/author$/
 const ROW_TABLE_PATTERN = /^\/admin\/api\/cms\/data\/rows\/([^/]+)\/table$/
@@ -317,6 +374,11 @@ export async function handleDataRowRoutes(
   const publishMatch = pathname.match(ROW_PUBLISH_PATTERN)
   if (publishMatch) {
     return handleRowPublish(req, db, decodeURIComponent(publishMatch[1]))
+  }
+
+  const scheduleMatch = pathname.match(ROW_SCHEDULE_PATTERN)
+  if (scheduleMatch) {
+    return handleRowSchedule(req, db, decodeURIComponent(scheduleMatch[1]))
   }
 
   const statusMatch = pathname.match(ROW_STATUS_PATTERN)

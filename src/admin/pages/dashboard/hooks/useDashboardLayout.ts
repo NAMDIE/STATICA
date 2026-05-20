@@ -196,11 +196,20 @@ const DEFAULT_LAYOUT: DashboardLayout = {
 // Collision resolution
 // ---------------------------------------------------------------------------
 
+/** Just the grid rectangle (no id) — used by the overlap helper. */
+interface GridRect {
+  col: number
+  row: number
+  size: number
+  rows: number
+}
+
 /**
- * AABB overlap on the integer grid. Two items overlap iff their column
- * ranges intersect AND their row ranges intersect (both half-open).
+ * AABB overlap on the integer grid. Two rectangles overlap iff their
+ * column ranges intersect AND their row ranges intersect (both
+ * half-open).
  */
-function overlaps(a: DashboardItem, b: DashboardItem): boolean {
+function overlaps(a: GridRect, b: GridRect): boolean {
   return !(
     a.col + a.size <= b.col ||
     b.col + b.size <= a.col ||
@@ -428,22 +437,30 @@ export function useDashboardLayout(): DashboardLayoutApi {
     (id: string, size: number, rows: number = 3, col?: number, row?: number) => {
       setLayout((curr) => {
         if (curr.items.some((i) => i.id === id)) return curr
-        // When the caller doesn't pin a target cell (e.g. click-to-add
-        // from the library), append at the bottom — the first row below
-        // every existing widget. Otherwise nothing overlaps, so the
-        // collision resolver leaves everything in place. Defaulting to
-        // (1, 1) would land the new tile on top of the first existing
-        // widget and shove the entire layout down.
-        const targetCol = col ?? 1
-        const targetRow = row ?? curr.items.reduce(
-          (max, item) => Math.max(max, item.row + item.rows),
-          1,
-        )
-        const nextItems = [
-          ...curr.items,
-          { id, size, rows, col: targetCol, row: targetRow },
-        ]
-        return { ...curr, items: resolveCollisions(nextItems, id) }
+        // Click-to-add (no explicit cell): append at the first row below
+        // every existing widget — that's always empty space by definition,
+        // so the drop succeeds with no overlap check needed.
+        if (col === undefined || row === undefined) {
+          const bottomRow = curr.items.reduce(
+            (max, item) => Math.max(max, item.row + item.rows),
+            1,
+          )
+          const nextItems = [
+            ...curr.items,
+            { id, size, rows, col: 1, row: bottomRow },
+          ]
+          return { ...curr, items: nextItems }
+        }
+        // Explicit cell (drag-and-drop from library): the new widget must
+        // fit in empty space without pushing siblings. If the proposed
+        // rectangle overlaps anything, reject the drop entirely — the
+        // page-level dragEnd handler only invokes addWidget when the
+        // pre-drop preview was valid, but we re-verify here so the layout
+        // model itself is the source of truth.
+        const proposed = { col, row, size, rows }
+        if (hasOverlapAt(curr.items, proposed, null)) return curr
+        const nextItems = [...curr.items, { id, size, rows, col, row }]
+        return { ...curr, items: nextItems }
       })
     },
     [],
@@ -464,10 +481,16 @@ export function useDashboardLayout(): DashboardLayoutApi {
       const clampedCol = Math.max(1, Math.min(MAX_COLS - target.size + 1, col))
       const clampedRow = Math.max(1, row)
       if (target.col === clampedCol && target.row === clampedRow) return curr
+      // The destination must be empty (excluding the source widget itself
+      // — it's moving out of its current cell). If the proposed rect
+      // overlaps any sibling, the move is rejected and the widget stays
+      // exactly where it was. No sliding, no auto-rearrangement.
+      const proposed = { col: clampedCol, row: clampedRow, size: target.size, rows: target.rows }
+      if (hasOverlapAt(curr.items, proposed, id)) return curr
       const nextItems = curr.items.map((i) =>
         i.id === id ? { ...i, col: clampedCol, row: clampedRow } : i,
       )
-      return { ...curr, items: resolveCollisions(nextItems, id) }
+      return { ...curr, items: nextItems }
     })
   }, [])
 

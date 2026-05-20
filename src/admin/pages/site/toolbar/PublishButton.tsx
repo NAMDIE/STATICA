@@ -3,6 +3,7 @@ import { selectActivePage, useEditorStore } from '@site/store/store'
 import { pagePublicPath } from '@core/page-tree/slugs'
 import { getCmsPublishStatus, publishCmsDraft } from '@core/persistence'
 import { LoaderIcon } from 'pixel-art-icons/icons/loader'
+import { CalendarSolidIcon } from 'pixel-art-icons/icons/calendar-solid'
 import { CheckIcon } from 'pixel-art-icons/icons/check'
 import { CircleAlertSolidIcon } from 'pixel-art-icons/icons/circle-alert-solid'
 import { CloudUploadSolidIcon } from 'pixel-art-icons/icons/cloud-upload-solid'
@@ -10,6 +11,7 @@ import { ExternalLinkSolidIcon } from 'pixel-art-icons/icons/external-link-solid
 import { EyeSolidIcon } from 'pixel-art-icons/icons/eye-solid'
 import { SaveSolidIcon } from 'pixel-art-icons/icons/save-solid'
 import { StepUpCancelledMessage, useStepUp } from '@admin/shared/StepUp'
+import { SchedulePublishDialog } from '@admin/modals/SchedulePublishDialog'
 import type { PersistenceSaveStatus } from '@site/hooks/usePersistence'
 import { PublishActionGroup, type PublishActionMenuItem } from './PublishActionGroup'
 
@@ -31,6 +33,7 @@ export function PublishButton({ enabled = true, onSave, saveStatus }: PublishBut
   const [state, setState] = useState<PublishState>('idle')
   const [message, setMessage] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false)
   const statusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isStatusSaving = saveStatus?.state === 'saving'
   const saveError = saveStatus?.state === 'error' ? saveStatus.message ?? 'Save failed' : null
@@ -187,6 +190,19 @@ export function PublishButton({ enabled = true, onSave, saveStatus }: PublishBut
       testId: 'toolbar-save-draft-action',
     },
     {
+      // Per-page scheduling. The Site editor's primary Publish button
+      // still publishes ALL draft pages at once (existing behaviour);
+      // the schedule action targets the currently-active page only —
+      // matching what the user sees in the editor when they make the
+      // decision.
+      id: 'schedule-publish',
+      label: 'Schedule publish…',
+      icon: CalendarSolidIcon,
+      disabled: !activePage,
+      onSelect: () => setScheduleDialogOpen(true),
+      testId: 'toolbar-schedule-publish-action',
+    },
+    {
       id: 'preview',
       label: 'Preview page',
       icon: EyeSolidIcon,
@@ -208,23 +224,47 @@ export function PublishButton({ enabled = true, onSave, saveStatus }: PublishBut
   ]
 
   return (
-    <PublishActionGroup
-      statusLabel={state === 'published' ? null : status.label}
-      statusTone={status.tone}
-      statusAriaLabel={status.ariaLabel}
-      publishLabel={label}
-      publishAriaLabel={state === 'published' ? 'Published' : 'Publish site'}
-      publishTitle={state === 'published' ? 'Published' : 'Publish site'}
-      publishState={state === 'publishing' ? 'busy' : state === 'published' ? 'success' : state}
-      publishBusy={isPublishing}
-      publishDisabled={disabled || state === 'published'}
-      publishIcon={PublishIcon}
-      onPublish={handlePublish}
-      menuItems={menuItems}
-      toast={message ? {
-        tone: state === 'error' ? 'alert' : 'status',
-        message,
-      } : null}
-    />
+    <>
+      <PublishActionGroup
+        statusLabel={state === 'published' ? null : status.label}
+        statusTone={status.tone}
+        statusAriaLabel={status.ariaLabel}
+        publishLabel={label}
+        publishAriaLabel={state === 'published' ? 'Published' : 'Publish site'}
+        publishTitle={state === 'published' ? 'Published' : 'Publish site'}
+        publishState={state === 'publishing' ? 'busy' : state === 'published' ? 'success' : state}
+        publishBusy={isPublishing}
+        publishDisabled={disabled || state === 'published'}
+        publishIcon={PublishIcon}
+        onPublish={handlePublish}
+        menuItems={menuItems}
+        toast={message ? {
+          tone: state === 'error' ? 'alert' : 'status',
+          message,
+        } : null}
+      />
+      {activePage && (
+        <SchedulePublishDialog
+          open={scheduleDialogOpen}
+          onClose={() => setScheduleDialogOpen(false)}
+          rowId={activePage.id}
+          // The editor's in-memory Page shape doesn't carry the row's
+          // scheduledPublishAt — that lives on the CMS row, not in the
+          // site document. Future enhancement: read it from a
+          // useCmsPageStatus(activePage.id) hook so re-opening the
+          // dialog pre-fills with the current schedule. For now we
+          // start fresh on every open.
+          currentScheduledAt={null}
+          entityLabel="page"
+          onScheduled={() => {
+            // Re-fetch publish status so the toolbar can transition out
+            // of "Draft saved" / "Unsaved" into the published state if
+            // the row picked up. Cheap call — the same endpoint the
+            // mount-time useEffect uses.
+            void getCmsPublishStatus().catch(() => undefined)
+          }}
+        />
+      )}
+    </>
   )
 }

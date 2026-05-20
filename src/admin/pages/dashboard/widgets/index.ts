@@ -99,10 +99,14 @@ export function registerFirstPartyDashboardWidgets(): void {
   })
 
   dashboardWidgetRegistry.register({
+    // `id: 'publish'` is preserved as a stable identifier so existing
+    // saved dashboard layouts keep finding this widget. The display
+    // label is "Publish lineup" — the block-library + widget chrome
+    // both read this `name`, so users see the new label everywhere.
     id: 'publish',
     ownerId: 'core',
-    name: 'Publish queue',
-    description: 'Builds & scheduled posts',
+    name: 'Publish lineup',
+    description: 'Scheduled, recently published, and drafts',
     icon: CloudUploadSolidIcon,
     defaultSize: 4,
     tint: 'sky',

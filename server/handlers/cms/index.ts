@@ -46,6 +46,7 @@ import { handleMediaFolderRoutes } from './mediaFolders'
 import { handleMediaStorageAdminRoutes } from './mediaStorageAdmin'
 import { handlePluginsRoutes } from './plugins'
 import { handleDataRoutes } from './data'
+import { handleDashboardRoutes } from './dashboard'
 import { handleFontsRoutes } from './fonts'
 import { handlePublishRoutes } from './publish'
 import { handleExportRoute } from './export'
@@ -97,6 +98,10 @@ export async function handleCmsRequest(
     ?? (await handleMediaRoutes(req, db, options))
     ?? (await handlePluginsRoutes(req, db, options))
     ?? (await handleDataRoutes(req, db))
+    // Dashboard stats — read-only aggregate counts used by the admin
+    // dashboard widgets. Lives after data routes so future routes
+    // under `/data/...` can never accidentally shadow it.
+    ?? (await handleDashboardRoutes(req, db))
     ?? (await handleFontsRoutes(req, db, options))
     ?? (await handlePublishRoutes(req, db))
     // Export and import are registered after data routes so their exact paths

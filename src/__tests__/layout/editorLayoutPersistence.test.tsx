@@ -217,6 +217,7 @@ describe('AdminCanvasLayout — CMS site hydration gate', () => {
           createdAt: '2026-01-01T00:00:00.000Z',
           updatedAt: '2026-01-01T00:00:00.000Z',
           publishedAt: null,
+          scheduledPublishAt: null,
           deletedAt: null,
         }))
         return new Response(JSON.stringify({ rows }), { status: 200 })

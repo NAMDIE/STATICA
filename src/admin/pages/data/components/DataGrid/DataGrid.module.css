@@ -138,6 +138,9 @@
 .pillDot[data-status="draft"] {
     background: var(--editor-warning);
 }
+.pillDot[data-status="scheduled"] {
+    background: var(--rail-tint-sky);
+}
 .pillDot[data-status="unpublished"] {
     background: var(--editor-surface-4);
 }
@@ -412,6 +415,9 @@
 .groupDot[data-status="draft"] {
     background: var(--editor-warning);
 }
+.groupDot[data-status="scheduled"] {
+    background: var(--rail-tint-sky);
+}
 .groupDot[data-status="unpublished"] {
     background: var(--editor-surface-4);
 }
@@ -569,6 +575,10 @@
 .statusDot[data-status="draft"] {
     background: var(--editor-warning);
     box-shadow: 0 0 0 3px var(--editor-warning-bg);
+}
+.statusDot[data-status="scheduled"] {
+    background: var(--rail-tint-sky);
+    box-shadow: 0 0 0 3px var(--editor-surface-3);
 }
 .statusDot[data-status="unpublished"] {
     background: var(--editor-surface-4);

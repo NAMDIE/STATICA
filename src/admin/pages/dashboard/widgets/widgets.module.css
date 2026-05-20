@@ -221,6 +221,16 @@
     color: var(--editor-warning);
 }
 
+/* "PUBLISHED" pill — success tone, sibling of `.badgeLive` but
+   semantically a finished publish rather than an in-flight build.
+   Same colour as `.badgeLive` for now; both signal "this row is on
+   the live site" — visually distinct from the warning-tone scheduled
+   pill so the eye scans the lineup at a glance. */
+.badgePublished {
+    background: var(--editor-success-bg);
+    color: var(--editor-success-green);
+}
+
 /* ── Pages / posts / status row utilities ──────────────────────────── */
 .subFootRow {
     margin-top: auto;
@@ -289,13 +299,13 @@
     margin-top: auto;
     display: grid;
     grid-template-columns: repeat(8, 1fr);
-    gap: 3px;
+    gap: 1px;
     padding-top: 12px;
 }
 
 .mediaCell {
     aspect-ratio: 1;
-    border-radius: 2px;
+    border-radius: 6px;
     background: var(--editor-surface-3);
 }
 
@@ -306,4 +316,35 @@
 
 .mediaCellEmpty {
     background: var(--editor-surface);
+}
+
+/* Cell that holds a real image thumbnail. The cell is rendered as a
+   Button primitive so clicking it opens the MediaViewerWindow — these
+   overrides strip the default Button chrome (fixed height, padding,
+   gap, min-width) so the tile reads as a pure square thumbnail. The
+   <img> inside fills the cell with `object-fit: cover`; the rounded
+   corners + background match the decorative cells so a partial fill
+   (fewer than 16 thumbs) blends with the decorative remainder. */
+.mediaCellThumb {
+    aspect-ratio: 1;
+    height: auto;
+    width: 100%;
+    min-width: 0;
+    padding: 0;
+    gap: 0;
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--editor-surface);
+    transition: transform 120ms ease;
+}
+
+.mediaCellThumb:hover {
+    transform: scale(1.04);
+}
+
+.mediaCellThumbImg {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
 }

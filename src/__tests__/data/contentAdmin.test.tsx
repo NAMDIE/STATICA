@@ -140,6 +140,7 @@ function makeRow(
     createdAt: '2026-05-01T10:00:00.000Z',
     updatedAt: '2026-05-01T10:00:00.000Z',
     publishedAt: null as string | null,
+    scheduledPublishAt: null as string | null,
     deletedAt: null as string | null,
     ...overrides,
   }

@@ -4,7 +4,6 @@ import type {
   DataTableListItem,
   DataRow,
   DataUserReference,
-  DataRowStatus,
   CreateDataTableInput,
   UpdateDataTableInput,
   CreateDataRowInput,
@@ -223,9 +222,58 @@ export async function publishCmsDataRow(
   return body.row as DataRow
 }
 
+/**
+ * Schedule a row's publication for a future ISO datetime. The
+ * server-side publish-scheduler tick (`server/publish/publishScheduler.ts`)
+ * picks the row up once `at <= now()` and calls the regular publish
+ * flow. The server validates that `at` is in the future and rejects
+ * past timestamps with a 400.
+ */
+export async function scheduleCmsDataRowPublish(
+  rowId: string,
+  atIso: string,
+  fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
+  basePath = '/admin/api/cms',
+): Promise<DataRow> {
+  const res = await fetchImpl(`${basePath}/data/rows/${encodeURIComponent(rowId)}/schedule`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ at: atIso }),
+  })
+  const body = await readEnvelope(res, RowEnvelope, `CMS data row schedule failed with ${res.status}`)
+  if (!body.row) throw new Error('CMS data row schedule response was missing row')
+  return body.row as DataRow
+}
+
+/**
+ * Cancel a pending scheduled publication. Reverts the row to `'draft'`
+ * status and clears `scheduledPublishAt`. Returns 404 if the row isn't
+ * currently scheduled (or doesn't exist).
+ */
+export async function cancelCmsDataRowSchedule(
+  rowId: string,
+  fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
+  basePath = '/admin/api/cms',
+): Promise<DataRow> {
+  const res = await fetchImpl(`${basePath}/data/rows/${encodeURIComponent(rowId)}/schedule`, {
+    method: 'DELETE',
+    credentials: 'include',
+  })
+  const body = await readEnvelope(res, RowEnvelope, `CMS data row schedule cancel failed with ${res.status}`)
+  if (!body.row) throw new Error('CMS data row schedule cancel response was missing row')
+  return body.row as DataRow
+}
+
 export async function updateCmsDataRowStatus(
   rowId: string,
-  status: Exclude<DataRowStatus, 'published'>,
+  // Mirrors the server handler's accepted statuses
+  // (`server/handlers/cms/data/rows.ts` → `handleRowStatus`). The status
+  // endpoint is the bare draft↔unpublished toggle. Publishing goes
+  // through `publishCmsDataRow`; scheduling goes through
+  // `scheduleCmsDataRowPublish`. The client signature is narrow so the
+  // type system enforces "use the right endpoint" at the call site.
+  status: 'draft' | 'unpublished',
   fetchImpl: FetchLike = globalThis.fetch.bind(globalThis),
   basePath = '/admin/api/cms',
 ): Promise<DataRow> {

@@ -109,6 +109,7 @@ function makeRow(
     createdAt: now,
     updatedAt: now,
     publishedAt: null as string | null,
+    scheduledPublishAt: null as string | null,
     deletedAt: null as string | null,
     ...overrides,
   }

@@ -135,9 +135,19 @@ export function DataPage() {
    * `setRowStatus` (transitions to 'draft' | 'unpublished') — because the
    * server has separate routes for them. The grid only knows DataRowStatus,
    * so we dispatch here.
+   *
+   * `'scheduled'` is NOT reachable through this bulk-status setter — it
+   * goes through the dedicated schedule dialog (`SchedulePublishDialog`,
+   * which talks to the `/schedule` endpoint with a target datetime).
+   * The grid's bulk-action menu doesn't expose 'scheduled' as an
+   * option, so this branch is defensive: a future caller can't slip a
+   * 'scheduled' value through without first picking a time.
    */
   async function handleSetRowStatus(rowId: string, status: DataRowStatus): Promise<DataRow> {
     if (status === 'published') return workspace.publishRow(rowId)
+    if (status === 'scheduled') {
+      throw new Error('Scheduling requires a target datetime — use the schedule dialog instead')
+    }
     return workspace.setRowStatus(rowId, status)
   }
 

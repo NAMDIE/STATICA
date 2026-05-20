@@ -1,34 +1,33 @@
 /**
  * Plugins widget — list of installed plugins with their status dot
- * (active / update / inactive).
+ * (active / disabled / error). Reads from `useDashboardStats().plugins`
+ * (one shared fetch with the other widgets), so the dashboard makes a
+ * single network round-trip on mount even with multiple widgets active.
  */
 import { PlugSolidIcon } from 'pixel-art-icons/icons/plug-solid'
 import type { DashboardWidgetRendererProps } from '@core/dashboard'
 import { Widget } from '@ui/components/Widget'
+import { useDashboardStats, type DashboardPluginRow } from '../hooks/useDashboardStats'
 import styles from './widgets.module.css'
 
-interface PluginRow { name: string; version: string; state: 'active' | 'update' | 'inactive' }
-
-const PLUGINS: readonly PluginRow[] = [
-  { name: 'SEO Meta', version: '1.2.0', state: 'active' },
-  { name: 'Comments', version: '0.8.4', state: 'active' },
-  { name: 'Image Optimizer', version: '2.0.1', state: 'update' },
-  { name: 'Analytics Lite', version: '0.4.0', state: 'inactive' },
-]
-
-function dotClass(state: PluginRow['state']): string {
+function dotClass(state: DashboardPluginRow['state']): string {
   if (state === 'active') return styles.dotGreen
-  if (state === 'update') return styles.dotAmber
+  if (state === 'error') return styles.dotAmber
   return styles.dotMuted
 }
 
-function stateLabel(state: PluginRow['state']): string {
+function stateLabel(state: DashboardPluginRow['state']): string {
   if (state === 'active') return 'active'
-  if (state === 'update') return 'update'
+  if (state === 'error') return 'error'
   return 'off'
 }
 
 export function PluginsWidget({ span, editing }: DashboardWidgetRendererProps) {
+  const stats = useDashboardStats()
+  const plugins = stats?.plugins.rows ?? []
+  const isLoading = stats === null
+  const isEmpty = !isLoading && plugins.length === 0
+
   return (
     <Widget
       widgetId="plugins"
@@ -39,8 +38,16 @@ export function PluginsWidget({ span, editing }: DashboardWidgetRendererProps) {
       editing={editing}
     >
       <div>
-        {PLUGINS.map((p) => (
-          <div key={p.name} className={styles.pluginRow}>
+        {isLoading && (
+          <p className={styles.feedTime} style={{ padding: '12px 0' }}>Loading…</p>
+        )}
+        {isEmpty && (
+          <p className={styles.feedTime} style={{ padding: '12px 0' }}>
+            No plugins installed yet.
+          </p>
+        )}
+        {plugins.map((p) => (
+          <div key={p.id} className={styles.pluginRow}>
             <span className={styles.pluginIcon}>
               <PlugSolidIcon size={12} aria-hidden="true" />
             </span>

@@ -32,6 +32,48 @@
        their label content themselves. */
     white-space: nowrap;
     max-width: calc(100vw - 32px);
+    /* Slide-up + fade in on mount. The matching `.exiting` rule below
+       plays the reverse on close so the bar doesn't pop out of
+       existence. Both animations honour `prefers-reduced-motion`. */
+    animation: slideIn 180ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideIn {
+    from {
+        transform: translate(-50%, 16px);
+        opacity: 0;
+    }
+    to {
+        transform: translate(-50%, 0);
+        opacity: 1;
+    }
+}
+
+/* `forwards` keeps the end state at translateY(16px) opacity:0 so the
+   bar visually settles into its hidden position right before the
+   `useDelayedUnmount` hook removes it from the DOM — no late frame
+   showing the bar pop back to fully visible after the animation. */
+.exiting {
+    animation: slideOut 180ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    pointer-events: none;
+}
+
+@keyframes slideOut {
+    from {
+        transform: translate(-50%, 0);
+        opacity: 1;
+    }
+    to {
+        transform: translate(-50%, 16px);
+        opacity: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .bar,
+    .exiting {
+        animation: none;
+    }
 }
 
 .label {

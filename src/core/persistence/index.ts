@@ -1,8 +1,9 @@
 export { cmsAdapter } from './cms'
 export { getCmsPublishStatus, publishCmsDraft } from './cmsPublish'
 export { listCmsMediaAssets } from './cmsMedia'
-export type { CmsMediaAsset } from './cmsMedia'
+export type { CmsMediaAsset, CmsMediaVariant } from './cmsMedia'
 export {
+  cancelCmsDataRowSchedule,
   createCmsDataRow,
   createCmsDataTable,
   deleteCmsDataRow,
@@ -14,6 +15,7 @@ export {
   listCmsDataTables,
   publishCmsDataRow,
   saveCmsDataRowDraft,
+  scheduleCmsDataRowPublish,
   updateCmsDataRowAuthor,
   updateCmsDataRowStatus,
   updateCmsDataRowTable,

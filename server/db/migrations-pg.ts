@@ -133,6 +133,35 @@ export const pgMigrations: Migration[] = [
         on sessions (user_id, expires_at)
         where revoked_at is null;
 
+      -- ─── User Preferences ─────────────────────────────────────────────────
+      --
+      -- Per-user, per-key JSON blob — the canonical home for any setting that
+      -- belongs to one admin and would otherwise live in localStorage
+      -- (dashboard layout, theme, default breakpoint, sidebar-collapsed state,
+      -- etc.).
+      --
+      -- Why a (user_id, key) table rather than a JSON column on users:
+      --   1. The users row is hot — every authenticated request joins it.
+      --      Dragging a fat preferences blob along on every auth lookup is
+      --      wasteful when most callers do not need it.
+      --   2. New preferences are added by code change only; the wire-level
+      --      key is type-narrowed by a TS whitelist (see
+      --      src/core/persistence/userPreferences.ts). The DB intentionally
+      --      accepts any string so that adding a key does not require a
+      --      migration — the server handler is the enforcement boundary.
+      --   3. on delete cascade so removing a user (admin housekeeping)
+      --      drops their preferences atomically.
+      --
+      -- value_json is opaque to this layer; the server per-key TypeBox
+      -- schemas validate shape at the HTTP boundary (read AND write paths).
+      create table if not exists user_preferences (
+        user_id    text not null references users(id) on delete cascade,
+        key        text not null,
+        value_json jsonb not null,
+        updated_at timestamptz not null default now(),
+        primary key (user_id, key)
+      );
+
       create table if not exists audit_events (
         id text primary key,
         actor_user_id text references users(id) on delete set null,
@@ -611,6 +640,36 @@ export const pgMigrations: Migration[] = [
         elected_at timestamptz not null default now(),
         elected_by_user_id text references users(id) on delete set null
       );
+    `,
+  },
+  {
+    id: '006_data_rows_scheduled_publish',
+    sql: `
+      -- ─── Scheduled publish — bring existing data_rows up to the new schema.
+      --
+      -- The baseline migration was rewritten in this revision to include
+      -- the 'scheduled' status + the scheduled_publish_at column for fresh
+      -- installs. This migration brings ALREADY-INSTALLED databases up
+      -- to the same shape so the publish-scheduler tick + the dashboard
+      -- stats endpoint can read/write the new columns without crashing.
+      --
+      -- Idempotent: every step uses 'if not exists' / 'if exists' so a
+      -- fresh install that already matches the new baseline runs this
+      -- as a no-op.
+
+      alter table data_rows
+        add column if not exists scheduled_publish_at timestamptz;
+
+      alter table data_rows
+        drop constraint if exists data_rows_status_check;
+
+      alter table data_rows
+        add constraint data_rows_status_check
+        check (status in ('draft', 'published', 'unpublished', 'scheduled'));
+
+      create index if not exists data_rows_scheduled_publish_idx
+        on data_rows (scheduled_publish_at)
+        where status = 'scheduled' and deleted_at is null;
     `,
   },
 ]

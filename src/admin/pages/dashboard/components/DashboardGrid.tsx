@@ -10,14 +10,14 @@
  * where the user puts them. The grid does NOT use `grid-auto-flow` —
  * gaps between widgets are honoured.
  *
- * Drag-to-move
- * ------------
- * One grid-wide droppable instead of per-cell drop zones — on drop, the
- * handler reads the dragged element's translated bounding rect, snaps
- * the top-left corner to the nearest grid cell, and calls `onMove(id,
- * col, row)`. The hook's collision resolver pushes any overlapping
- * siblings downward while keeping the dropped widget pinned at the
- * landing cell.
+ * Drag-to-move + drag-from-library
+ * --------------------------------
+ * One grid-wide droppable instead of per-cell drop zones. The parent
+ * `DashboardPage` owns the `DndContext` (so the Block library can sit
+ * outside this component as a sibling drag source) — this component just
+ * registers the grid surface as the single drop target via
+ * `GRID_DROP_ID` and re-exports the snap-math helpers used by the page's
+ * `onDragEnd` handler.
  *
  * Resize
  * ------
@@ -29,17 +29,10 @@
  * `useDashboardLayout.ts` so the JS handlers and CSS grid track sizes
  * stay in lockstep.
  */
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useRef, type PointerEvent as ReactPointerEvent } from 'react'
 import {
-  DndContext,
-  DragOverlay,
-  PointerSensor,
   useDraggable,
   useDroppable,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-  type DragStartEvent,
 } from '@dnd-kit/core'
 import { PlusIcon } from 'pixel-art-icons/icons/plus'
 import type { DashboardWidgetDefinition } from '@core/dashboard'
@@ -47,6 +40,7 @@ import { Button } from '@ui/components/Button'
 import { cn } from '@ui/cn'
 import {
   EDITING_GRID_GAP,
+  GRID_DROP_ID,
   GRID_ROW_HEIGHT,
   MAX_COLS,
   MAX_ROWS,
@@ -54,9 +48,16 @@ import {
   MIN_ROWS,
   type DashboardItem,
 } from '../hooks/useDashboardLayout'
-import styles from './DashboardGrid.module.css'
 
-const GRID_DROP_ID = '__dashboard_grid__'
+/**
+ * Extra empty rows reserved below the lowest widget while in customize
+ * mode. Without this the grid surface sizes itself to the content and
+ * leaves no droppable area for a library tile to land in. Six rows of
+ * room is enough to drop any widget (largest first-party widget is 5
+ * rows tall) plus visual margin.
+ */
+const CUSTOMIZE_DROPZONE_ROWS = 6
+import styles from './DashboardGrid.module.css'
 
 function clampSize(size: number, min: number, max: number): number {
   if (size < min) return min
@@ -69,69 +70,49 @@ export interface DashboardGridProps {
   /** Definitions keyed by id (registry snapshot). */
   definitions: ReadonlyMap<string, DashboardWidgetDefinition>
   editing: boolean
-  onMove: (id: string, col: number, row: number) => void
   onResize: (id: string, size: number) => void
   onResizeRows: (id: string, rows: number) => void
   onAddBlock: () => void
+  /**
+   * Imperative ref to the grid's DOM root. The page uses it to read
+   * `getBoundingClientRect()` during `onDragEnd` so it can snap library
+   * drops to a grid cell.
+   */
+  gridRef: React.RefObject<HTMLDivElement | null>
+  /**
+   * Live drop-target preview during an active drag. The grid renders a
+   * translucent placeholder at the pixel rectangle described by
+   * `leftPx` / `topPx` / `widthPx` / `heightPx`. CSS transitions on
+   * those properties make the ghost glide smoothly between cells as
+   * the pointer crosses cell boundaries. `null` whenever no drag is
+   * in progress, the pointer left the grid (e.g. is over the library
+   * drop pill), OR the proposed destination would overlap an existing
+   * widget (drops only land in empty space).
+   */
+  dropTarget:
+    | {
+        col: number
+        row: number
+        size: number
+        rows: number
+        leftPx: number
+        topPx: number
+        widthPx: number
+        heightPx: number
+      }
+    | null
 }
 
 export function DashboardGrid({
   items,
   definitions,
   editing,
-  onMove,
   onResize,
   onResizeRows,
   onAddBlock,
+  gridRef,
+  dropTarget,
 }: DashboardGridProps) {
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-  )
-  const [draggingId, setDraggingId] = useState<string | null>(null)
-  const gridRef = useRef<HTMLDivElement | null>(null)
-
-  function handleDragStart(event: DragStartEvent) {
-    setDraggingId(event.active.id as string)
-  }
-
-  function handleDragEnd(event: DragEndEvent) {
-    setDraggingId(null)
-    const itemId = event.active.id as string
-    const item = items.find((i) => i.id === itemId)
-    const grid = gridRef.current
-    const draggedRect = event.active.rect.current.translated
-    if (!item || !grid || !draggedRect) return
-
-    const gridRect = grid.getBoundingClientRect()
-    // One column track = (gridWidth - 11 gaps) / 12. The "step" from
-    // one column start to the next is `colTrack + gap` — that's what
-    // we divide the drop X offset by so each pointer-pixel maps cleanly
-    // to a column index. Same shape for rows: `--row-h + gap`.
-    //
-    // We use `EDITING_GRID_GAP` here (not `GRID_GAP`) because drag-
-    // and-drop only fires in customize mode, where the CSS widens the
-    // gap to 16px for handle accessibility. The snap math has to use
-    // the same value the layout actually rendered with, or the dropped
-    // card lands a column off after a few rows of drift.
-    const colTrack = (gridRect.width - (MAX_COLS - 1) * EDITING_GRID_GAP) / MAX_COLS
-    const colStep = colTrack + EDITING_GRID_GAP
-    const rowStep = GRID_ROW_HEIGHT + EDITING_GRID_GAP
-
-    const offsetX = draggedRect.left - gridRect.left
-    const offsetY = draggedRect.top - gridRect.top
-
-    // `round` snaps to the nearest column / row line rather than
-    // `floor`-ing, which feels closer to where the user "aimed" the
-    // drop. Clamp into the legal range so the widget stays inside the
-    // grid and within the 12-col bound when accounting for its width.
-    const rawCol = Math.round(offsetX / colStep) + 1
-    const rawRow = Math.round(offsetY / rowStep) + 1
-    const targetCol = Math.max(1, Math.min(MAX_COLS - item.size + 1, rawCol))
-    const targetRow = Math.max(1, rawRow)
-
-    onMove(itemId, targetCol, targetRow)
-  }
-
   /**
    * The "Add block" tile sits in the next row below the lowest widget.
    * We compute it from the max (row + rows) of the items so dropping a
@@ -142,99 +123,112 @@ export function DashboardGrid({
     1,
   )
 
-  const draggingDef = draggingId ? definitions.get(draggingId) ?? null : null
-  const draggingItem = draggingId ? items.find((i) => i.id === draggingId) ?? null : null
+  // While editing, force the grid to extend several rows BELOW the
+  // lowest widget so the user has actual empty cells to drag library
+  // tiles into. Computed in pixels (row-height + the customize-mode
+  // gap × rows). View mode leaves min-height unset so the grid stays
+  // tight to its content.
+  const dropZoneBottomRow = addBlockRow + CUSTOMIZE_DROPZONE_ROWS
+  const gridMinHeight = editing
+    ? dropZoneBottomRow * (GRID_ROW_HEIGHT + EDITING_GRID_GAP)
+    : undefined
 
   // CRITICAL: a SINGLE render tree across view/customize so the grid's
   // root <div> survives the mode flip with the same DOM identity. If we
-  // returned different JSX trees for the two modes (one with DndContext,
-  // one without), React would unmount the old grid element and mount a
-  // fresh one — and a brand-new element has no previous CSS state for
-  // the `gap` transition to interpolate from. The transition would
-  // silently no-op.
+  // returned different JSX trees for the two modes, React would unmount
+  // the old grid element and mount a fresh one — and a brand-new element
+  // has no previous CSS state for the `gap` transition to interpolate
+  // from. The transition would silently no-op.
   //
-  // `DndContext` is always mounted (cheap when there's no active drag).
   // Inside, each cell branches per-mode: `<DraggableCell>` in customize,
-  // a plain `<div>` in view. The Add-block tile and DragOverlay render
-  // only in customize. The grid surface itself stays the same element.
+  // a plain `<div>` in view. The Add-block tile renders only in customize.
+  // The grid surface itself stays the same element.
   return (
-    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <GridSurface ref={gridRef} editing={editing}>
-        {items.map((item) => {
-          const def = definitions.get(item.id)
-          if (!def) return null
-          if (editing) {
-            return (
-              <DraggableCell
-                key={item.id}
-                item={item}
-                definition={def}
-                onResize={onResize}
-                onResizeRows={onResizeRows}
-              />
-            )
-          }
-          const Render = def.render
+    <GridSurface ref={gridRef} editing={editing} minHeight={gridMinHeight}>
+      {items.map((item) => {
+        const def = definitions.get(item.id)
+        if (!def) return null
+        if (editing) {
           return (
-            <div
+            <DraggableCell
               key={item.id}
-              className={styles.cell}
-              data-span={item.size}
-              data-rows={item.rows}
-              data-col={item.col}
-              data-row={item.row}
-              style={{
-                ['--span' as string]: String(item.size),
-                ['--rows' as string]: String(item.rows),
-                ['--col' as string]: String(item.col),
-                ['--row' as string]: String(item.row),
-              }}
-            >
-              <Render span={item.size} editing={false} />
-            </div>
+              item={item}
+              definition={def}
+              onResize={onResize}
+              onResizeRows={onResizeRows}
+            />
           )
-        })}
-        {editing && (
-          <Button
-            variant="ghost"
-            className={cn(styles.cell, styles.addWidget)}
-            data-span={3}
-            data-rows={3}
-            data-col={1}
-            data-row={addBlockRow}
-            style={{
-              ['--span' as string]: '3',
-              ['--rows' as string]: '3',
-              ['--col' as string]: '1',
-              ['--row' as string]: String(addBlockRow),
-            }}
-            onClick={onAddBlock}
-          >
-            <span className={styles.addInner}>
-              <span className={styles.addIcon}>
-                <PlusIcon size={14} />
-              </span>
-              <span className={styles.addLabel}>Add block</span>
-            </span>
-          </Button>
-        )}
-      </GridSurface>
-      <DragOverlay>
-        {editing && draggingDef && draggingItem ? (
+        }
+        const Render = def.render
+        return (
           <div
-            className={cn(styles.cell, styles.dragOverlay)}
-            data-span={draggingItem.size}
-            data-rows={draggingItem.rows}
+            key={item.id}
+            className={styles.cell}
+            data-span={item.size}
+            data-rows={item.rows}
+            data-col={item.col}
+            data-row={item.row}
             style={{
-              ['--span' as string]: String(draggingItem.size),
-              ['--rows' as string]: String(draggingItem.rows),
+              ['--span' as string]: String(item.size),
+              ['--rows' as string]: String(item.rows),
+              ['--col' as string]: String(item.col),
+              ['--row' as string]: String(item.row),
             }}
           >
-            <draggingDef.render span={draggingItem.size} editing />
+            <Render span={item.size} editing={false} />
           </div>
-        ) : null}
-      </DragOverlay>
-    </DndContext>
+        )
+      })}
+      {editing && (
+        <Button
+          variant="ghost"
+          className={cn(styles.cell, styles.addWidget)}
+          data-span={3}
+          data-rows={3}
+          data-col={1}
+          data-row={addBlockRow}
+          style={{
+            ['--span' as string]: '3',
+            ['--rows' as string]: '3',
+            ['--col' as string]: '1',
+            ['--row' as string]: String(addBlockRow),
+          }}
+          onClick={onAddBlock}
+        >
+          <span className={styles.addInner}>
+            <span className={styles.addIcon}>
+              <PlusIcon size={14} />
+            </span>
+            <span className={styles.addLabel}>Add block</span>
+          </span>
+        </Button>
+      )}
+      {/* Live drop-target preview, absolutely positioned inside the
+          grid surface. CSS transitions on `top` / `left` / `width` /
+          `height` (see `.dropPreview` in DashboardGrid.module.css)
+          make the placeholder glide smoothly from one cell to the
+          next as the pointer crosses cell boundaries — `grid-column-
+          start` / `grid-row-start` aren't transitionable in all
+          browsers, so we feed pixel coordinates from `DashboardPage`'s
+          `onDragMove` math instead. Pointer-events disabled so the
+          placeholder never absorbs drop events itself. */}
+      {dropTarget && (
+        <div
+          className={styles.dropPreview}
+          aria-hidden="true"
+          data-span={dropTarget.size}
+          data-rows={dropTarget.rows}
+          data-col={dropTarget.col}
+          data-row={dropTarget.row}
+          style={{
+            left: `${dropTarget.leftPx}px`,
+            top: `${dropTarget.topPx}px`,
+            width: `${dropTarget.widthPx}px`,
+            height: `${dropTarget.heightPx}px`,
+          }}
+        />
+      )}
+    </GridSurface>
   )
 }
 
@@ -253,10 +247,12 @@ export function DashboardGrid({
 function GridSurface({
   ref,
   editing,
+  minHeight,
   children,
 }: {
   ref: React.RefObject<HTMLDivElement | null>
   editing: boolean
+  minHeight: number | undefined
   children: React.ReactNode
 }) {
   const { setNodeRef } = useDroppable({ id: GRID_DROP_ID })
@@ -267,7 +263,20 @@ function GridSurface({
   }
 
   return (
-    <div ref={setRefs} className={cn(styles.gridLayout, editing && styles.editing)}>
+    <div
+      ref={setRefs}
+      className={cn(styles.gridLayout, editing && styles.editing)}
+      // `min-height` is only set in customize mode — the empty rows
+      // below the lowest widget exist purely to give library tiles
+      // a place to land. The number comes from `gridMinHeight` in
+      // the parent, which mirrors `CUSTOMIZE_DROPZONE_ROWS` extra
+      // rows worth of pixels.
+      style={
+        minHeight !== undefined
+          ? { ['--grid-min-height' as string]: `${minHeight}px` }
+          : undefined
+      }
+    >
       {children}
     </div>
   )

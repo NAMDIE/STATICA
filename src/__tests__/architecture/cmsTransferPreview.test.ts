@@ -126,6 +126,7 @@ function bundleRowEntry(id: string, tableId: string, slug: string = ''): DataRow
     createdAt: now,
     updatedAt: now,
     publishedAt: null,
+    scheduledPublishAt: null,
     deletedAt: null,
   }
 }

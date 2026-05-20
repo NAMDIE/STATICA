@@ -8,17 +8,45 @@
  *     `useOnboardingState`). Per-user dismissed / collapsed in
  *     localStorage.
  *   • A configurable widget grid (12 columns). Customize mode shows drag
- *     handles + resize handles per widget + a block picker.
+ *     handles + resize handles per widget + the bottom Block library.
  *
  * Widgets come from `dashboardWidgetRegistry` — first-party widgets are
  * registered on mount via `registerFirstPartyDashboardWidgets`; plugins
  * that hold the `dashboard.widgets.register` permission contribute
  * additional widgets through the SDK.
  *
+ * Drag-and-drop topology
+ * ----------------------
+ * The page owns the `DndContext` so two sibling DnD surfaces can share
+ * the same dnd-kit session:
+ *
+ *   1. The dashboard grid registers itself as a single droppable
+ *      (`GRID_DROP_ID`); every grid cell that is `useDraggable` becomes
+ *      a "move" source.
+ *   2. The bottom-docked `BlockLibrary` registers each preview tile as
+ *      `useDraggable` with id `library:<widgetId>` — a separate source
+ *      class that the page-level `onDragEnd` distinguishes from the
+ *      regular cell-move case.
+ *
+ * On drag end the page snaps the dragged element's translated bounding
+ * rect to the nearest grid cell and either calls `moveWidget(id, col, row)`
+ * (for in-grid moves) or `addWidget(id, size, rows, col, row)` (for
+ * library drops).
+ *
  * Routes into the editor through the existing soft-nav helpers so the
  * Site editor's heavy bundle doesn't load on the dashboard.
  */
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragMoveEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core'
 import { PlusIcon } from 'pixel-art-icons/icons/plus'
 import { LayoutSolidIcon } from 'pixel-art-icons/icons/layout-solid'
 import { ZapSolidIcon } from 'pixel-art-icons/icons/zap-solid'
@@ -28,27 +56,44 @@ import { useAuthenticatedAdminUser } from '@admin/sessionContext'
 import { useAdminNavigate } from '@admin/lib/useAdminNavigate'
 import { Button } from '@ui/components/Button'
 import { FloatingActionBar } from '@ui/components/FloatingActionBar'
-import { bindDashboardWidgetIconResolver } from '@core/plugins/runtime'
+import { cn } from '@ui/cn'
+import type { DashboardWidgetDefinition } from '@core/dashboard'
+import {
+  EDITING_GRID_GAP,
+  GRID_DROP_ID,
+  GRID_ROW_HEIGHT,
+  MAX_COLS,
+  hasOverlapAt,
+  snapToCell,
+  useDashboardLayout,
+  type DashboardItem,
+} from './hooks/useDashboardLayout'
 import { useDashboardWidgets } from './hooks/useDashboardWidgets'
 import { useOnboardingState } from './hooks/useOnboardingState'
-import { useDashboardLayout } from './hooks/useDashboardLayout'
 import { registerFirstPartyDashboardWidgets } from './widgets'
-import { resolveDashboardWidgetIcon } from './widgetIcons'
 import { OnboardingPanel } from './components/OnboardingPanel'
-import { BlockPicker } from './components/BlockPicker'
+import {
+  BlockLibrary,
+  LIBRARY_DRAG_PREFIX,
+  LIBRARY_DROP_ID,
+} from './components/BlockLibrary'
 import { DashboardGrid } from './components/DashboardGrid'
 import { RangeTabs } from '@ui/components/RangeTabs'
 import styles from './DashboardPage.module.css'
+import gridStyles from './components/DashboardGrid.module.css'
 
-// Register first-party widgets + the plugin icon resolver eagerly at
-// module import. Both are idempotent and side-effect-free past the first
-// call, so successive imports during fast-refresh / lazy reloads are
-// cheap. Doing this at module scope (not inside the component) means
-// plugin code that activates concurrently can already see the resolver.
+// Register first-party widgets at module import. Idempotent so successive
+// imports during fast-refresh / lazy reloads are cheap. The plugin icon
+// resolver is bound earlier — at admin boot, from
+// `useInstalledEditorPlugins.ts` — so plugin widgets registered at boot
+// already have an icon mapping by the time their `activate()` runs.
 registerFirstPartyDashboardWidgets()
-bindDashboardWidgetIconResolver(resolveDashboardWidgetIcon)
 
 type RangeKey = 'today' | '7d' | '30d' | 'all'
+
+/** Default rows used when the library drops a new widget. Matches the
+ *  preview tile's row count in `BlockLibrary.tsx`. */
+const ADD_DEFAULT_ROWS = 3
 
 function greetingFor(displayName: string | null | undefined): string {
   const hour = new Date().getHours()
@@ -67,17 +112,70 @@ export function DashboardPage() {
     layout,
     addWidget,
     moveWidget,
+    removeWidget,
     resize,
     resizeRows,
     dismissOnboarding,
+    setLibraryHeight,
   } = layoutApi
 
   const [editing, setEditing] = useState(false)
-  const [pickerOpen, setPickerOpen] = useState(false)
+  const [libraryOpen, setLibraryOpenRaw] = useState(false)
   const [range, setRange] = useState<RangeKey>('today')
 
+  /**
+   * Opening the block library forces customize mode on. Without that
+   * the grid stays at its compact 1px-gap layout with no extra drop
+   * zone below the last widget — and dragging a library tile onto an
+   * already-full grid has nowhere to land. Customize mode widens the
+   * gutter to 16px and extends the grid surface by
+   * `CUSTOMIZE_DROPZONE_ROWS` empty rows, which is exactly the
+   * affordance the user needs for drop targeting. Closing the library
+   * does NOT auto-exit customize mode — the user clicks Done when
+   * they're satisfied with their arrangement.
+   */
+  function setLibraryOpen(next: boolean) {
+    setLibraryOpenRaw(next)
+    if (next) setEditing(true)
+  }
+
+  // Drag tracking — the active id tells `DragOverlay` what to render
+  // (an existing grid cell or a library preview). The grid ref is read
+  // during `onDragEnd` to compute the snap-to-cell math.
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const gridRef = useRef<HTMLDivElement | null>(null)
+
+  /**
+   * Live drop-target preview — set on every `onDragMove` tick to the
+   * cell the widget WOULD land in if released now, AND its pixel
+   * footprint within the grid (so the placeholder ghost renders with
+   * `position: absolute` and CSS-animates smoothly between cells via
+   * top/left/width/height transitions). `null` whenever no drag is
+   * active, the pointer isn't over the grid surface, OR the proposed
+   * destination overlaps an existing widget — drops are now strictly
+   * "into empty space", so a hidden ghost is the visual signal that
+   * the current target is invalid.
+   */
+  const [dropTarget, setDropTarget] = useState<
+    | {
+        col: number
+        row: number
+        size: number
+        rows: number
+        leftPx: number
+        topPx: number
+        widthPx: number
+        heightPx: number
+      }
+    | null
+  >(null)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+  )
+
   // Bridge the registry array into a stable Map keyed by id for O(1)
-  // lookups inside the grid + picker.
+  // lookups inside the grid + library.
   const definitionsById = useMemo(() => {
     const map = new Map<string, typeof widgets[number]>()
     for (const w of widgets) map.set(w.id, w)
@@ -100,6 +198,193 @@ export function DashboardPage() {
 
   const activeKeys = visibleItems.map((i) => i.id)
   const showOnboarding = !layout.onboardingDismissed && !facts.loading
+
+  /**
+   * One-copy model: the library only shows widgets that are NOT already
+   * on the dashboard. The filter is computed here (not inside
+   * `BlockLibrary`) so the parent's single source of truth — `layout.items`
+   * intersected with the registry — drives both the grid contents AND
+   * the available list. Adding a widget moves it from the library to the
+   * dashboard; dragging it back drops it from the dashboard and the
+   * widget reappears in the library on the next render.
+   */
+  const availableWidgets = useMemo(() => {
+    const active = new Set(activeKeys)
+    return widgets.filter((w) => !active.has(w.id))
+  }, [widgets, activeKeys])
+
+  function handleDragStart(event: DragStartEvent) {
+    setActiveId(String(event.active.id))
+    setDropTarget(null)
+  }
+
+  /**
+   * Pick the widget size (column span × row span) the placeholder should
+   * use for the active drag. Library-sourced drags use the widget's
+   * `defaultSize` and the standard `ADD_DEFAULT_ROWS`; grid-sourced
+   * drags mirror the existing tile's current size + rows so the preview
+   * lines up 1:1 with the dragged tile.
+   */
+  function resolveDragFootprint(
+    rawId: string,
+  ): { size: number; rows: number } | null {
+    if (rawId.startsWith(LIBRARY_DRAG_PREFIX)) {
+      const widgetId = rawId.slice(LIBRARY_DRAG_PREFIX.length)
+      const def = definitionsById.get(widgetId)
+      if (!def) return null
+      return { size: def.defaultSize, rows: ADD_DEFAULT_ROWS }
+    }
+    const item = visibleItems.find((i) => i.id === rawId)
+    if (!item) return null
+    return { size: item.size, rows: item.rows }
+  }
+
+  /**
+   * Resolve the precise cell the active drag will land in if released
+   * now, including pixel coordinates for the placeholder ghost. Called
+   * by BOTH `onDragMove` (to update the live preview) and `onDragEnd`
+   * (to commit the drop) so the preview and the actual landing
+   * position are always identical — no chance of the ghost showing one
+   * cell while the drop math picks another.
+   *
+   * Behaviour when the cursor is over an occupied cell: scan DOWN
+   * within the same column until the first empty row that fits the
+   * widget. This means the preview never disappears just because the
+   * pointer wandered over an existing tile — it shifts to the nearest
+   * empty space below, which is exactly where the drop will land. The
+   * grid auto-extends to receive the widget thanks to the
+   * `CUSTOMIZE_DROPZONE_ROWS` min-height.
+   *
+   * Returns `null` only when the drag couldn't be resolved at all (e.g.
+   * pointer hasn't entered the grid yet) — that's the one case where
+   * the preview is hidden and the drop is rejected.
+   */
+  function resolveDropTarget(
+    rawId: string,
+    gridRect: DOMRect,
+    draggedRect: { left: number; top: number },
+    overGrid: boolean,
+  ): NonNullable<typeof dropTarget> | null {
+    if (!overGrid) return null
+    const footprint = resolveDragFootprint(rawId)
+    if (!footprint) return null
+
+    const offsetX = draggedRect.left - gridRect.left
+    const offsetY = draggedRect.top - gridRect.top
+    const { col, row: cursorRow } = snapToCell(
+      offsetX,
+      offsetY,
+      gridRect.width,
+      footprint.size,
+    )
+    const excludeId = rawId.startsWith(LIBRARY_DRAG_PREFIX) ? null : rawId
+
+    // Walk down from the cursor's snapped row until we hit empty space.
+    // 200 is a defensive cap — the grid never gets that tall in practice
+    // and we don't want a pathological layout to spin the loop forever.
+    let row = cursorRow
+    const MAX_SCAN_ROWS = 200
+    while (row < MAX_SCAN_ROWS) {
+      const proposed = { col, row, size: footprint.size, rows: footprint.rows }
+      if (!hasOverlapAt(visibleItems, proposed, excludeId)) break
+      row++
+    }
+    if (row >= MAX_SCAN_ROWS) return null
+
+    // Compute pixel coords for the placeholder ghost. CSS transitions
+    // on `top`/`left`/`width`/`height` give the smooth glide between
+    // cells (CSS Grid's integer placement isn't transitionable).
+    const colWidth = (gridRect.width - (MAX_COLS - 1) * EDITING_GRID_GAP) / MAX_COLS
+    return {
+      col,
+      row,
+      size: footprint.size,
+      rows: footprint.rows,
+      leftPx: (col - 1) * (colWidth + EDITING_GRID_GAP),
+      topPx: (row - 1) * (GRID_ROW_HEIGHT + EDITING_GRID_GAP),
+      widthPx: footprint.size * colWidth + (footprint.size - 1) * EDITING_GRID_GAP,
+      heightPx: footprint.rows * GRID_ROW_HEIGHT + (footprint.rows - 1) * EDITING_GRID_GAP,
+    }
+  }
+
+  function handleDragMove(event: DragMoveEvent) {
+    const grid = gridRef.current
+    const draggedRect = event.active.rect.current.translated
+    if (!grid || !draggedRect) {
+      setDropTarget(null)
+      return
+    }
+    const overGrid = event.over?.id === GRID_DROP_ID
+    const next = resolveDropTarget(
+      String(event.active.id),
+      grid.getBoundingClientRect(),
+      draggedRect,
+      overGrid,
+    )
+    setDropTarget((prev) => {
+      // Avoid React re-renders when nothing actually changed (the
+      // pointer moved within the same cell). React would otherwise
+      // re-render at 60Hz during the entire drag, which is wasted
+      // work for an identical preview position.
+      if (next === null) return prev === null ? prev : null
+      if (
+        prev !== null &&
+        prev.col === next.col &&
+        prev.row === next.row &&
+        prev.size === next.size &&
+        prev.rows === next.rows
+      ) {
+        return prev
+      }
+      return next
+    })
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const rawId = String(event.active.id)
+    setActiveId(null)
+    setDropTarget(null)
+    const grid = gridRef.current
+    const draggedRect = event.active.rect.current.translated
+    if (!grid || !draggedRect) return
+
+    const overId = event.over?.id
+    const overGrid = overId === GRID_DROP_ID
+    const overLibrary = overId === LIBRARY_DROP_ID
+    const gridRect = grid.getBoundingClientRect()
+
+    // ── Grid → library: remove (only valid for a grid-sourced drag). ─
+    if (!rawId.startsWith(LIBRARY_DRAG_PREFIX) && overLibrary) {
+      const item = visibleItems.find((i) => i.id === rawId)
+      if (!item) return
+      removeWidget(rawId)
+      return
+    }
+
+    // For every other case the destination is whatever
+    // `resolveDropTarget` would have computed for the preview — same
+    // helper, same inputs, so preview and commit can't disagree.
+    const target = resolveDropTarget(rawId, gridRect, draggedRect, overGrid)
+    if (!target) return
+
+    if (rawId.startsWith(LIBRARY_DRAG_PREFIX)) {
+      const widgetId = rawId.slice(LIBRARY_DRAG_PREFIX.length)
+      // Defensive: `availableWidgets` already filters out everything on
+      // the grid, so the library shouldn't expose dupes — but guard
+      // anyway in case a plugin re-registers the same id mid-drag.
+      if (activeKeys.includes(widgetId)) return
+      addWidget(widgetId, target.size, target.rows, target.col, target.row)
+      return
+    }
+
+    // Grid → grid move.
+    moveWidget(rawId, target.col, target.row)
+  }
+
+  // The DragOverlay renders a portal-rooted visual at the pointer. We
+  // resolve which kind of source is active (existing cell vs. library
+  // preview) so the overlay reads as the same tile the user picked up.
+  const overlayContent = renderOverlay(activeId, visibleItems, definitionsById)
 
   return (
     <AdminPageLayout
@@ -155,36 +440,67 @@ export function DashboardPage() {
             <LayoutSolidIcon size={11} aria-hidden="true" />
             {editing ? 'Done' : 'Customize'}
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => setPickerOpen(true)}>
+          <Button variant="ghost" size="sm" onClick={() => setLibraryOpen(true)}>
             <PlusIcon size={11} aria-hidden="true" /> Add block
           </Button>
         </div>
       </div>
 
-      <DashboardGrid
-        items={visibleItems}
-        definitions={definitionsById}
-        editing={editing}
-        onMove={moveWidget}
-        onResize={resize}
-        onResizeRows={resizeRows}
-        onAddBlock={() => setPickerOpen(true)}
-      />
-
-      {pickerOpen && (
-        <BlockPicker
-          widgets={widgets}
-          activeKeys={activeKeys}
-          onAdd={(id, defaultSize) => addWidget(id, defaultSize)}
-          onClose={() => setPickerOpen(false)}
+      <DndContext
+        sensors={sensors}
+        onDragStart={handleDragStart}
+        onDragMove={handleDragMove}
+        onDragEnd={handleDragEnd}
+        onDragCancel={() => {
+          setActiveId(null)
+          setDropTarget(null)
+        }}
+      >
+        <DashboardGrid
+          items={visibleItems}
+          definitions={definitionsById}
+          editing={editing}
+          onResize={resize}
+          onResizeRows={resizeRows}
+          onAddBlock={() => setLibraryOpen(true)}
+          gridRef={gridRef}
+          dropTarget={dropTarget}
         />
-      )}
 
-      {/* Floating customize-mode toolbar — replaces the old inline banner.
-          Same shared primitive the Data page uses for bulk row actions,
-          so the two surfaces share a single floating-bar visual. */}
+        {/* Library — split internally into two surfaces:
+            • Expanded panel: lifecycle tied to `panelOpen` only, with
+              slide-up / slide-down animations via `useDelayedUnmount`.
+              Hidden via CSS (no exit animation) while a drag is in
+              progress so the pill can take its place.
+            • Minimized pill: mounted only while a drag is active.
+              Mounts with `pillIn` animation, unmounts instantly — no
+              exit animation, so a grid-to-grid move doesn't flash a
+              "library closing" animation for a library the user never
+              opened. */}
+        <BlockLibrary
+          panelOpen={libraryOpen}
+          dragging={activeId !== null}
+          draggingFromGrid={
+            activeId !== null && !activeId.startsWith(LIBRARY_DRAG_PREFIX)
+          }
+          availableWidgets={availableWidgets}
+          height={layout.libraryHeight}
+          onHeightChange={setLibraryHeight}
+          onAdd={(id, defaultSize) => addWidget(id, defaultSize)}
+          onClose={() => setLibraryOpen(false)}
+        />
+
+        <DragOverlay>{overlayContent}</DragOverlay>
+      </DndContext>
+
+      {/* Floating customize-mode toolbar. Hidden whenever the library is
+          visible in either mode — the expanded panel owns the "Add
+          block" affordance, and the minimized pill owns the drag
+          interaction. The floating bar only appears when neither is on
+          screen (i.e., customize mode is on but the user hasn't opened
+          the library and isn't currently dragging). */}
       <FloatingActionBar
-        open={editing}
+        open={editing && !libraryOpen && activeId === null}
         ariaLabel="Customize dashboard"
         label={<><strong>Customize mode</strong> — drag, resize, or add blocks.</>}
       >
@@ -192,7 +508,7 @@ export function DashboardPage() {
           variant="ghost"
           size="sm"
           shape="pill"
-          onClick={() => setPickerOpen(true)}
+          onClick={() => setLibraryOpen(true)}
         >
           <PlusIcon size={11} aria-hidden="true" /> Add block
         </Button>
@@ -206,5 +522,68 @@ export function DashboardPage() {
         </Button>
       </FloatingActionBar>
     </AdminPageLayout>
+  )
+}
+
+/**
+ * Render the dnd-kit DragOverlay child for the currently active drag.
+ *
+ *   • Existing-grid moves get the real widget renderer in a cell-shaped
+ *     wrapper (matches the original card's footprint via `--span` /
+ *     `--rows`).
+ *
+ *   • Library drags get a sized preview tile with the same renderer at
+ *     its default size, so the user sees what will land.
+ */
+function renderOverlay(
+  activeId: string | null,
+  items: readonly DashboardItem[],
+  definitions: ReadonlyMap<string, DashboardWidgetDefinition>,
+) {
+  if (!activeId) return null
+
+  if (activeId.startsWith(LIBRARY_DRAG_PREFIX)) {
+    const widgetId = activeId.slice(LIBRARY_DRAG_PREFIX.length)
+    const def = definitions.get(widgetId)
+    if (!def) return null
+    const Render = def.render
+    // dnd-kit sizes the overlay portal to match the activator element
+    // (the library item's `.itemSurface`, which is sized to the exact
+    // destination cell dimensions). The inner card uses `100%` width /
+    // height from `.dragOverlay`, so we don't need to compute pixel
+    // dimensions here — the source measurements flow through
+    // automatically.
+    return (
+      <div
+        className={cn(gridStyles.cell, gridStyles.dragOverlay)}
+        data-span={def.defaultSize}
+        data-rows={ADD_DEFAULT_ROWS}
+        style={{
+          ['--span' as string]: String(def.defaultSize),
+          ['--rows' as string]: String(ADD_DEFAULT_ROWS),
+        }}
+      >
+        <Render span={def.defaultSize} editing />
+      </div>
+    )
+  }
+
+  const item = items.find((i) => i.id === activeId)
+  if (!item) return null
+  const def = definitions.get(activeId)
+  if (!def) return null
+  const Render = def.render
+  return (
+    <div
+      className={cn(gridStyles.cell, gridStyles.dragOverlay)}
+      data-span={item.size}
+      data-rows={item.rows}
+      style={{
+        ['--span' as string]: String(item.size),
+        ['--rows' as string]: String(item.rows),
+      }}
+    >
+      <Render span={item.size} editing />
+    </div>
   )
 }

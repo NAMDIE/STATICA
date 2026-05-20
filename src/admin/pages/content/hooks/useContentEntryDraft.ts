@@ -147,6 +147,14 @@ export function useContentEntryDraft({
       await handlePublish()
       return
     }
+    if (nextStatus === 'scheduled') {
+      // Scheduling requires a target datetime — the Content workspace
+      // surfaces it via the `SchedulePublishDialog`, not through this
+      // bare status setter. Reject defensively so a future caller can't
+      // slip 'scheduled' through with no time set.
+      setError('Use the schedule dialog to set a publish time')
+      return
+    }
 
     setSaveMessage('saving')
     setError(null)

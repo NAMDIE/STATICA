@@ -151,6 +151,7 @@ describe('CMS data client', () => {
           createdAt: '2026-05-01T10:00:00.000Z',
           updatedAt: '2026-05-01T10:00:00.000Z',
           publishedAt: null,
+          scheduledPublishAt: null,
         },
       }), { status: 201 })
     })
@@ -224,6 +225,7 @@ describe('CMS data client', () => {
           createdAt: '2026-05-01T10:00:00.000Z',
           updatedAt: '2026-05-01T10:01:00.000Z',
           publishedAt: null,
+          scheduledPublishAt: null,
         },
       }), { status: 200 })
     })
@@ -263,6 +265,7 @@ describe('CMS data client', () => {
           createdAt: '2026-05-01T10:00:00.000Z',
           updatedAt: '2026-05-01T10:03:00.000Z',
           publishedAt: null,
+          scheduledPublishAt: null,
         },
       }), { status: 200 })
     })
@@ -294,6 +297,7 @@ describe('CMS data client', () => {
           createdAt: '2026-05-01T10:00:00.000Z',
           updatedAt: '2026-05-01T10:03:00.000Z',
           publishedAt: null,
+          scheduledPublishAt: null,
         },
       }), { status: 200 })
     })
@@ -325,6 +329,7 @@ describe('CMS data client', () => {
           createdAt: '2026-05-01T10:00:00.000Z',
           updatedAt: '2026-05-01T10:03:00.000Z',
           publishedAt: null,
+          scheduledPublishAt: null,
         },
       }), { status: 200 })
     })
@@ -356,6 +361,7 @@ describe('CMS data client', () => {
           createdAt: '2026-05-01T10:00:00.000Z',
           updatedAt: '2026-05-01T10:03:00.000Z',
           publishedAt: null,
+          scheduledPublishAt: null,
         },
       }), { status: 200 })
     })

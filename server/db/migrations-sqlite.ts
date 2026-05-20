@@ -574,4 +574,90 @@ export const sqliteMigrations: Migration[] = [
       );
     `,
   },
+  {
+    id: '006_data_rows_scheduled_publish',
+    sql: `
+      -- ─── Scheduled publish — SQLite mirror of migrations-pg.ts 006.
+      --
+      -- We can't ALTER TABLE DROP CONSTRAINT in SQLite, so the only way to
+      -- relax the data_rows status check (to allow 'scheduled') AND add
+      -- the new scheduled_publish_at column on an existing DB is the
+      -- standard table-rebuild dance:
+      --
+      --   1. defer FK enforcement to the end of the transaction so we
+      --      can drop+recreate data_rows without temporarily orphaning
+      --      data_row_versions.row_id references
+      --   2. CREATE a new data_rows with the desired final schema
+      --   3. INSERT existing rows into the new table (scheduled_publish_at
+      --      defaults to NULL — we don't list the column so the SELECT
+      --      works whether the old table has it or not)
+      --   4. DROP old, RENAME new → old's place
+      --   5. Re-create every index that used to live on data_rows
+      --
+      -- On COMMIT the deferred FK check passes because the new table
+      -- contains the same row ids as the old one. Foreign keys are
+      -- always re-enabled at COMMIT by SQLite itself — the pragma is
+      -- transaction-scoped.
+      --
+      -- Safe to run on a fresh install too: the table already has the
+      -- new schema from the rewritten baseline (migration 001), so the
+      -- rebuild produces a structurally identical table. No data loss
+      -- either way.
+
+      pragma defer_foreign_keys = on;
+
+      create table data_rows__migr006 (
+        id text primary key,
+        table_id text not null references data_tables(id) on delete restrict,
+        cells_json text not null default '{}',
+        slug text not null default '',
+        status text not null default 'draft',
+        active_version_id text references data_row_versions(id) on delete set null,
+        author_user_id text references users(id) on delete set null,
+        created_by_user_id text references users(id) on delete set null,
+        updated_by_user_id text references users(id) on delete set null,
+        published_by_user_id text references users(id) on delete set null,
+        created_at text not null default current_timestamp,
+        updated_at text not null default current_timestamp,
+        published_at text,
+        scheduled_publish_at text,
+        deleted_at text,
+        constraint data_rows_status_check check (status in ('draft', 'published', 'unpublished', 'scheduled'))
+      );
+
+      insert into data_rows__migr006 (
+        id, table_id, cells_json, slug, status, active_version_id,
+        author_user_id, created_by_user_id, updated_by_user_id, published_by_user_id,
+        created_at, updated_at, published_at, deleted_at
+      )
+      select
+        id, table_id, cells_json, slug, status, active_version_id,
+        author_user_id, created_by_user_id, updated_by_user_id, published_by_user_id,
+        created_at, updated_at, published_at, deleted_at
+      from data_rows;
+
+      drop table data_rows;
+      alter table data_rows__migr006 rename to data_rows;
+
+      create unique index if not exists data_rows_table_slug_active_idx
+        on data_rows (table_id, slug)
+        where deleted_at is null and slug <> '';
+
+      create index if not exists data_rows_table_idx
+        on data_rows (table_id, updated_at desc)
+        where deleted_at is null;
+
+      create index if not exists data_rows_table_status_idx
+        on data_rows (table_id, status, updated_at desc)
+        where deleted_at is null;
+
+      create index if not exists data_rows_table_author_idx
+        on data_rows (table_id, author_user_id, updated_at desc)
+        where deleted_at is null;
+
+      create index if not exists data_rows_scheduled_publish_idx
+        on data_rows (scheduled_publish_at)
+        where status = 'scheduled' and deleted_at is null;
+    `,
+  },
 ]

@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { CalendarSolidIcon } from 'pixel-art-icons/icons/calendar-solid'
 import { CheckIcon } from 'pixel-art-icons/icons/check'
 import { CircleAlertSolidIcon } from 'pixel-art-icons/icons/circle-alert-solid'
 import { ExternalLinkSolidIcon } from 'pixel-art-icons/icons/external-link-solid'
@@ -12,6 +14,7 @@ import {
   type PublishActionStatusTone,
 } from '@site/toolbar/PublishActionGroup'
 import { SettingsButton } from '@site/toolbar/SettingsButton'
+import { SchedulePublishDialog } from '@admin/modals/SchedulePublishDialog'
 import type { SaveMessage } from '@content/hooks/useContentEntryDraft'
 
 interface ContentToolbarProps {
@@ -169,6 +172,7 @@ export function ContentToolbar({
 
   const isSaving = saveMessage === 'saving'
   const isPublishing = saveMessage === 'publishing'
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false)
 
   const menuItems: PublishActionMenuItem[] = [
     {
@@ -178,6 +182,17 @@ export function ContentToolbar({
       disabled: !selectedEntry || !canSaveDraft || isSaving || !isDirty,
       onSelect: onSaveDraft,
       testId: 'toolbar-content-save-draft-action',
+    },
+    {
+      // Schedule the selected entry for future publication. Disabled
+      // when there's no entry or the user lacks publish capability —
+      // mirrors the publish button's own gate.
+      id: 'schedule-publish',
+      label: `Schedule ${entryLabel}…`,
+      icon: CalendarSolidIcon,
+      disabled: !selectedEntry || !canPublish || isPublishing,
+      onSelect: () => setScheduleDialogOpen(true),
+      testId: 'toolbar-content-schedule-publish-action',
     },
     {
       id: 'open-live',
@@ -208,6 +223,24 @@ export function ContentToolbar({
         menuItems={menuItems}
       />
       <SettingsButton />
+      {selectedEntry && (
+        <SchedulePublishDialog
+          open={scheduleDialogOpen}
+          onClose={() => setScheduleDialogOpen(false)}
+          rowId={selectedEntry.id}
+          currentScheduledAt={selectedEntry.scheduledPublishAt}
+          entityLabel={entryLabel}
+          onScheduled={() => {
+            // The Content workspace owns its own entry refresh logic
+            // (`useContentEntryDraft` re-fetches when the row id or
+            // version changes). The scheduled-publish status flip is
+            // picked up on the next refresh — for v1 we don't push a
+            // synchronous refresh signal from here. Future polish:
+            // route an onRefresh callback through the toolbar so
+            // scheduling shows immediate effect.
+          }}
+        />
+      )}
     </>
   )
 }

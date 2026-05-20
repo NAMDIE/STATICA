@@ -63,6 +63,11 @@
        row drop positions). */
     --gap: 16px;
     outline-color: rgba(155, 220, 255, 0.18);
+    /* `--grid-min-height` is set inline by GridSurface in customize
+       mode — extra empty rows below the lowest widget so the user has
+       drop zones when dragging from the block library. View mode
+       leaves the variable unset and the grid sizes to content. */
+    min-height: var(--grid-min-height);
 }
 
 .cell {
@@ -235,6 +240,51 @@
     width: 6px;
     height: 6px;
     border-radius: 1px;
+}
+
+/* ── Drop-target preview ──────────────────────────────────────────────
+ *
+ * Translucent ghost placed at the cell the active drag would land in
+ * if released now. Positioned absolutely (NOT as a grid item) so the
+ * `top` / `left` / `width` / `height` properties — fed by
+ * `DashboardPage`'s `onDragMove` math from snapped cell coords — can
+ * transition smoothly across cell boundaries. CSS Grid's
+ * `grid-column-start` / `grid-row-start` aren't transitionable in all
+ * browsers; pixel coordinates are the reliable cross-browser path
+ * for the smooth glide the user asked for.
+ *
+ * The placeholder is only ever shown when the destination is valid
+ * (empty space); `DashboardPage` clears `dropTarget` to `null` while
+ * the proposed cell overlaps any existing widget, so the ghost
+ * disappearing IS the visual signal that the drop will be rejected.
+ */
+.dropPreview {
+    position: absolute;
+    background: var(--rail-tint-sky);
+    opacity: 0.18;
+    border-radius: 16px;
+    border: 1px dashed rgba(155, 220, 255, 0.55);
+    pointer-events: none;
+    z-index: 1;
+    transition:
+        left 160ms cubic-bezier(0.4, 0, 0.2, 1),
+        top 160ms cubic-bezier(0.4, 0, 0.2, 1),
+        width 160ms cubic-bezier(0.4, 0, 0.2, 1),
+        height 160ms cubic-bezier(0.4, 0, 0.2, 1),
+        opacity 120ms ease;
+    animation: dropPreviewIn 140ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes dropPreviewIn {
+    from { opacity: 0; }
+    to   { opacity: 0.18; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dropPreview {
+        transition: none;
+        animation: none;
+    }
 }
 
 /* ── "Add block" cell ──────────────────────────────────────────────── */

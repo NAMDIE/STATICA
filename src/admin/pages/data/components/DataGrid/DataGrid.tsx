@@ -130,6 +130,7 @@ interface RowGroup {
 const STATUS_VIEW_ORDER_DEFAULT: { key: StatusFilter; label: string }[] = [
   { key: 'all',         label: 'All' },
   { key: 'published',   label: 'Published' },
+  { key: 'scheduled',   label: 'Scheduled' },
   { key: 'draft',       label: 'Drafts' },
   { key: 'unpublished', label: 'Archived' },
 ]
@@ -142,6 +143,7 @@ const STATUS_VIEW_ORDER_PAGES: { key: StatusFilter; label: string }[] = [
   { key: 'pages',       label: 'Pages' },
   { key: 'templates',   label: 'Templates' },
   { key: 'published',   label: 'Published' },
+  { key: 'scheduled',   label: 'Scheduled' },
   { key: 'draft',       label: 'Drafts' },
   { key: 'unpublished', label: 'Archived' },
 ]
@@ -261,11 +263,14 @@ export function DataGrid({
       published: [],
       draft: [],
       unpublished: [],
+      scheduled: [],
     }
     for (const row of visibleRows) buckets[row.status].push(row)
     const out: RowGroup[] = []
     if (buckets.published.length > 0)
       out.push({ key: 'published', label: 'Published', status: 'published', rows: buckets.published })
+    if (buckets.scheduled.length > 0)
+      out.push({ key: 'scheduled', label: 'Scheduled', status: 'scheduled', rows: buckets.scheduled })
     if (buckets.draft.length > 0)
       out.push({ key: 'draft', label: 'Drafts', status: 'draft', rows: buckets.draft })
     if (buckets.unpublished.length > 0)
@@ -284,6 +289,7 @@ export function DataGrid({
       published: 0,
       draft: 0,
       unpublished: 0,
+      scheduled: 0,
       pages: 0,
       templates: 0,
     }

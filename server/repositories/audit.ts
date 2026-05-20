@@ -25,6 +25,8 @@ const AuditActionSchema = Type.Union([
   Type.Literal('data.row.update'),
   Type.Literal('data.row.delete'),
   Type.Literal('data.row.publish'),
+  Type.Literal('data.row.schedule'),
+  Type.Literal('data.row.schedule.cancel'),
   Type.Literal('data.row.status'),
   Type.Literal('data.row.move'),
   Type.Literal('data.author.assign'),

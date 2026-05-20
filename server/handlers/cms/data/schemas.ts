@@ -50,4 +50,16 @@ export const RowTableBodySchema = Type.Object({
   tableId: Type.String(),
 })
 
+/**
+ * Body for POST /admin/api/cms/data/rows/:id/schedule. `at` is an ISO
+ * datetime — the handler additionally verifies that it parses as a
+ * Date AND lies in the future before invoking `scheduleDataRowPublish`.
+ * The future-time check lives in the handler (not the schema) so we
+ * can return a meaningful 400 message instead of a generic schema
+ * validation failure.
+ */
+export const RowScheduleBodySchema = Type.Object({
+  at: Type.String(),
+})
+
 export type TablePatchBody = Static<typeof TablePatchBodySchema>

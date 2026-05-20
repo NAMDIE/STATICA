@@ -97,7 +97,15 @@ function previousRouteChanged(previous: PreviousPublishedRouteRow, currentSlug: 
 export async function publishDataRow(
   db: DbClient,
   rowId: string,
-  publisherUserId: string,
+  /**
+   * The user attributed as the publisher. `null` is allowed for system
+   * actors that have no user context — e.g. the scheduled-publish tick
+   * (`server/publish/publishScheduler.ts`) which fires once
+   * `scheduled_publish_at` is in the past. The `published_by_user_id`
+   * column on `data_rows` is nullable (`on delete set null`), so a
+   * null publisher round-trips cleanly through the schema.
+   */
+  publisherUserId: string | null,
 ): Promise<PublishDataRowResult> {
   return db.transaction(async (tx) => {
     const row = await getDataRow(tx, rowId)

@@ -30,6 +30,13 @@ const DataRowStatusSchema = Type.Union([
   Type.Literal('draft'),
   Type.Literal('published'),
   Type.Literal('unpublished'),
+  // 'scheduled' rows wait for the publish scheduler tick — see
+  // `server/publish/publishScheduler.ts`. The row's
+  // `scheduledPublishAt` carries the target ISO datetime; the tick
+  // calls `publishDataRow(...)` once `now() >= scheduledPublishAt`
+  // and flips the row to 'published' (or back to 'draft' on
+  // publish failure).
+  Type.Literal('scheduled'),
 ])
 
 export type DataRowStatus = Static<typeof DataRowStatusSchema>
@@ -358,6 +365,14 @@ export const DataRowSchema = Type.Object({
   /** ISO datetime string from DB */
   updatedAt: Type.String(),
   publishedAt: Type.Union([Type.String(), Type.Null()]),
+  /**
+   * Wall-clock ISO datetime at which the publish scheduler should fire
+   * `publishDataRow(...)` for this row. Set whenever
+   * `status === 'scheduled'`; null otherwise. Server-side tick:
+   * `server/publish/publishScheduler.ts`. UI entry point: the
+   * "Schedule publish…" action in the page/post toolbar.
+   */
+  scheduledPublishAt: Type.Union([Type.String(), Type.Null()]),
   deletedAt: Type.Union([Type.String(), Type.Null()]),
 })
 

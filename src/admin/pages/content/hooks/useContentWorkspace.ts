@@ -18,7 +18,6 @@ import { useEditorStore } from '@site/store/store'
 import type {
   DataTable,
   DataRow,
-  DataRowStatus,
   DataUserReference,
   CreateDataTableInput,
   UpdateDataTableInput,
@@ -349,7 +348,10 @@ export function useContentWorkspace({
 
   const updateEntryStatus = useCallback(async (
     entry: DataRow,
-    status: Exclude<DataRowStatus, 'published'>,
+    // Narrowed to match the `/status` endpoint's accepted statuses —
+    // 'scheduled' goes through the dedicated schedule dialog with a
+    // target datetime, not this bare setter.
+    status: 'draft' | 'unpublished',
   ) => {
     setError(null)
     const updatedRow = await updateCmsDataRowStatus(entry.id, status)

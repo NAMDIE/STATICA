@@ -385,6 +385,12 @@ export async function activateInstalledServerPlugins(
   const { startScheduler } = await import('./scheduler')
   startScheduler(db)
 
+  // Same idempotency contract as the plugin scheduler — boot path,
+  // re-bind, hot reload all converge on a single running tick pointed
+  // at the current DbClient.
+  const { startPublishScheduler } = await import('../publish/publishScheduler')
+  startPublishScheduler(db)
+
   const plugins = await listInstalledPlugins(db)
   for (const plugin of plugins) {
     if (!plugin.enabled) continue

@@ -137,6 +137,7 @@ function bundleRowEntry(
     createdAt: now,
     updatedAt: now,
     publishedAt: null,
+    scheduledPublishAt: null,
     deletedAt: null,
   }
 }

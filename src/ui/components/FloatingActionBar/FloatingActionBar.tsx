@@ -20,10 +20,13 @@
  *
  * Conditional rendering
  * ---------------------
- * Pass `open={false}` (or omit the component entirely) when the bar
- * shouldn't be visible. The component returns `null` for `open: false`
- * — no transition cleanup, no leftover DOM. A consumer that wants
- * fade transitions can wrap the bar in their own transition layer.
+ * Pass `open={true}` to show, `open={false}` to hide. The bar plays a
+ * brief slide-up + fade enter animation on mount and a reverse slide-
+ * down + fade exit animation on `open` flipping to `false`. The DOM
+ * stays mounted for the exit-animation duration (see `EXIT_DURATION_MS`)
+ * via `useDelayedUnmount`. Once the animation finishes the component
+ * unmounts cleanly. Honors `prefers-reduced-motion` via the matching
+ * media query in `FloatingActionBar.module.css`.
  *
  * Accessibility
  * -------------
@@ -36,7 +39,16 @@ import type { ReactNode } from 'react'
 import { CloseIcon } from 'pixel-art-icons/icons/close'
 import { Button } from '@ui/components/Button'
 import { cn } from '@ui/cn'
+import { useDelayedUnmount } from '@ui/lib/useDelayedUnmount'
 import styles from './FloatingActionBar.module.css'
+
+/**
+ * Must match the longest CSS animation duration in
+ * `FloatingActionBar.module.css` (the `slideOut` keyframes). If you
+ * bump the CSS timing, bump this too — the hook unmounts after this
+ * many ms, so a smaller value here truncates the exit animation.
+ */
+const EXIT_DURATION_MS = 180
 
 export interface FloatingActionBarProps {
   /**
@@ -84,14 +96,20 @@ export function FloatingActionBar({
   open = true,
   className,
 }: FloatingActionBarProps) {
-  if (!open) return null
+  const { mounted, exiting } = useDelayedUnmount(open, EXIT_DURATION_MS)
+
+  if (!mounted) return null
 
   const hasLabel = label !== undefined && label !== null && label !== false
   const hasChildren = children !== undefined && children !== null && children !== false
   const hasClose = typeof onClose === 'function'
 
   return (
-    <div className={cn(styles.bar, className)} role="toolbar" aria-label={ariaLabel}>
+    <div
+      className={cn(styles.bar, exiting && styles.exiting, className)}
+      role="toolbar"
+      aria-label={ariaLabel}
+    >
       {hasLabel && (
         <span className={styles.label}>{label}</span>
       )}
