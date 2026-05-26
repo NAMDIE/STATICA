@@ -25,12 +25,15 @@
  * own `/runtime/stats` route). The Pages / Posts / Media counters in
  * this response are point-in-time totals + a fixed "this week" delta.
  */
+import { readdir, stat } from 'node:fs/promises'
+import { join } from 'node:path'
 import type { DbClient } from '../../db/client'
+import { isSqliteUrl, parseSqlitePath } from '../../db'
 import { requireAuthenticatedUser } from '../../auth/authz'
 import { jsonResponse, methodNotAllowed } from '../../http'
 import type { AuditAction } from '../../repositories/audit'
 import { computeGravatarHash } from '../../repositories/users'
-import { CMS_API_PREFIX } from './shared'
+import { CMS_API_PREFIX, type CmsHandlerOptions } from './shared'
 
 // ---------------------------------------------------------------------------
 // Response shapes
@@ -201,6 +204,54 @@ export interface RecentActivityEntry {
 
 export interface RecentActivityStats {
   rows: RecentActivityEntry[]
+}
+
+/**
+ * Per-category storage breakdown shown by the dashboard Storage widget.
+ *
+ * There is intentionally **no quota** here — self-hosted Page Builder
+ * never imposes an artificial disk cap. The widget shows real usage and
+ * stretches its breakdown bar to the sum of the segments, so each
+ * category reads as a proportion of *total used* rather than of an
+ * imaginary plan limit.
+ *
+ * Media is split into three sub-categories — `imageBytes`, `videoBytes`,
+ * and `documentBytes` — so the breakdown bar can tell the operator at a
+ * glance whether their disk is mostly photos, video assets, or PDFs /
+ * misc downloads. Classification is by `mime_type` prefix; anything
+ * that doesn't match `image/*` or `video/*` falls into `documentBytes`
+ * (audio, application/*, text/*, fonts, etc.). This is a coarse split
+ * by design — the goal is a visual breakdown, not an audit.
+ *
+ *   • `imageBytes`    — sum of `media_assets.size_bytes` where
+ *                        `mime_type like 'image/%'`.
+ *   • `videoBytes`    — sum of `media_assets.size_bytes` where
+ *                        `mime_type like 'video/%'`.
+ *   • `documentBytes` — sum of `media_assets.size_bytes` for everything
+ *                        else (audio, PDFs, archives, …). Always
+ *                        includes rows whose `mime_type` is NULL.
+ *   • `pluginBytes`   — sum of file sizes under `<uploadsDir>/plugins/`,
+ *                        i.e. all installed plugin packages on disk.
+ *                        `0` when uploads are not configured (tests).
+ *   • `databaseBytes` — byte size of the underlying database. For SQLite
+ *                        that is the `.db` file plus its `-wal` / `-shm`
+ *                        sidecars when present; for Postgres the result
+ *                        of `pg_database_size(current_database())`.
+ *   • `totalBytes`    — convenience: `image + video + document + plugin +
+ *                        database`. The widget formats this as the
+ *                        headline stat.
+ *   • `dialect`       — which database the host is running on. Surfaced
+ *                        in the widget caption ("SQLite" / "Postgres")
+ *                        so the operator knows where data lives.
+ */
+export interface StorageStats {
+  imageBytes: number
+  videoBytes: number
+  documentBytes: number
+  pluginBytes: number
+  databaseBytes: number
+  totalBytes: number
+  dialect: 'sqlite' | 'postgres'
 }
 
 // ---------------------------------------------------------------------------
@@ -890,6 +941,179 @@ async function readPostsStats(db: DbClient): Promise<PostsStats> {
   }
 }
 
+/**
+ * Recursively sum the byte sizes of every regular file under `dir`.
+ *
+ * Returns `0` when the directory does not exist (e.g. a fresh install
+ * with no plugins installed yet). Symlinks are resolved via the default
+ * `stat` behaviour — that's fine for the plugin asset tree which is
+ * always a regular directory tree the server writes itself. Any per-
+ * entry error (a file vanishing between `readdir` and `stat`, a
+ * permission gap) is swallowed for that entry and counted as zero; the
+ * dashboard widget is a usage estimate, not a forensic audit.
+ */
+async function sumDirectoryBytes(dir: string): Promise<number> {
+  let entries: { name: string; isDirectory: boolean; isFile: boolean }[]
+  try {
+    const list = await readdir(dir, { withFileTypes: true })
+    entries = list.map((d) => ({
+      name: d.name,
+      isDirectory: d.isDirectory(),
+      isFile: d.isFile(),
+    }))
+  } catch (err) {
+    if (isFsNotFound(err)) return 0
+    console.error('[dashboard:storage] readdir failed for', dir, err)
+    return 0
+  }
+
+  let total = 0
+  for (const entry of entries) {
+    const full = join(dir, entry.name)
+    if (entry.isDirectory) {
+      total += await sumDirectoryBytes(full)
+    } else if (entry.isFile) {
+      try {
+        const s = await stat(full)
+        total += s.size
+      } catch (err) {
+        if (!isFsNotFound(err)) {
+          console.error('[dashboard:storage] stat failed for', full, err)
+        }
+      }
+    }
+  }
+  return total
+}
+
+/** True for Node-style filesystem "no such file or directory" errors. */
+function isFsNotFound(err: unknown): boolean {
+  return Boolean(err) && typeof err === 'object' && (err as { code?: string }).code === 'ENOENT'
+}
+
+/**
+ * Compute the byte size of the underlying database.
+ *
+ *   • SQLite: stat the file at the parsed DATABASE_URL path. WAL +
+ *     shared-memory sidecars (`-wal`, `-shm`) are added when present
+ *     because they hold uncommitted page data and matter for the "what
+ *     is this database really costing on disk?" answer the widget is
+ *     trying to give. Missing sidecars (WAL not yet rotated, no live
+ *     connections) silently contribute zero.
+ *   • Postgres: `pg_database_size(current_database())` — the canonical
+ *     PG function for this. Dialect-aware because there is no portable
+ *     equivalent; SQLite has no `pg_database_size` and Postgres has no
+ *     on-disk file the host process can stat directly.
+ *
+ * Returns `0` when no measurement is possible (missing config, stat
+ * error). The dashboard would still render — the segment just contributes
+ * zero to the breakdown bar.
+ */
+async function readDatabaseBytes(
+  db: DbClient,
+  databaseUrl: string | undefined,
+): Promise<number> {
+  if (db.dialect === 'postgres') {
+    try {
+      const { rows } = await db<{ size: number | string | null }>`
+        select pg_database_size(current_database()) as size
+      `
+      const raw = rows[0]?.size ?? 0
+      if (typeof raw === 'string') return parseInt(raw, 10) || 0
+      return raw ?? 0
+    } catch (err) {
+      console.error('[dashboard:storage] pg_database_size failed:', err)
+      return 0
+    }
+  }
+
+  // SQLite: stat the main file + WAL/SHM sidecars when present.
+  if (!databaseUrl || !isSqliteUrl(databaseUrl)) return 0
+  const path = parseSqlitePath(databaseUrl)
+  const sidecars = [path, `${path}-wal`, `${path}-shm`]
+  let total = 0
+  for (const p of sidecars) {
+    try {
+      const s = await stat(p)
+      total += s.size
+    } catch (err) {
+      // ENOENT for sidecars is the common case; only log unexpected errors.
+      if (!isFsNotFound(err)) {
+        console.error('[dashboard:storage] stat failed for', p, err)
+      }
+    }
+  }
+  return total
+}
+
+/**
+ * Coerce a SQL `sum(...)` result into a plain JS number. PG returns
+ * BIGINT sums as strings; SQLite returns them as numbers; both can
+ * return `null` when there are no matching rows. This helper collapses
+ * all three shapes to `number` with a 0 default so the storage reader
+ * can treat every category uniformly.
+ */
+function coerceByteSum(raw: number | string | null | undefined): number {
+  if (raw === null || raw === undefined) return 0
+  if (typeof raw === 'string') return parseInt(raw, 10) || 0
+  return raw
+}
+
+/**
+ * Dashboard "Storage" widget data. Image / video / document /
+ * plugin / database byte counts plus the dialect label the widget
+ * surfaces in its caption.
+ *
+ * Media is split into three sub-categories with a single SQL pass that
+ * sums conditionally per mime-type bucket. Anything that isn't
+ * `image/*` or `video/*` (audio, application/*, text/*, fonts, rows
+ * with NULL mime_type) lands in `documentBytes` so the three counters
+ * are guaranteed to sum back to the original media total.
+ *
+ * `case when ... then size_bytes else 0 end` is portable across PG and
+ * SQLite — both dialects support standard SQL `CASE` and the `LIKE`
+ * pattern match.
+ */
+async function readStorageStats(
+  db: DbClient,
+  options: CmsHandlerOptions,
+): Promise<StorageStats> {
+  const [mediaResult, pluginBytes, databaseBytes] = await Promise.all([
+    db<{
+      image_bytes: number | string | null
+      video_bytes: number | string | null
+      document_bytes: number | string | null
+    }>`
+      select
+        coalesce(sum(case when mime_type like 'image/%' then size_bytes else 0 end), 0) as image_bytes,
+        coalesce(sum(case when mime_type like 'video/%' then size_bytes else 0 end), 0) as video_bytes,
+        coalesce(sum(case when mime_type not like 'image/%' and mime_type not like 'video/%' then size_bytes
+                          when mime_type is null then size_bytes
+                          else 0 end), 0) as document_bytes
+      from media_assets
+      where deleted_at is null
+    `,
+    options.uploadsDir
+      ? sumDirectoryBytes(join(options.uploadsDir, 'plugins'))
+      : Promise.resolve(0),
+    readDatabaseBytes(db, options.databaseUrl),
+  ])
+
+  const imageBytes = coerceByteSum(mediaResult.rows[0]?.image_bytes)
+  const videoBytes = coerceByteSum(mediaResult.rows[0]?.video_bytes)
+  const documentBytes = coerceByteSum(mediaResult.rows[0]?.document_bytes)
+
+  return {
+    imageBytes,
+    videoBytes,
+    documentBytes,
+    pluginBytes,
+    databaseBytes,
+    totalBytes: imageBytes + videoBytes + documentBytes + pluginBytes + databaseBytes,
+    dialect: db.dialect,
+  }
+}
+
 async function readMediaStats(db: DbClient): Promise<MediaStats> {
   // Two queries — totals + the latest thumbs — fire in parallel.
   const [totalsResult, latestThumbs] = await Promise.all([
@@ -920,17 +1144,24 @@ async function readMediaStats(db: DbClient): Promise<MediaStats> {
 // Route handler
 // ---------------------------------------------------------------------------
 
-type DashboardReader = (db: DbClient) => Promise<unknown>
+type DashboardReader = (db: DbClient, options: CmsHandlerOptions) => Promise<unknown>
 
 // `/dashboard/<segment>` → reader. The segment is the public slug, the
 // reader returns the JSON-serialisable response body. Keeps the route
 // dispatch a single Map lookup and the per-endpoint differences are
 // only the URL slug + the reader function.
+//
+// Readers receive the full `CmsHandlerOptions` even when they don't
+// need it — the storage reader is the only one that consumes
+// `uploadsDir` / `databaseUrl` today, but keeping the signature uniform
+// means future readers can pull what they need without re-plumbing the
+// dispatch.
 const DASHBOARD_READERS: Record<string, DashboardReader> = {
   'pages': readPagesStats,
   'posts': readPostsStats,
   'media': readMediaStats,
   'plugins': readPluginsStats,
+  'storage': readStorageStats,
   'publish-lineup': readPublishLineup,
   'activity': readRecentActivity,
 }
@@ -938,6 +1169,7 @@ const DASHBOARD_READERS: Record<string, DashboardReader> = {
 export async function handleDashboardRoutes(
   req: Request,
   db: DbClient,
+  options: CmsHandlerOptions = {},
 ): Promise<Response | null> {
   const url = new URL(req.url)
   const prefix = `${CMS_API_PREFIX}/dashboard/`
@@ -954,6 +1186,6 @@ export async function handleDashboardRoutes(
   const user = await requireAuthenticatedUser(req, db)
   if (user instanceof Response) return user
 
-  const body = await reader(db)
+  const body = await reader(db, options)
   return jsonResponse(body)
 }

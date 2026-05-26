@@ -14,7 +14,7 @@ The Dashboard is the **canonical implementation** of the borderless-tile-card pa
 - Widgets are draggable (move) and resizable (column / row span). Drop targets and resize previews use `--rail-tint-sky` for the dashed indicator.
 - Customize mode: dashed outline + bottom-docked `<BlockLibrary>` of unused widgets. Toggled by a top-toolbar button.
 - Layout persists per-user via `useDashboardLayout` (server-side `user_preferences`).
-- Stats stream from `/admin/api/cms/dashboard` (`handleDashboardRoutes` → `server/repositories/audit.ts`, `media.ts`, `data/...`).
+- Stats stream from `/admin/api/cms/dashboard/<domain>` (`handleDashboardRoutes` → `server/repositories/audit.ts`, `media.ts`, `data/...`, plus a `fs.stat` walk for plugins and a dialect-aware DB size query for storage).
 
 ---
 
@@ -32,7 +32,7 @@ src/admin/pages/dashboard/
 │   ├── BlockLibrary.module.css
 │   ├── OnboardingPanel.tsx      — first-run setup checklist
 │   ├── OnboardingPanel.module.css
-│   ├── LiquidProgressRing.tsx   — the storage progress ring used by StorageWidget
+│   ├── LiquidProgressRing.tsx   — animated liquid-filled ring (onboarding completion)
 │   └── LiquidProgressRing.module.css
 ├── hooks/
 │   ├── useDashboardLayout.ts    — layout state (positions / sizes) + DnD + resize math
@@ -131,7 +131,7 @@ interface DashboardWidgetDefinition {
 | id              | Default size | Tint     | Shows                                                |
 |-----------------|--------------|----------|------------------------------------------------------|
 | `visitors`      | 6 × 4        | mint     | Unique visitor count + sparkline (24h / 7d / 30d)    |
-| `storage`       | 4 × 3        | sky      | Disk usage with LiquidProgressRing + storage breakdown bar |
+| `storage`       | 4 × 3        | sky      | Total disk usage + media/plugins/database breakdown bar    |
 | `top-pages`     | 4 × 3        | lilac    | Top pages by traffic                                 |
 | `posts`         | 4 × 2        | peach    | Total post count + per-day bars                      |
 | `activity`      | 4 × 3        | peach    | Recent admin activity feed                           |
@@ -213,26 +213,30 @@ New users start with a default layout (first-party widgets pre-positioned). `use
 
 ---
 
-## Stats endpoint
+## Stats endpoints
 
-`GET /admin/api/cms/dashboard` returns aggregate stats:
+The dashboard fans out into **per-domain** endpoints under `/admin/api/cms/dashboard/<domain>`. Each widget owns one hook (`usePagesStats`, `useMediaStats`, `useStorageStats`, …) which hits exactly one endpoint, so widgets unblock independently and the slowest reader (Activity) never holds up the rest:
 
-```ts
-{
-  visitors:  { last24h: 0, last7d: 2, last30d: 12, sparkline: [...] }
-  storage:   { totalBytes, mediaBytes, pagesBytes, pluginsBytes, dbBytes, limitBytes }
-  posts:     { total, byCategory: [...], publishedPerDay: [...] }
-  pages:     { total, published, drafts }
-  media:     { fileCount, totalBytes, recentThumbs: [...] }
-  domain:    { hostname, sslStatus, httpsActive }
-  status:    { site: 'live' | 'down', lastDeploy: '...' }
-  publishLineup: [{ slug, status, publishedAt }, ...]
-  activity:  [{ actor, action, target, when }, ...]
-  plugins:   { installed: number }
-}
-```
+| Endpoint                       | Hook                       | Response shape (summary)                                                                              |
+|--------------------------------|----------------------------|-------------------------------------------------------------------------------------------------------|
+| `/dashboard/pages`             | `usePagesStats`            | `{ total, published, drafts, scheduled, deltaPublishedThisWeek }`                                     |
+| `/dashboard/posts`             | `usePostsStats`            | `{ total, categories, scheduled, daily28 }`                                                           |
+| `/dashboard/media`             | `useMediaStats`            | `{ count, totalBytes, latestThumbs[] }`                                                               |
+| `/dashboard/plugins`           | `usePluginsStats`          | `{ total, active, disabled, errored, rows[] }`                                                        |
+| `/dashboard/storage`           | `useStorageStats`          | `{ imageBytes, videoBytes, documentBytes, pluginBytes, databaseBytes, totalBytes, dialect }`          |
+| `/dashboard/publish-lineup`    | `usePublishLineupStats`    | `{ rows: [{ id, path, status, at }] }`                                                                |
+| `/dashboard/activity`          | `useRecentActivityStats`   | `{ rows: [{ id, action, actor, targetCode, targetText, createdAt }] }`                                |
 
-The handler aggregates from multiple repositories (`audit`, `media`, `data`, `publish`) in parallel. The response is shaped so each widget reads only the slice it cares about.
+### Storage sizing
+
+`/dashboard/storage` is the only endpoint that combines a SQL aggregate, a filesystem walk, and a dialect-aware database probe:
+
+- **`imageBytes` / `videoBytes` / `documentBytes`** — `coalesce(sum(case when mime_type like 'image/%' then size_bytes else 0 end), 0)` (and the matching `video/%` / fallback bucket) over active `media_assets`. Anything that isn't `image/*` or `video/*` — audio, PDFs, archives, rows with NULL mime_type — sums into `documentBytes`, so the three sub-counters add up to the full media total.
+- **`pluginBytes`** — recursive `fs.stat` walk of `<uploadsDir>/plugins/`.
+- **`databaseBytes`** — SQLite stats the `.db` file plus its `-wal` / `-shm` sidecars when present; Postgres runs `select pg_database_size(current_database())`.
+- **`dialect`** — `db.dialect`, surfaced verbatim so the widget caption can show "SQLite" / "Postgres".
+
+There is **no quota** — self-hosted Page Builder never imposes an artificial disk cap, so the widget shows real usage and stretches its breakdown bar to fill the full width.
 
 `useDashboardStats(...)` fetches once on mount and refreshes when the user toggles between 24h / 7d / 30d ranges (for visitors).
 

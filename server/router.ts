@@ -21,6 +21,12 @@ interface ServerRuntime {
   db: DbClient
   staticDir?: string
   uploadsDir?: string
+  /**
+   * The raw `DATABASE_URL` the server booted with — forwarded down to
+   * CMS handlers that need to resolve the on-disk SQLite file (e.g. the
+   * storage dashboard widget).
+   */
+  databaseUrl?: string
 }
 
 /**
@@ -121,7 +127,10 @@ function tryServeAgentToolResult(req: Request, runtime: ServerRuntime, _url: URL
 
 function tryServeCmsApi(req: Request, runtime: ServerRuntime, _url: URL, pathname: string): Promise<Response> | null {
   if (!pathname.startsWith('/admin/api/cms/')) return null
-  return handleCmsRequest(req, runtime.db, { uploadsDir: runtime.uploadsDir })
+  return handleCmsRequest(req, runtime.db, {
+    uploadsDir: runtime.uploadsDir,
+    databaseUrl: runtime.databaseUrl,
+  })
 }
 
 /**

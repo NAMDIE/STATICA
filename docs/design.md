@@ -85,7 +85,7 @@ This split (cards = filled & borderless, inputs = unfilled & bordered) is the lo
 
 ### 6. Identity is a color, not a label
 
-Categories of things have an associated color drawn from the four **rail tints**. Each widget category has a tint; each panel rail icon has a tint; each storage breakdown segment has a tint. Color is the at-a-glance label that lets the eye sort the screen.
+Categories of things have an associated color drawn from the **rail tints**. Each widget category has a tint; each panel rail icon has a tint; each storage breakdown segment has a tint. Color is the at-a-glance label that lets the eye sort the screen.
 
 | Token              | Hex       | Role                                                    |
 |--------------------|-----------|---------------------------------------------------------|
@@ -93,6 +93,7 @@ Categories of things have an associated color drawn from the four **rail tints**
 | `--rail-tint-lilac`| `#c8b6ff` | "Pages / structure" categories                          |
 | `--rail-tint-sky`  | `#9bdcff` | "Storage / data / configuration" categories             |
 | `--rail-tint-peach`| `#ffc7a8` | "Posts / media / activity" categories                   |
+| `--rail-tint-rose` | `#ffb6cd` | Fifth-hue overflow — used by breakdowns that need 5 categorical chips (e.g. Storage: images/videos/documents/plugins/database) |
 
 Rail tints don't live in `src/styles/globals.css` to be decorative — they're part of the design system, and primitives like `Widget` accept a `tint` prop that maps to one of them. New rail tints are added by extending the token group, not by inlining a color.
 

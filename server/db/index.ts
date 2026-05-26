@@ -34,7 +34,14 @@ class UnsupportedDatabaseUrlError extends Error {
   }
 }
 
-function parseSqlitePath(databaseUrl: string): string {
+/**
+ * Strip the `sqlite:` / `file:` prefix from a SQLite-flavoured DATABASE_URL
+ * and return the bare filesystem path. Exported for callers (e.g. the
+ * storage dashboard widget) that need to stat the on-disk database file.
+ * Only call this when `isSqliteUrl(databaseUrl)` is true — Postgres URLs
+ * passed in here would be returned unchanged.
+ */
+export function parseSqlitePath(databaseUrl: string): string {
   if (databaseUrl.startsWith('sqlite:')) return databaseUrl.slice('sqlite:'.length)
   if (databaseUrl.startsWith('file:')) return databaseUrl.slice('file:'.length)
   return databaseUrl

@@ -101,7 +101,7 @@ export async function handleCmsRequest(
     // Dashboard stats — read-only aggregate counts used by the admin
     // dashboard widgets. Lives after data routes so future routes
     // under `/data/...` can never accidentally shadow it.
-    ?? (await handleDashboardRoutes(req, db))
+    ?? (await handleDashboardRoutes(req, db, options))
     ?? (await handleFontsRoutes(req, db, options))
     ?? (await handlePublishRoutes(req, db, options))
     // Export and import are registered after data routes so their exact paths

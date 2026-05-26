@@ -13,6 +13,9 @@
  *   • `useMediaStats()`        — Media widget (totals + 16 thumbs)
  *   • `usePluginsStats()`      — Plugins widget (one scan of
  *                                  `installed_plugins`)
+ *   • `useStorageStats()`      — Storage widget (media bytes + plugin
+ *                                  dir size + database file/db size +
+ *                                  the active dialect label)
  *   • `usePublishLineupStats()`— Publish Lineup widget (three small
  *                                  range queries)
  *   • `useRecentActivityStats()`— Activity widget (a 50-row audit-events
@@ -123,6 +126,28 @@ export interface DashboardPublishLineupStats {
   rows: DashboardPublishLineupRow[]
 }
 
+/**
+ * Storage widget payload. Mirrors `StorageStats` on the server (see
+ * `server/handlers/cms/dashboard.ts`). All byte counts are raw integers;
+ * the widget formats them with the `formatSize` helper. `dialect` powers
+ * the "SQLite" / "Postgres" label the widget shows in its caption so
+ * operators can see at a glance which adapter is in use.
+ *
+ * Media is split into `imageBytes` / `videoBytes` / `documentBytes` by
+ * mime-type prefix on the server; anything that isn't `image/*` or
+ * `video/*` (PDFs, audio, archives, rows with NULL mime_type) lands in
+ * `documentBytes`, so the three sub-counters sum to the full media total.
+ */
+export interface DashboardStorageStats {
+  imageBytes: number
+  videoBytes: number
+  documentBytes: number
+  pluginBytes: number
+  databaseBytes: number
+  totalBytes: number
+  dialect: 'sqlite' | 'postgres'
+}
+
 export interface DashboardActivityStats {
   rows: DashboardActivityEntry[]
 }
@@ -180,6 +205,19 @@ function isPluginsStats(v: unknown): v is DashboardPluginsStats {
 function isPublishLineupStats(v: unknown): v is DashboardPublishLineupStats {
   if (!isObject(v)) return false
   return Array.isArray(v.rows)
+}
+
+function isStorageStats(v: unknown): v is DashboardStorageStats {
+  if (!isObject(v)) return false
+  return (
+    typeof v.imageBytes === 'number' &&
+    typeof v.videoBytes === 'number' &&
+    typeof v.documentBytes === 'number' &&
+    typeof v.pluginBytes === 'number' &&
+    typeof v.databaseBytes === 'number' &&
+    typeof v.totalBytes === 'number' &&
+    (v.dialect === 'sqlite' || v.dialect === 'postgres')
+  )
 }
 
 function isActivityStats(v: unknown): v is DashboardActivityStats {
@@ -249,6 +287,15 @@ export function useMediaStats(): DashboardMediaStats | null {
 /** Plugins widget. One scan of `installed_plugins`. */
 export function usePluginsStats(): DashboardPluginsStats | null {
   return useDashboardEndpoint('plugins', isPluginsStats)
+}
+
+/**
+ * Storage widget. One mime-bucketed sum over `media_assets.size_bytes`
+ * (image / video / other) + an `fs.stat` walk of `<uploadsDir>/plugins/`
+ * + a dialect-aware database size query.
+ */
+export function useStorageStats(): DashboardStorageStats | null {
+  return useDashboardEndpoint('storage', isStorageStats)
 }
 
 /** Publish Lineup widget. Three small queries against `data_rows`. */

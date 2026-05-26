@@ -61,16 +61,23 @@
     margin-top: auto;
 }
 
+/* The track is a flex row of pill-shaped segments separated by a 1px
+   gap. We deliberately drop the previous `overflow: hidden` +
+   container-level rounding: each segment now owns its own full radius
+   (height/2 = 4px) so neighbouring segments read as distinct chips
+   instead of melting into a single continuous bar. The host track
+   stays transparent — there is no quota-style remainder background
+   in the storage widget anymore. */
 .stackBar {
     display: flex;
+    gap: 1px;
     height: 8px;
-    border-radius: 4px;
-    overflow: hidden;
-    background: var(--editor-surface);
+    background: transparent;
 }
 
 .stackSeg {
     height: 100%;
+    border-radius: 4px;
 }
 
 .stackLegend {

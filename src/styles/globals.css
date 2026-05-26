@@ -89,6 +89,12 @@
     --rail-tint-lilac: #c8b6ff;
     --rail-tint-sky: #9bdcff;
     --rail-tint-peach: #ffc7a8;
+    /* `--rail-tint-rose` extends the categorical palette with a fifth hue
+       for breakdowns that genuinely need five distinct identity tints
+       (e.g. the dashboard Storage widget's images/videos/documents/
+       plugins/database split). Same saturation envelope as the other
+       four — keeps the chip row visually balanced. */
+    --rail-tint-rose: #ffb6cd;
 
     /* ─── Chart default tint — the semantic token chart primitives
      *     (Bars, Sparkline, StackedBar) fall back to when no per-call
