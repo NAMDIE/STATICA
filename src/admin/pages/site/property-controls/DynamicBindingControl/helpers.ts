@@ -17,7 +17,7 @@ import type { PropertyControlKind } from '../bindingCompatibility'
 //
 // `selectedTableKey` is a tagged string in the picker dialog:
 //   - `__loop__`              → loop scope (synthetic fields only)
-//   - `system:<sourceId>`     → system source (page / site / viewer / route)
+//   - `system:<sourceId>`     → system source (page / site / route)
 //   - `table:<tableId>`       → DataMeta table by id
 // Helpers here build/parse those tags so neither the dialog nor the panes
 // have to know the exact prefix strings.

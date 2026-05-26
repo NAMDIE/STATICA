@@ -165,25 +165,37 @@ describe('DynamicBindingControl picker', () => {
     })
   })
 
-  it('shows Post types and Data tables groups in the left pane', async () => {
+  it('hides post-type and data-table groups in the unscoped left pane and shows a hint', async () => {
+    // Unscoped opening (no template, no loop) — tables in the system exist
+    // (`posts`, `products`) but they're NOT offered as direct bindings.
+    // `currentEntry.*` has no scope outside a loop or template, so any
+    // binding to them would silently resolve to empty. The picker
+    // surfaces a hint pointing the author at the loop / template flow.
     renderBinding()
     fireEvent.click(screen.getByRole('button', { name: /bind text/i }))
     await waitFor(() => {
       expect(screen.getByRole('dialog')).toBeDefined()
     })
-    expect(screen.getByText('Post types')).toBeDefined()
-    expect(screen.getByText('Data tables')).toBeDefined()
-    expect(screen.getByRole('button', { name: /posts/i })).toBeDefined()
-    expect(screen.getByRole('button', { name: /products/i })).toBeDefined()
+    expect(screen.queryByText('Post types')).toBeNull()
+    expect(screen.queryByText('Data tables')).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Posts$/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Products$/i })).toBeNull()
+    // The hint should be visible so authors know how to make table
+    // fields available.
+    await waitFor(() => {
+      expect(screen.getByText(/Bind to row fields by adding a loop/i)).toBeDefined()
+    })
   })
 
-  it('shows fields in the right pane after selecting a table', async () => {
+  it('shows post-type fields in the right pane when auto-scoped to a template page', async () => {
+    // Auto-scope: a template page is bound to the `posts` table, so the
+    // picker hides the left pane and surfaces post fields directly.
+    loadTemplatePageInStore('posts')
     renderBinding()
     fireEvent.click(screen.getByRole('button', { name: /bind text/i }))
     await waitFor(() => {
       expect(screen.getByRole('dialog')).toBeDefined()
     })
-    fireEvent.click(screen.getByRole('button', { name: /^Posts$/i }))
     await waitFor(() => {
       expect(screen.getByText('Title')).toBeDefined()
     })
@@ -191,11 +203,11 @@ describe('DynamicBindingControl picker', () => {
     expect(screen.getByText('SEO title')).toBeDefined()
   })
 
-  it('filters the field list using the field search bar', async () => {
+  it('filters the field list using the field search bar (auto-scoped)', async () => {
+    loadTemplatePageInStore('posts')
     renderBinding()
     fireEvent.click(screen.getByRole('button', { name: /bind text/i }))
     await waitFor(() => expect(screen.getByRole('dialog')).toBeDefined())
-    fireEvent.click(screen.getByRole('button', { name: /^Posts$/i }))
     await waitFor(() => expect(screen.getByText('Title')).toBeDefined())
 
     const searchBar = screen.getByRole('searchbox', { name: /search fields/i })
@@ -206,11 +218,11 @@ describe('DynamicBindingControl picker', () => {
     })
   })
 
-  it('disables media fields when control type is text', async () => {
+  it('disables media fields when control type is text (auto-scoped)', async () => {
+    loadTemplatePageInStore('posts')
     renderBinding()
     fireEvent.click(screen.getByRole('button', { name: /bind text/i }))
     await waitFor(() => expect(screen.getByRole('dialog')).toBeDefined())
-    fireEvent.click(screen.getByRole('button', { name: /^Posts$/i }))
     await waitFor(() => expect(screen.getByText('Featured media')).toBeDefined())
 
     // The "Featured media" button should be aria-disabled for a text control
@@ -222,16 +234,16 @@ describe('DynamicBindingControl picker', () => {
     expect(mediaBtn?.getAttribute('aria-disabled')).toBe('true')
   })
 
-  it('calls onSet with correct binding when a field is selected and confirmed', async () => {
+  it('calls onSet with correct binding when a field is selected and confirmed (auto-scoped)', async () => {
     let result: DynamicPropBinding | undefined
+    loadTemplatePageInStore('posts')
     renderBinding({ onSet: (b) => { result = b } })
     fireEvent.click(screen.getByRole('button', { name: /bind text/i }))
     await waitFor(() => expect(screen.getByRole('dialog')).toBeDefined())
-
-    fireEvent.click(screen.getByRole('button', { name: /^Posts$/i }))
     await waitFor(() => expect(screen.getByText('Title')).toBeDefined())
 
-    // Select the field
+    // Select the field directly — auto-scope means no need to click a
+    // "Posts" button first.
     const titleBtn = screen.getAllByRole('button').find((b) =>
       b.textContent?.includes('Title') && !b.textContent?.includes('SEO'),
     )

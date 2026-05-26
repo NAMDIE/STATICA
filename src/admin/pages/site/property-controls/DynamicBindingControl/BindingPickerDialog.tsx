@@ -22,7 +22,6 @@ import { EmptyState } from '@ui/components/EmptyState'
 import { SearchBar } from '@ui/components/SearchBar'
 import { Separator } from '@ui/components/Separator'
 import { BracesIcon } from 'pixel-art-icons/icons/braces'
-import { DatabaseSolidIcon } from 'pixel-art-icons/icons/database-solid'
 import { SkeletonBlock } from '@ui/components/Skeleton'
 import { ImageSolidIcon } from 'pixel-art-icons/icons/image-solid'
 import { VideoSolidIcon } from 'pixel-art-icons/icons/video-solid'
@@ -250,7 +249,7 @@ export function BindingPickerDialog({
       return [{ label: sourceLabel ? `${sourceLabel} fields` : 'Loop metadata', entries }]
     }
 
-    // System source scope (page / site / viewer / route).
+    // System source scope (page / site / route).
     if (selectedTableKey.startsWith(SYSTEM_KEY_PREFIX)) {
       const sourceId = selectedTableKey.slice(SYSTEM_KEY_PREFIX.length) as SystemSourceId
       const source = SYSTEM_SOURCES.find((s) => s.id === sourceId)
@@ -409,7 +408,7 @@ export function BindingPickerDialog({
 
   // The right preview pane is meaningful when:
   //   - the picker is auto-scoped to a loop-bound table (sample rows), OR
-  //   - a system source is selected (page/site/viewer/route current value).
+  //   - a system source is selected (page/site/route current value).
   const showPreviewPane = isLoopTableScope || selectedSystemSourceId !== null
 
   // What's "focused" in the field list — the field whose value we render
@@ -479,7 +478,7 @@ export function BindingPickerDialog({
       )
     }
 
-    // System source field (page / site / viewer / route).
+    // System source field (page / site / route).
     // Selection match requires BOTH source + field id because the same
     // field id ('id', 'slug') exists on multiple system sources.
     if (entry.kind === 'system') {
@@ -573,7 +572,7 @@ export function BindingPickerDialog({
           <EmptyState
             variant="centered"
             title="Select a source"
-            description="Pick a source from the left — System for page / site / viewer / route data, or any of your tables."
+            description="Pick a source from the left — System for page / site / route data, or the current loop's fields when available."
           />
         </div>
       )
@@ -634,16 +633,22 @@ export function BindingPickerDialog({
   }
 
   // ─── Left pane content ─────────────────────────────────────────────────
+  //
+  // Post-type / data-table groups are intentionally NOT shown here. The
+  // picker is auto-scoped (left pane hidden entirely) when `currentEntry`
+  // has a real scope (template page or in-loop with a CMS table source).
+  // Reaching this code path means no such scope exists, so a binding to
+  // `{ source: 'currentEntry', field }` against any table would silently
+  // resolve to empty. Authors who want table fields are pointed toward
+  // the loop / template flow via the hint at the bottom.
   function renderLeftPane() {
     const q = tableSearch.trim().toLowerCase()
     const visibleSystemSources: SystemSource[] = q
       ? SYSTEM_SOURCES.filter((s) => s.label.toLowerCase().includes(q) || s.id.includes(q))
       : [...SYSTEM_SOURCES]
     const hasSystem = visibleSystemSources.length > 0
-    const hasPostTypes = postTypeTables.length > 0
-    const hasDataTables = dataTables.length > 0
-    const noResults =
-      !hasLoopScope && !hasSystem && !hasPostTypes && !hasDataTables && tableSearch
+    const tablesExist = postTypeTables.length > 0 || dataTables.length > 0
+    const noResults = !hasLoopScope && !hasSystem && tableSearch
 
     return (
       <div className={styles.tablePane}>
@@ -655,7 +660,9 @@ export function BindingPickerDialog({
           aria-label="Search sources"
         />
         <div className={styles.tableList}>
-          {/* Loop scope entry */}
+          {/* Loop scope entry — when the node is inside a loop whose
+              source declared synthetic fields. Lets authors bind to the
+              iteration item directly. */}
           {hasLoopScope && (
             <>
               <Button
@@ -674,13 +681,13 @@ export function BindingPickerDialog({
                   <span>{sourceLabel ?? 'Current loop'}</span>
                 </span>
               </Button>
-              {(hasSystem || hasPostTypes || hasDataTables) && <Separator />}
+              {hasSystem && <Separator />}
             </>
           )}
 
-          {/* System sources group — Page / Site / Viewer / Route. Always
-              available since the publisher seeds these frames on every
-              render; no DB lookup required to enumerate. */}
+          {/* System sources group — Page / Site / Route. Always available
+              since the publisher seeds these frames on every render; no
+              DB lookup required to enumerate. */}
           {hasSystem && (
             <>
               <p className={styles.groupLabel}>System</p>
@@ -704,72 +711,28 @@ export function BindingPickerDialog({
                   </span>
                 </Button>
               ))}
-              {(hasPostTypes || hasDataTables) && <Separator />}
             </>
           )}
 
-          {/* Post types group */}
-          {hasPostTypes && (
-            <>
-              <p className={styles.groupLabel}>Post types</p>
-              {postTypeTables.map((table) => (
-                <Button
-                  key={table.id}
-                  variant="ghost"
-                  size="sm"
-                  fullWidth
-                  align="start"
-                  pressed={selectedTableKey === `table:${table.id}`}
-                  onClick={() => handleTableSelect(`table:${table.id}`)}
-                  type="button"
-                >
-                  <span className={styles.fieldRowInner}>
-                    <span className={styles.tableRowIcon}>
-                      <DatabaseSolidIcon size={12} aria-hidden="true" />
-                    </span>
-                    <span>{table.name}</span>
-                  </span>
-                </Button>
-              ))}
-            </>
-          )}
-
-          {/* Separator between groups */}
-          {hasPostTypes && hasDataTables && <Separator />}
-
-          {/* Data tables group */}
-          {hasDataTables && (
-            <>
-              <p className={styles.groupLabel}>Data tables</p>
-              {dataTables.map((table) => (
-                <Button
-                  key={table.id}
-                  variant="ghost"
-                  size="sm"
-                  fullWidth
-                  align="start"
-                  pressed={selectedTableKey === `table:${table.id}`}
-                  onClick={() => handleTableSelect(`table:${table.id}`)}
-                  type="button"
-                >
-                  <span className={styles.fieldRowInner}>
-                    <span className={styles.tableRowIcon}>
-                      <DatabaseSolidIcon size={12} aria-hidden="true" />
-                    </span>
-                    <span>{table.name}</span>
-                  </span>
-                </Button>
-              ))}
-            </>
+          {/* Hint when tables exist in the system but aren't surfaced
+              because the current node has no entry scope. Points the
+              author toward the loop / template that would make those
+              fields available. */}
+          {tablesExist && !tableSearch && (
+            <EmptyState
+              variant="card"
+              title="Bind to row fields by adding a loop"
+              description="Wrap this section in a Loop module, or open a postType template page, to reference fields from your tables (posts, products, etc.)."
+            />
           )}
 
           {/* No results in search */}
           {noResults && (
-            <EmptyState variant="card" title={`No tables match "${tableSearch}"`} />
+            <EmptyState variant="card" title={`No sources match "${tableSearch}"`} />
           )}
 
-          {/* No tables at all */}
-          {!hasLoopScope && !hasPostTypes && !hasDataTables && !tableSearch && !metaLoading && (
+          {/* No tables at all — author hasn't created any data tables yet. */}
+          {!hasLoopScope && !tablesExist && !tableSearch && !metaLoading && (
             <EmptyState
               variant="card"
               title="No tables yet"

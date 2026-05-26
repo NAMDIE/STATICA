@@ -172,7 +172,11 @@ describe('dynamic binding controls', () => {
   })
 
   it('disables media fields for an image control and enables them for compatible fields', async () => {
-    // Render the image-type control directly (no store template)
+    // Auto-scope via a posts template page — the picker hides the left
+    // pane and surfaces the table's fields directly. The unscoped left
+    // pane no longer offers tables, so this test requires a real
+    // currentEntry scope.
+    loadTemplateWithTextNode()
     let selectedBinding: DynamicPropBinding | undefined
     render(
       <DynamicBindingControl
@@ -189,8 +193,7 @@ describe('dynamic binding controls', () => {
     fireEvent.click(screen.getByRole('button', { name: /bind image/i }))
     await waitFor(() => expect(screen.getByRole('dialog')).toBeDefined())
 
-    // Select "Posts" table
-    fireEvent.click(screen.getByRole('button', { name: /^Posts$/i }))
+    // Auto-scoped — fields appear directly without picking a table.
     await waitFor(() => expect(screen.getByText('Featured media')).toBeDefined())
 
     // Text fields should be aria-disabled for an image control

@@ -163,7 +163,7 @@ export function usePropertiesPanelData(): PropertiesPanelData {
   )
   // Bindings are always available. The picker decides which sources are
   // meaningful in the current context (`currentEntry` / `parentEntry`
-  // only when inside a loop or template page; page / site / viewer / route
+  // only when inside a loop or template page; page / site / route
   // are always offered). Phase 3 of the binding system refactor —
   // see docs/superpowers/plans/2026-05-… for the broader plan.
   const dynamicBindingsEnabled = true
