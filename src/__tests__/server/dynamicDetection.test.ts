@@ -170,27 +170,6 @@ describe('findDynamicNodeIds — Rule 1: dynamic module flag', () => {
 // ---------------------------------------------------------------------------
 
 describe('findDynamicNodeIds — Rule 2: structured dynamicBindings', () => {
-  it('adds node id when a dynamicBinding uses viewer source', () => {
-    const page = makePage({
-      root: { moduleId: 'base.body', children: ['banner'] },
-      banner: {
-        moduleId: 'base.text',
-        props: { count: 0 },
-        dynamicBindings: {
-          count: { source: 'viewer', field: 'cartCount' },
-        },
-      },
-    })
-    const site = makeSite()
-    const reg = makeRegistry({
-      'base.body': makeModule('base.body'),
-      'base.text': makeModule('base.text'),
-    })
-
-    const ids = findDynamicNodeIds(page, site, reg)
-    expect(ids.has('banner')).toBe(true)
-  })
-
   it('adds node id when a dynamicBinding uses route.query source', () => {
     const page = makePage({
       root: { moduleId: 'base.body', children: ['search'] },
@@ -255,24 +234,6 @@ describe('findDynamicNodeIds — Rule 2b: inline {source.field} tokens', () => {
 
     const ids = findDynamicNodeIds(page, site, reg)
     expect(ids.has('result')).toBe(true)
-  })
-
-  it('adds node id when a string prop contains {viewer.*} token', () => {
-    const page = makePage({
-      root: { moduleId: 'base.body', children: ['greeting'] },
-      greeting: {
-        moduleId: 'base.text',
-        props: { text: 'Hello, {viewer.name}!' },
-      },
-    })
-    const site = makeSite()
-    const reg = makeRegistry({
-      'base.body': makeModule('base.body'),
-      'base.text': makeModule('base.text'),
-    })
-
-    const ids = findDynamicNodeIds(page, site, reg)
-    expect(ids.has('greeting')).toBe(true)
   })
 
   it('does NOT add node id for publish-time tokens like {route.slug}', () => {

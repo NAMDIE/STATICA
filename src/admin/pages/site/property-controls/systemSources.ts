@@ -16,7 +16,7 @@
 
 import type { LoopSourceField } from '@core/loops/types'
 
-export type SystemSourceId = 'page' | 'site' | 'viewer' | 'route'
+export type SystemSourceId = 'page' | 'site' | 'route'
 
 export interface SystemSource {
   id: SystemSourceId
@@ -59,24 +59,6 @@ const SITE_SOURCE: SystemSource = {
 }
 
 // ---------------------------------------------------------------------------
-// viewer — currently authenticated user
-// ---------------------------------------------------------------------------
-
-const VIEWER_SOURCE: SystemSource = {
-  id: 'viewer',
-  label: 'Viewer',
-  description: 'Currently logged-in user. Resolves to empty for anonymous visitors.',
-  fields: [
-    { id: 'displayName', label: 'Display name' },
-    { id: 'email', label: 'Email' },
-    { id: 'roleName', label: 'Role name' },
-    { id: 'roleSlug', label: 'Role slug' },
-    { id: 'isAuthenticated', label: 'Is signed in' },
-    { id: 'id', label: 'User id' },
-  ],
-}
-
-// ---------------------------------------------------------------------------
 // route — current URL frame
 // ---------------------------------------------------------------------------
 
@@ -97,6 +79,5 @@ const ROUTE_SOURCE: SystemSource = {
 export const SYSTEM_SOURCES: readonly SystemSource[] = [
   PAGE_SOURCE,
   SITE_SOURCE,
-  VIEWER_SOURCE,
   ROUTE_SOURCE,
 ]

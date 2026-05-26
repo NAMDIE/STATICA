@@ -92,13 +92,13 @@ describe('isFullyStaticPage returns false for dynamic-bearing trees', () => {
     expect(isFullyStaticPage(page, site, reg)).toBe(false)
   })
 
-  it('returns false — Rule 2: node has a dynamicBinding to viewer source', () => {
+  it('returns false — Rule 2: node has a dynamicBinding to a request-dependent source', () => {
     const page = makePage({
       root: { moduleId: 'base.body', children: ['banner'] },
       banner: {
         moduleId: 'base.text',
         props: { count: 0 },
-        dynamicBindings: { count: { source: 'viewer', field: 'cartCount' } },
+        dynamicBindings: { count: { source: 'route', field: 'query.cartCount' } },
       },
     })
     const site = makeSite()

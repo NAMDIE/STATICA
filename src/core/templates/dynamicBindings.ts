@@ -28,7 +28,6 @@ import { renderMarkdownToHtml } from '@core/markdown/renderMarkdown'
 import type {
   PageFrame,
   SiteFrame,
-  ViewerFrame,
   RouteFrame,
 } from './contextFrames'
 import {
@@ -45,20 +44,25 @@ import {
  * (push on iteration enter, pop on iteration exit). Stack-top resolves
  * `source: 'currentEntry'`; one below resolves `source: 'parentEntry'`.
  *
- * The four named frames (`page`, `site`, `viewer`, `route`) are always
- * provided on every render — they're built once by the publisher and
- * referenced by the corresponding binding sources. Anonymous renders
- * pass `viewer: null`; bindings against null frames resolve to empty.
+ * The three named frames (`page`, `site`, `route`) are always provided
+ * on every render — they're built once by the publisher and referenced
+ * by the corresponding binding sources.
  *
  * Frames are stable references across the whole render pass; the loop
  * interceptor only mutates `entryStack`. This keeps the resolver
  * branchless for the common case (frame lookup is a property read).
+ *
+ * Note on viewer / visitor identity: the product is admin-only today —
+ * there is no public-visitor auth or session concept. A `viewer` binding
+ * source was considered for `{viewer.displayName}`-style tokens but
+ * removed pre-v1: dead surface on the public site, and trivial to add
+ * later either as a core feature (member auth) or as a plugin-provided
+ * binding-source registry. See the publishing-architecture plan doc.
  */
 export interface TemplateRenderDataContext {
   entryStack: LoopItem[]
   page?: PageFrame
   site?: SiteFrame
-  viewer?: ViewerFrame | null
   route?: RouteFrame
 }
 
@@ -99,7 +103,7 @@ function resolveBindingValue(
   // `format: 'html'`, render markdown to HTML here so the module receives
   // ready-to-embed HTML rather than raw markdown. Tokens embedded inside
   // the body markdown are interpolated FIRST so authors can write
-  // `Hello {viewer.displayName|guest}` directly in a blog post body and
+  // `Hello {currentEntry.title|untitled}` directly in a blog post body and
   // have it resolve against the same render context as page props.
   if (
     binding.format === 'html' &&

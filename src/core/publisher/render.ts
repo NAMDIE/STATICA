@@ -240,7 +240,6 @@ function composeTemplateContext(
     entryStack: provided.entryStack,
     page: pageFrame,
     site: provided.site ?? buildSiteFrame(site),
-    viewer: provided.viewer ?? null,
     route: provided.route ?? buildRouteFrame(pageFrame.permalink),
   }
 }

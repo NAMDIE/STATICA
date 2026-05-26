@@ -40,7 +40,6 @@ const DynamicBindingSourceSchema = Type.Union([
   Type.Literal('parentEntry'),
   Type.Literal('page'),
   Type.Literal('site'),
-  Type.Literal('viewer'),
   Type.Literal('route'),
 ])
 type DynamicBindingSource = Static<typeof DynamicBindingSourceSchema>
@@ -77,7 +76,6 @@ export function parseDynamicPropBinding(raw: unknown): DynamicPropBinding | null
     'parentEntry',
     'page',
     'site',
-    'viewer',
     'route',
   ]
   if (!VALID_SOURCES.includes(r.source as DynamicBindingSource)) return null

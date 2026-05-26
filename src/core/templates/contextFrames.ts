@@ -40,15 +40,6 @@ export interface SiteFrame {
   name: string
 }
 
-export interface ViewerFrame {
-  id: string
-  displayName: string
-  email: string
-  roleSlug: string | null
-  roleName: string | null
-  isAuthenticated: true
-}
-
 /**
  * URL frame for the current request.
  *
@@ -98,31 +89,6 @@ export function buildSiteFrame(site: SiteDocument): SiteFrame {
   return {
     id: site.id,
     name: site.name,
-  }
-}
-
-/**
- * Build the viewer frame from a parsed session (or null for anonymous).
- * Kept shape-compatible with data-row author frames so the same field
- * names work across sources.
- */
-export function buildViewerFrame(
-  user: {
-    id: string
-    displayName: string
-    email: string
-    roleSlug?: string | null
-    roleName?: string | null
-  } | null,
-): ViewerFrame | null {
-  if (!user) return null
-  return {
-    id: user.id,
-    displayName: user.displayName,
-    email: user.email,
-    roleSlug: user.roleSlug ?? null,
-    roleName: user.roleName ?? null,
-    isAuthenticated: true,
   }
 }
 

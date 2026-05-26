@@ -39,7 +39,6 @@ const VALID_SOURCES: ReadonlySet<DynamicPropBinding['source']> = new Set([
   'parentEntry',
   'page',
   'site',
-  'viewer',
   'route',
 ])
 
@@ -209,8 +208,6 @@ export function readFrame(
       return (context.page as unknown as Record<string, unknown>) ?? null
     case 'site':
       return (context.site as unknown as Record<string, unknown>) ?? null
-    case 'viewer':
-      return context.viewer ? (context.viewer as unknown as Record<string, unknown>) : null
     case 'route':
       return (context.route as unknown as Record<string, unknown>) ?? null
     default:

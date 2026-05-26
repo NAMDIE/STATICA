@@ -290,7 +290,7 @@ defineModule({
 
   // Optional. Default false. Set true when the module's render output
   // varies per visitor request — `Date.now()` examples, live API reads,
-  // viewer-specific data. The publisher emits a <pb-hole> placeholder
+  // per-visitor data. The publisher emits a <pb-hole> placeholder
   // instead of running `render` at publish time; the actual render fires
   // inside /_pb/hole/<nodeId> at request time (with the result cached
   // per (nodeId, publishVersion) in Layer B's LRU).

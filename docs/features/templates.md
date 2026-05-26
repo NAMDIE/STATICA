@@ -10,8 +10,8 @@ Templates — the mechanism that lets one page layout render many rows. Two flav
 ## TL;DR
 
 - Entry template lookup: `selectEntryTemplate(site, tableSlug)` in `src/core/templates/templateMatching.ts`. Picks the page that has `entryTemplateForTableId` set to the postType's data table id.
-- Dynamic bindings: `PageNode.dynamicBindings: Record<propKey, { source, fieldId }>`. Source is one of `currentEntry | parentEntry | site | viewer | route`. Resolved by `resolveDynamicProps(...)` in `src/core/templates/dynamicBindings.ts`.
-- Context frames built by `buildPageFrame`, `buildSiteFrame`, `buildViewerFrame`, `buildRouteFrame` in `contextFrames.ts`.
+- Dynamic bindings: `PageNode.dynamicBindings: Record<propKey, { source, fieldId }>`. Source is one of `currentEntry | parentEntry | page | site | route`. Resolved by `resolveDynamicProps(...)` in `src/core/templates/dynamicBindings.ts`.
+- Context frames built by `buildPageFrame`, `buildSiteFrame`, `buildRouteFrame` in `contextFrames.ts`.
 - Token interpolation: text props can mix literal text + tokens (`Hello {currentEntry.title}`). Parsed by `parseTokenString(...)` in `tokenInterpolation.ts`.
 - Preview data: `buildPreviewCells(table)` produces fake `currentEntry` values for the editor canvas so templates render meaningfully at edit time.
 
@@ -21,7 +21,7 @@ Templates — the mechanism that lets one page layout render many rows. Two flav
 
 ```text
 src/core/templates/
-├── contextFrames.ts        — PageFrame, SiteFrame, ViewerFrame, RouteFrame + builders
+├── contextFrames.ts        — PageFrame, SiteFrame, RouteFrame + builders
 ├── dynamicBindings.ts      — TemplateRenderDataContext + resolveDynamicProps
 ├── templateMatching.ts     — normalizeRouteBase, selectEntryTemplate
 ├── templatePreviewData.ts  — buildPreviewCells (canvas preview defaults)
@@ -61,17 +61,20 @@ interface TemplateRenderDataContext {
   page?:        PageFrame                   // current page (id, slug, title, ...)
   site?:        SiteFrame                   // site name, settings, breakpoints
   route?:       RouteFrame                  // current URL parts
-  viewer?:      ViewerFrame                 // current viewer (anonymous or logged-in)
   entryStack:   LoopItem[]                  // pushed by loops + entry-template render
 }
 ```
+
+There is no `viewer` frame — the product is admin-only and has no
+public-visitor identity concept (pre-v1 cleanup). A `viewer` binding
+source can be reintroduced later as a core feature (member auth) or
+exposed by a plugin via a future plugin-source registry.
 
 Builders:
 
 ```ts
 buildPageFrame(page)                                 // { id, slug, title, ... }
 buildSiteFrame(site)                                 // { name, settings, breakpoints, ... }
-buildViewerFrame({ user, userTable })                // { id, displayName, role, ... } | { kind: 'anonymous' }
 buildRouteFrame(urlOrPath)                           // { pathname, segments, query }
 ```
 

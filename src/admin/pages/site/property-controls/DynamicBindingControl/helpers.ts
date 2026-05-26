@@ -152,7 +152,6 @@ export function resolveBindingLabel(
   if (
     binding.source === 'page' ||
     binding.source === 'site' ||
-    binding.source === 'viewer' ||
     binding.source === 'route'
   ) {
     const system = SYSTEM_SOURCES.find((s) => s.id === binding.source)

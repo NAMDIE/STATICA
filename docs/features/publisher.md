@@ -62,7 +62,7 @@ server/publish/
 ```text
 publishPage(page, ctx)             ← src/core/publisher/render.ts
     │
-    ├─→ resolve template-context frames (page / site / route / viewer)
+    ├─→ resolve template-context frames (page / site / route)
     ├─→ inject root node's classIds into <body> tag
     ├─→ build <head>: title, description, favicon, font import, lang, importmap, runtime <script>s, CSP
     ├─→ renderNode(rootNodeId, ctx)

@@ -3,9 +3,9 @@
  * engine (Phases 1-3 of the binding system refactor).
  *
  * What we assert:
- *   - resolveDynamicProps dispatches on each new source
- *     (page / site / viewer / route)
- *   - viewer null resolves to empty (anonymous renders)
+ *   - resolveDynamicProps dispatches on each source
+ *     (page / site / route / currentEntry)
+ *   - missing frames resolve to empty / static fallback
  *   - dotted field paths walk plain objects safely
  *   - parseTokenString round-trips text + tokens, including backslash escapes
  *   - interpolateTokens substitutes against the named frames
@@ -25,7 +25,6 @@ import {
 import {
   buildPageFrame,
   buildSiteFrame,
-  buildViewerFrame,
   buildRouteFrame,
 } from '@core/templates/contextFrames'
 import type { Page, SiteDocument } from '@core/page-tree'
@@ -47,7 +46,6 @@ function ctx(overrides: Partial<TemplateRenderDataContext> = {}): TemplateRender
     entryStack: [],
     page: buildPageFrame(fakePage),
     site: buildSiteFrame(fakeSite),
-    viewer: null,
     route: buildRouteFrame('/about'),
     ...overrides,
   }
@@ -85,38 +83,34 @@ describe('resolveDynamicProps — system sources', () => {
     expect(props.text).toBe('/about')
   })
 
-  it('keeps the static fallback when viewer is null and fallback is not set', () => {
+  it('keeps the static fallback when currentEntry frame is missing and fallback is not set', () => {
+    // Outside a loop, the entryStack is empty so `currentEntry.*` has no frame.
     const props = resolveDynamicProps(
-      { text: 'Welcome, guest' },
-      { text: { source: 'viewer', field: 'displayName' } },
-      ctx({ viewer: null }),
+      { text: 'Untitled' },
+      { text: { source: 'currentEntry', field: 'title' } },
+      ctx({ entryStack: [] }),
     )
-    expect(props.text).toBe('Welcome, guest')
+    expect(props.text).toBe('Untitled')
   })
 
-  it('substitutes empty when viewer is null and fallback is empty', () => {
+  it('substitutes empty when currentEntry frame is missing and fallback is empty', () => {
     const props = resolveDynamicProps(
-      { text: 'Welcome, guest' },
-      { text: { source: 'viewer', field: 'displayName', fallback: 'empty' } },
-      ctx({ viewer: null }),
+      { text: 'Untitled' },
+      { text: { source: 'currentEntry', field: 'title', fallback: 'empty' } },
+      ctx({ entryStack: [] }),
     )
     expect(props.text).toBe('')
   })
 
-  it('resolves viewer.displayName when the viewer frame is populated', () => {
-    const viewer = buildViewerFrame({
-      id: 'u1',
-      displayName: 'Davide',
-      email: 'd@e.io',
-      roleSlug: 'editor',
-      roleName: 'Editor',
-    })
+  it('resolves currentEntry.title when an entry is on the stack', () => {
     const props = resolveDynamicProps(
-      { text: 'Welcome, guest' },
-      { text: { source: 'viewer', field: 'displayName' } },
-      ctx({ viewer }),
+      { text: 'Untitled' },
+      { text: { source: 'currentEntry', field: 'title' } },
+      ctx({
+        entryStack: [{ id: 'r1', fields: { title: 'Hello world' } }],
+      }),
     )
-    expect(props.text).toBe('Davide')
+    expect(props.text).toBe('Hello world')
   })
 
   it('supports dotted field paths (no relation traversal, just plain object dive)', () => {
@@ -219,14 +213,14 @@ describe('parseTokenString', () => {
   })
 
   it('preserves additional `|` characters inside the fallback verbatim', () => {
-    const segs = parseTokenString('{viewer.displayName|Anonymous | Visitor}')
+    const segs = parseTokenString('{currentEntry.title|Anonymous | Visitor}')
     expect(segs).toEqual([
       {
         kind: 'token',
-        source: 'viewer',
-        field: 'displayName',
+        source: 'currentEntry',
+        field: 'title',
         fallback: 'Anonymous | Visitor',
-        raw: '{viewer.displayName|Anonymous | Visitor}',
+        raw: '{currentEntry.title|Anonymous | Visitor}',
       },
     ])
   })
@@ -261,8 +255,8 @@ describe('interpolateTokens', () => {
     expect(out).toBe('Before [] After')
   })
 
-  it('omits null viewer fields silently', () => {
-    const out = interpolateTokens('Hi {viewer.displayName}!', ctx({ viewer: null }))
+  it('omits unresolved `currentEntry.*` outside a loop silently', () => {
+    const out = interpolateTokens('Hi {currentEntry.title}!', ctx({ entryStack: [] }))
     expect(out).toBe('Hi !')
   })
 
@@ -276,8 +270,8 @@ describe('interpolateTokens', () => {
   })
 
   it('emits the fallback when the value is missing', () => {
-    const c = ctx({ viewer: null })
-    expect(interpolateTokens('Welcome, {viewer.displayName|guest}!', c)).toBe(
+    const c = ctx({ entryStack: [] })
+    expect(interpolateTokens('Welcome, {currentEntry.title|guest}!', c)).toBe(
       'Welcome, guest!',
     )
   })
@@ -297,8 +291,8 @@ describe('interpolateTokens', () => {
   })
 
   it('emits empty when the value is missing and there is no fallback', () => {
-    const c = ctx({ viewer: null })
-    expect(interpolateTokens('Welcome, {viewer.displayName}!', c)).toBe('Welcome, !')
+    const c = ctx({ entryStack: [] })
+    expect(interpolateTokens('Welcome, {currentEntry.title}!', c)).toBe('Welcome, !')
   })
 })
 
@@ -373,9 +367,5 @@ describe('frame builders', () => {
     expect(route.slug).toBe(null)
     expect(route.segments).toEqual([])
     expect(route.path).toBe('/')
-  })
-
-  it('buildViewerFrame returns null for anonymous', () => {
-    expect(buildViewerFrame(null)).toBe(null)
   })
 })

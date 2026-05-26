@@ -487,10 +487,14 @@ A node is **dynamic** if any of the following holds:
    - `currentEntry.*` → publish-time (entry is known)
    - `route.path`, `route.slug` → publish-time (URL is fixed per static route)
    - `route.query.*` → REQUEST (varies per visitor URL)
-   - `site.*` → publish-time
-   - `viewer.*` → REQUEST (if/when added)
+   - `site.*` / `page.*` → publish-time
    - Plugin-registered sources declare their own classification via
-     `requestDependent: boolean` on registration.
+     `requestDependent: boolean` on registration. (No public-visitor
+     identity source is built in. A `viewer.*` source was considered
+     for `{viewer.displayName}`-style tokens but removed before v1:
+     dead surface on the public site without a visitor-auth concept.
+     Plugins can add their own via a future plugin-source registry,
+     or a member-auth feature can reintroduce it as a core source.)
 3. **It's a `base.loop` whose source is request-dependent** (e.g. a
    plugin loop source that hits a live API and declares itself
    request-dependent). Most built-in loops (querying the CMS data
@@ -594,8 +598,7 @@ ALSO works for non-JS visitors as a meaningful default.
 - **New:** `server/handlers/cms/hole.ts`
   - `GET /_pb/hole/<nodeId>?v=<publishVersion>` → finds the node in the
     snapshot, renders it through `renderNode` against a minimal
-    `RenderContext` (with the request available for plugin auth /
-    `viewer.*` resolution), returns HTML.
+    `RenderContext`, returns HTML.
   - The response goes through Layer B's render cache with key
     `hole:<nodeId>:<queryString>` and `publishVersion`. Single-flight
     + LRU. Most popular holes render once per cache lifetime.

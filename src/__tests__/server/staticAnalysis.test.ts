@@ -120,13 +120,13 @@ describe('isBindingSourceRequestDependent', () => {
     expect(isBindingSourceRequestDependent('route', 'query.page')).toBe(true)
   })
 
-  it('returns true for viewer', () => {
-    expect(isBindingSourceRequestDependent('viewer', 'name')).toBe(true)
-    expect(isBindingSourceRequestDependent('viewer', 'id')).toBe(true)
-  })
-
   it('returns false for unknown sources (conservative / static-default)', () => {
     expect(isBindingSourceRequestDependent('unknown', 'field')).toBe(false)
+    // Pre-v1, no public-visitor identity source exists. A `viewer` source
+    // would have been classified as request-dependent if it existed; the
+    // unknown-source default keeps the door open for a plugin-provided
+    // visitor frame later without forcing it to be request-dependent.
+    expect(isBindingSourceRequestDependent('viewer', 'displayName')).toBe(false)
   })
 })
 
@@ -235,14 +235,15 @@ describe('isFullyStaticPage', () => {
   // ── Case 5: dynamicBindings with request-dependent source → false ──────────
   it('returns false when a node has a structured dynamicBinding with a request-dependent source', () => {
     // Structured bindings survive in dynamicBindings only for non-string props
-    // (booleans, numbers). Here we simulate a hidden:boolean binding on viewer.
+    // (booleans, numbers). Simulate a hidden:boolean binding on `route.query.*`
+    // which is the canonical request-dependent source post-v1.
     const page = makePage({
       root: { moduleId: 'base.body', children: ['banner'] },
       banner: {
         moduleId: 'base.text',
         props: { showCount: 0 },
         dynamicBindings: {
-          showCount: { source: 'viewer', field: 'cartCount' },
+          showCount: { source: 'route', field: 'query.cartCount' },
         },
       },
     })
@@ -254,7 +255,7 @@ describe('isFullyStaticPage', () => {
 
     expect(isFullyStaticPage(page, site, registry)).toBe(false)
     const reasons = staticReasons(page, site, registry)
-    expect(reasons.some((r) => r.includes('viewer.cartCount') && r.includes('request-dependent'))).toBe(
+    expect(reasons.some((r) => r.includes('route.query.cartCount') && r.includes('request-dependent'))).toBe(
       true,
     )
   })

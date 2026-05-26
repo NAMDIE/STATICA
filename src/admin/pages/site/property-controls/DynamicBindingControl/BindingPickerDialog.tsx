@@ -792,7 +792,6 @@ export function BindingPickerDialog({
     if (selectedSystemSourceId) {
       // Build the chosen frame from the in-memory site state. Anonymous
       // visitor preview for `viewer` until we surface the current admin
-      // user — bindings against `viewer` resolve to empty in that case.
       const frame: Record<string, unknown> | null = (() => {
         if (selectedSystemSourceId === 'page') {
           return activePageForFrame
@@ -803,9 +802,6 @@ export function BindingPickerDialog({
           return activeSite
             ? (buildSiteFrame(activeSite) as unknown as Record<string, unknown>)
             : null
-        }
-        if (selectedSystemSourceId === 'viewer') {
-          return null
         }
         if (selectedSystemSourceId === 'route') {
           return activePageForFrame
@@ -845,11 +841,7 @@ export function BindingPickerDialog({
                 <span className={styles.previewRowId}>{fieldId}</span>
               </div>
               <div className={styles.previewRowValue}>
-                {frame
-                  ? formatPreviewValue(frame[fieldId])
-                  : selectedSystemSourceId === 'viewer'
-                    ? '(anonymous — resolves at runtime)'
-                    : '—'}
+                {frame ? formatPreviewValue(frame[fieldId]) : '—'}
               </div>
             </div>
           </div>

@@ -16,7 +16,7 @@
  *
  *   1. Module is flagged `dynamic: true` in the registry.
  *   2. Node has a `dynamicBindings` entry whose source is request-dependent
- *      (`viewer.*`, `route.query.*`).
+ *      (currently: `route.query.*`).
  *   2b. A string prop value contains a `{source.field}` token whose source is
  *      request-dependent.
  *   3. `moduleId === 'base.loop'` AND the loop source has `requestDependent: true`.
@@ -54,7 +54,6 @@ import { containsTokens, parseTokenString } from '@core/templates/tokenInterpola
  * sources can extend the classification without changing the union type.
  *
  * Built-in classification:
- *   - `viewer.*`          → request-time (per-visitor identity)
  *   - `route.query.*`     → request-time (varies with URL query string)
  *   - `currentEntry.*`    → publish-time (entry is known at publish)
  *   - `parentEntry.*`     → publish-time
@@ -62,12 +61,14 @@ import { containsTokens, parseTokenString } from '@core/templates/tokenInterpola
  *   - `site.*`            → publish-time
  *   - `route.path`        → publish-time (fixed per static route)
  *   - `route.slug`        → publish-time
+ *
+ * No public-visitor identity source is built in. Membership / visitor-auth
+ * is a future feature (likely as a plugin); when it lands, the plugin
+ * (or a future plugin-source registry) is the place to declare its own
+ * request-dependent sources.
  */
 export function isBindingSourceRequestDependent(source: string, field: string): boolean {
   switch (source) {
-    case 'viewer':
-      // Authenticated-user identity — always per-request.
-      return true
     case 'route':
       // route.path and route.slug are fixed per static route.
       // route.query and route.query.* vary per visitor URL.
