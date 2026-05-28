@@ -109,16 +109,42 @@
    inner card to `width/height: 100%` makes the floating visual
    perfectly 1:1 with the original — no scale, no shrink, no
    resize-flicker.
-   We deliberately DO NOT apply `transform: scale(1.02)` here. A
-   sub-pixel scale-up would break the seamless lift the user
+   We deliberately DO NOT apply `transform: scale(1.02)` here at
+   rest. A sub-pixel scale-up would break the seamless lift the user
    expects; the box-shadow alone reads as "this is lifted off the
-   surface". */
+   surface".
+
+   `--proximity-scale` is fed inline by `DashboardPage` on every
+   `onDragMove` tick: 1 when the dragged tile is far from the
+   bottom-docked drop-to-remove pill, ramping down to ~0.32 once the
+   tile overlaps the pill. The transform-origin stays at `center center`
+   (the default) so the tile shrinks uniformly around the cursor,
+   revealing the pill below it as the tile gets smaller. We deliberately
+   do NOT anchor to `bottom center` — the cursor is typically grabbed
+   near the tile's centre, so a bottom-anchored shrink would visibly
+   drift the tile upward away from the pointer, which reads as a glitch.
+   Without this scale-down, the full-size overlay completely covers the
+   pill and the user can't see where they're aiming. */
 .dragOverlay {
+    /* Default proximity scale (1 = no shrink). `DashboardPage` overrides
+       this inline on every `onDragMove` tick so the tile shrinks as it
+       approaches the bottom-pill. The bare `--proximity-scale` token
+       (no `var(... , fallback)` form) is required by the CSS var()
+       fallback policy. */
+    --proximity-scale: 1;
     width: 100%;
     height: 100%;
     pointer-events: none;
     box-shadow: 0 24px 56px rgba(0, 0, 0, 0.6);
     border-radius: 16px;
+    transform: scale(var(--proximity-scale));
+    transition: transform 140ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dragOverlay {
+        transition: none;
+    }
 }
 
 /* ── Resize handles ────────────────────────────────────────────────

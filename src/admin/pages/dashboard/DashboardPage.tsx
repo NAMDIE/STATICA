@@ -95,6 +95,30 @@ type RangeKey = 'today' | '7d' | '30d' | 'all'
  *  preview tile's row count in `BlockLibrary.tsx`. */
 const ADD_DEFAULT_ROWS = 3
 
+/**
+ * Distance from the bottom-pill at which the DragOverlay starts shrinking.
+ * Picked so the user sees the pill emerge from under the tile a comfortable
+ * scroll's worth of pixels before reaching it — fast pointer motions still
+ * arrive at the pill already mostly-shrunken.
+ */
+const PROXIMITY_FADE_START_PX = 260
+
+/**
+ * Final scale applied to the DragOverlay when the dragged tile is directly
+ * on top of the pill. Small enough that the pill is fully visible behind
+ * the floating widget; large enough that the user still recognises what
+ * they're dragging.
+ */
+const PROXIMITY_MIN_SCALE = 0.32
+
+/**
+ * Vertical footprint of the bottom pill in CSS pixels (matches
+ * `BlockLibrary.module.css`: `bottom: 28px; height: 44px`). The proximity
+ * math measures the distance from the dragged tile's bottom edge to the
+ * pill's top edge, which is `window.innerHeight - PILL_FOOTPRINT_PX`.
+ */
+const PILL_FOOTPRINT_PX = 72
+
 function greetingFor(displayName: string | null | undefined): string {
   const hour = new Date().getHours()
   const time = hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening'
@@ -198,6 +222,24 @@ export function DashboardPage() {
     | null
   >(null)
 
+  /**
+   * Proximity scale for the DragOverlay child — drops the dragged tile
+   * down to a smaller footprint as it approaches the bottom-docked
+   * "drop to remove" pill. Without this the full-size overlay completely
+   * covers the pill and the user can't see where they're aiming. The
+   * value is recomputed on every `onDragMove` tick from the dragged
+   * element's bottom edge versus the pill's top edge:
+   *
+   *   distance ≥ PROXIMITY_FADE_START  → scale = 1   (no effect)
+   *   distance ≤ 0 (overlapping)       → scale = PROXIMITY_MIN_SCALE
+   *   in-between                       → linear interpolation
+   *
+   * The overlay child shrinks uniformly around its cursor anchor (origin
+   * stays `center center`), so the pill emerges from underneath the tile
+   * as it gets smaller. Resets to 1 on drag end / cancel.
+   */
+  const [proximityScale, setProximityScale] = useState(1)
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
   )
@@ -247,6 +289,23 @@ export function DashboardPage() {
   function handleDragStart(event: DragStartEvent) {
     setActiveId(String(event.active.id))
     setDropTarget(null)
+    setProximityScale(1)
+  }
+
+  /**
+   * Compute the proximity scale for the DragOverlay child based on the
+   * dragged element's bottom edge versus the bottom pill's top edge.
+   * Returns 1 when the drag is far from the pill, and ramps down to
+   * `PROXIMITY_MIN_SCALE` as the tile overlaps the pill. Pure function
+   * so the math is testable without standing up a DnD harness.
+   */
+  function computeProximityScale(draggedBottomY: number, viewportHeight: number): number {
+    const pillTopY = viewportHeight - PILL_FOOTPRINT_PX
+    const distance = pillTopY - draggedBottomY
+    if (distance >= PROXIMITY_FADE_START_PX) return 1
+    if (distance <= 0) return PROXIMITY_MIN_SCALE
+    const t = distance / PROXIMITY_FADE_START_PX
+    return PROXIMITY_MIN_SCALE + (1 - PROXIMITY_MIN_SCALE) * t
   }
 
   /**
@@ -343,6 +402,7 @@ export function DashboardPage() {
     const draggedRect = event.active.rect.current.translated
     if (!grid || !draggedRect) {
       setDropTarget(null)
+      setProximityScale(1)
       return
     }
     const overGrid = event.over?.id === GRID_DROP_ID
@@ -369,12 +429,25 @@ export function DashboardPage() {
       }
       return next
     })
+
+    // Update the proximity scale on every move tick. The DragOverlay
+    // child reads this through inline `transform: scale(...)` so the
+    // shrink animation runs in CSS (smooth, GPU-composited) rather
+    // than re-mounting the overlay subtree.
+    const nextScale = computeProximityScale(draggedRect.bottom, window.innerHeight)
+    setProximityScale((prev) => {
+      // Skip React updates within a few hundredths — the visual
+      // change is imperceptible and avoids a 60Hz re-render storm.
+      if (Math.abs(prev - nextScale) < 0.01) return prev
+      return nextScale
+    })
   }
 
   function handleDragEnd(event: DragEndEvent) {
     const rawId = String(event.active.id)
     setActiveId(null)
     setDropTarget(null)
+    setProximityScale(1)
     const grid = gridRef.current
     const draggedRect = event.active.rect.current.translated
     if (!grid || !draggedRect) return
@@ -414,8 +487,10 @@ export function DashboardPage() {
 
   // The DragOverlay renders a portal-rooted visual at the pointer. We
   // resolve which kind of source is active (existing cell vs. library
-  // preview) so the overlay reads as the same tile the user picked up.
-  const overlayContent = renderOverlay(activeId, visibleItems, definitionsById)
+  // preview) so the overlay reads as the same tile the user picked up,
+  // and pass the proximity scale so the tile shrinks toward the bottom
+  // pill as the drop-to-remove gesture approaches commit.
+  const overlayContent = renderOverlay(activeId, visibleItems, definitionsById, proximityScale)
 
   return (
     <AdminPageLayout
@@ -485,7 +560,19 @@ export function DashboardPage() {
         onDragCancel={() => {
           setActiveId(null)
           setDropTarget(null)
+          setProximityScale(1)
         }}
+        // Auto-scroll OFF: dnd-kit's default scrolls the window when the
+        // pointer is within 20% of a viewport edge — which fires the
+        // instant the user moves a tile toward the bottom-docked "drop
+        // to remove" pill (the pill lives in that very band). The page
+        // would slide down under the cursor while the user is trying to
+        // aim at a stationary target, which the user flagged as a UX
+        // bug. The dashboard surface fits comfortably on a normal
+        // viewport, so disabling auto-scroll wholesale is a safe trade
+        // — for the rare case of a very tall grid, the user can scroll
+        // manually before initiating the drag.
+        autoScroll={false}
       >
         <DashboardGrid
           items={visibleItems}
@@ -579,11 +666,17 @@ export function DashboardPage() {
  *
  *   • Library drags get a sized preview tile with the same renderer at
  *     its default size, so the user sees what will land.
+ *
+ *   • `proximityScale` is fed through `--proximity-scale` (read by
+ *     `.dragOverlay` in `DashboardGrid.module.css`). It rides on top of
+ *     dnd-kit's own translate transform so the tile shrinks toward the
+ *     bottom-pill without breaking the pointer-follow behaviour.
  */
 function renderOverlay(
   activeId: string | null,
   items: readonly DashboardItem[],
   definitions: ReadonlyMap<string, DashboardWidgetDefinition>,
+  proximityScale: number,
 ) {
   if (!activeId) return null
 
@@ -606,6 +699,7 @@ function renderOverlay(
         style={{
           ['--span' as string]: String(def.defaultSize),
           ['--rows' as string]: String(ADD_DEFAULT_ROWS),
+          ['--proximity-scale' as string]: String(proximityScale),
         }}
       >
         <Render span={def.defaultSize} editing />
@@ -626,6 +720,7 @@ function renderOverlay(
       style={{
         ['--span' as string]: String(item.size),
         ['--rows' as string]: String(item.rows),
+        ['--proximity-scale' as string]: String(proximityScale),
       }}
     >
       <Render span={item.size} editing />
