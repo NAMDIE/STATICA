@@ -22,7 +22,6 @@ import {
   useState,
   useRef,
   useEffect,
-  useCallback,
   useId,
   useImperativeHandle,
   type FormEvent,
@@ -105,12 +104,7 @@ interface ClassPickerProps {
 
 export function ClassPicker({ nodeId, trailingAction, ref }: ClassPickerProps) {
   const site = useEditorStore((s) => s.site)
-  const node = useEditorStore(
-    useCallback(
-      (s) => selectActiveCanvasPage(s)?.nodes[nodeId] ?? null,
-      [nodeId],
-    ),
-  )
+  const node = useEditorStore((s) => selectActiveCanvasPage(s)?.nodes[nodeId] ?? null)
   const activeClassId = useEditorStore((s) => s.activeClassId)
   const setActiveClass = useEditorStore((s) => s.setActiveClass)
   const addNodeClass = useEditorStore((s) => s.addNodeClass)
@@ -181,23 +175,20 @@ export function ClassPicker({ nodeId, trailingAction, ref }: ClassPickerProps) {
 
   const suggestions = isEmptyQuery ? candidates : filteredSuggestions
 
-  const openSuggestions = useCallback(() => {
+  const openSuggestions = () => {
     setShowSuggestions(true)
-  }, [])
+  }
 
-  const handleAddExisting = useCallback(
-    (classId: string) => {
-      addNodeClass(nodeId, classId)
-      setActiveClass(classId)
-      clearPreviewNodeClass(nodeId, classId)
-      recordClassUsage(classId)
-      setQuery('')
-      setShowSuggestions(false)
-    },
-    [nodeId, addNodeClass, setActiveClass, clearPreviewNodeClass],
-  )
+  const handleAddExisting = (classId: string) => {
+    addNodeClass(nodeId, classId)
+    setActiveClass(classId)
+    clearPreviewNodeClass(nodeId, classId)
+    recordClassUsage(classId)
+    setQuery('')
+    setShowSuggestions(false)
+  }
 
-  const handleCreateAndAdd = useCallback(() => {
+  const handleCreateAndAdd = () => {
     const name = query.trim()
     if (!name) return
     try {
@@ -211,7 +202,7 @@ export function ClassPicker({ nodeId, trailingAction, ref }: ClassPickerProps) {
     } catch {
       // Class with this name already exists
     }
-  }, [query, createClass, addNodeClass, nodeId, setActiveClass, clearPreviewNodeClass])
+  }
 
   // Shared submit logic for both the Enter key and the trailing enter-icon
   // button. Resolution priority:
@@ -235,20 +226,14 @@ export function ClassPicker({ nodeId, trailingAction, ref }: ClassPickerProps) {
     if (canCreateNew) handleCreateAndAdd()
   }
 
-  const previewClass = useCallback(
-    (classId: string) => {
-      if (!hoverPreviewEnabled) return
-      setPreviewNodeClass(nodeId, classId)
-    },
-    [hoverPreviewEnabled, nodeId, setPreviewNodeClass],
-  )
+  const previewClass = (classId: string) => {
+    if (!hoverPreviewEnabled) return
+    setPreviewNodeClass(nodeId, classId)
+  }
 
-  const clearPreviewClass = useCallback(
-    (classId: string) => {
-      clearPreviewNodeClass(nodeId, classId)
-    },
-    [clearPreviewNodeClass, nodeId],
-  )
+  const clearPreviewClass = (classId: string) => {
+    clearPreviewNodeClass(nodeId, classId)
+  }
 
   useEffect(() => {
     if (!hoverPreviewEnabled) clearPreviewNodeClass(nodeId)
@@ -273,51 +258,39 @@ export function ClassPicker({ nodeId, trailingAction, ref }: ClassPickerProps) {
     el?.scrollIntoView({ block: 'nearest' })
   }, [highlightedClassId])
 
-  const closeSuggestions = useCallback(() => {
+  const closeSuggestions = () => {
     clearPreviewNodeClass(nodeId)
     setShowSuggestions(false)
     setHighlightedIndex(-1)
-  }, [clearPreviewNodeClass, nodeId])
+  }
 
-  const closeContextMenu = useCallback(() => {
+  const closeContextMenu = () => {
     setContextMenu(null)
-  }, [])
+  }
 
-  const openClassContextMenu = useCallback(
-    (classId: string, event: MouseEvent<HTMLElement>) => {
-      event.preventDefault()
-      event.stopPropagation()
-      setContextMenu({ x: event.clientX, y: event.clientY, classId })
-    },
-    [],
-  )
+  const openClassContextMenu = (classId: string, event: MouseEvent<HTMLElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setContextMenu({ x: event.clientX, y: event.clientY, classId })
+  }
 
-  const openKeyboardClassContextMenu = useCallback(
-    (classId: string, event: KeyboardEvent<HTMLElement>) => {
-      if (event.key !== 'ContextMenu' && !(event.key === 'F10' && event.shiftKey)) return
-      event.preventDefault()
-      event.stopPropagation()
-      setContextMenu({ ...keyboardMenuPosition(event.currentTarget), classId })
-    },
-    [],
-  )
+  const openKeyboardClassContextMenu = (classId: string, event: KeyboardEvent<HTMLElement>) => {
+    if (event.key !== 'ContextMenu' && !(event.key === 'F10' && event.shiftKey)) return
+    event.preventDefault()
+    event.stopPropagation()
+    setContextMenu({ ...keyboardMenuPosition(event.currentTarget), classId })
+  }
 
-  const handleRename = useCallback(
-    (name: string) => {
-      if (!renameTarget) return
-      renameClass(renameTarget.id, name)
-      setRenameTarget(null)
-    },
-    [renameClass, renameTarget],
-  )
+  const handleRename = (name: string) => {
+    if (!renameTarget) return
+    renameClass(renameTarget.id, name)
+    setRenameTarget(null)
+  }
 
-  const removeAssignedClass = useCallback(
-    (classId: string) => {
-      if (activeClassId === classId) setActiveClass(null)
-      removeNodeClass(nodeId, classId)
-    },
-    [activeClassId, nodeId, removeNodeClass, setActiveClass],
-  )
+  const removeAssignedClass = (classId: string) => {
+    if (activeClassId === classId) setActiveClass(null)
+    removeNodeClass(nodeId, classId)
+  }
 
   // Search-input keyboard dispatch. Inline-defined in the JSX would push the
   // component's cognitive complexity past the panel-wide threshold; named here
