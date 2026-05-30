@@ -74,6 +74,7 @@ export function Input({
   trailingSlot,
   numberSpinner,
   type,
+  autoComplete = 'off',
   ref,
   ...props
 }: InputProps) {
@@ -107,6 +108,7 @@ export function Input({
     <input
       ref={setRef}
       type={type}
+      autoComplete={autoComplete}
       aria-invalid={invalid || props['aria-invalid'] ? true : undefined}
       data-emphasis={emphasis !== 'default' ? emphasis : undefined}
       className={cn(
@@ -175,12 +177,14 @@ export function Textarea({
   monospace = false,
   emphasis = 'default',
   resize = 'vertical',
+  autoComplete = 'off',
   ref,
   ...props
 }: TextareaProps) {
   return (
     <textarea
       ref={ref}
+      autoComplete={autoComplete}
       aria-invalid={invalid || props['aria-invalid'] ? true : undefined}
       data-emphasis={emphasis !== 'default' ? emphasis : undefined}
       data-resize={resize}

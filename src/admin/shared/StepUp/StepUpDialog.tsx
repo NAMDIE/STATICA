@@ -111,6 +111,7 @@ export function StepUpDialog({
             <Input
               id={passwordId}
               type="password"
+              autoComplete="current-password"
               autoFocus
               required
               disabled={submitting}
