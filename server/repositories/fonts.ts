@@ -18,7 +18,7 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { nanoid } from 'nanoid'
-import type { FontEntry, FontFile } from '@core/fonts/schemas'
+import type { FontEntry, FontFile, FontFileFormat } from '@core/fonts/schemas'
 import { familySlug } from '@core/fonts/css'
 import { compareVariants, parseVariant, variantsToCss2Axis } from '@core/fonts/variants'
 import { findGoogleFont } from '@core/fonts/googleDirectory'
