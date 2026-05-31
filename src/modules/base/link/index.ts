@@ -8,13 +8,19 @@ import type { ModuleDefinition } from '@core/module-engine/types'
 import { registry } from '@core/module-engine/registry'
 import { LinkIcon } from 'pixel-art-icons/icons/link'
 import { safeUrl } from '@modules/base/utils/escape'
+import { Type, Value, type Static } from '@core/utils/typeboxHelpers'
 import { LinkEditor } from './LinkEditor'
 
-interface LinkProps extends Record<string, unknown> {
-  href: string
-  text: string
-  target: '_blank' | '_self' | '_parent'
-}
+const LinkPropsSchema = Type.Object({
+  href: Type.String({ default: '#' }),
+  text: Type.String({ default: 'Click here' }),
+  target: Type.Union(
+    [Type.Literal('_self'), Type.Literal('_blank'), Type.Literal('_parent')],
+    { default: '_self' },
+  ),
+})
+
+type LinkProps = Static<typeof LinkPropsSchema>
 
 export const LinkModule: ModuleDefinition<LinkProps> = {
   id: 'base.link',
@@ -40,11 +46,9 @@ export const LinkModule: ModuleDefinition<LinkProps> = {
     },
   },
 
-  defaults: {
-    href: '#',
-    text: 'Click here',
-    target: '_self',
-  },
+  propsSchema: LinkPropsSchema,
+
+  defaults: Value.Create(LinkPropsSchema),
 
   component: LinkEditor,
 

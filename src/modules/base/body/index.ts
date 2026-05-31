@@ -13,8 +13,13 @@ import type { ModuleDefinition } from '@core/module-engine/types'
 import { registry } from '@core/module-engine/registry'
 import { FileTextSolidIcon } from 'pixel-art-icons/icons/file-text-solid'
 import { BodyEditor } from './BodyEditor'
+import { Type } from '@core/utils/typeboxHelpers'
+import type { Static } from '@core/utils/typeboxHelpers'
 
-type BodyProps = Record<string, unknown>
+// No authored fields — additionalProperties:true makes validation a pass-through
+// while still satisfying the propsSchema contract for consistency.
+const BodyPropsSchema = Type.Object({}, { additionalProperties: true })
+type BodyProps = Static<typeof BodyPropsSchema>
 
 export const BodyModule: ModuleDefinition<BodyProps> = {
   id: 'base.body',
@@ -26,6 +31,7 @@ export const BodyModule: ModuleDefinition<BodyProps> = {
   icon: FileTextSolidIcon,
 
   schema: {},
+  propsSchema: BodyPropsSchema,
   defaults: {},
 
   component: BodyEditor,

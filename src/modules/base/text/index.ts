@@ -7,26 +7,32 @@
 import type { ModuleDefinition } from '@core/module-engine/types'
 import { registry } from '@core/module-engine/registry'
 import { TextStartTIcon } from 'pixel-art-icons/icons/text-start-t'
+import { Type, Value, type Static } from '@core/utils/typeboxHelpers'
 import { TextEditor } from './TextEditor'
 
-type TextTag =
-  | 'p'
-  | 'h1'
-  | 'h2'
-  | 'h3'
-  | 'h4'
-  | 'h5'
-  | 'h6'
-  | 'span'
-  | 'div'
-  | 'small'
-  | 'strong'
-  | 'em'
+const TextPropsSchema = Type.Object({
+  text: Type.String({ default: 'Add your text here.' }),
+  tag: Type.Union(
+    [
+      Type.Literal('p'),
+      Type.Literal('h1'),
+      Type.Literal('h2'),
+      Type.Literal('h3'),
+      Type.Literal('h4'),
+      Type.Literal('h5'),
+      Type.Literal('h6'),
+      Type.Literal('span'),
+      Type.Literal('div'),
+      Type.Literal('small'),
+      Type.Literal('strong'),
+      Type.Literal('em'),
+    ],
+    { default: 'p' },
+  ),
+})
 
-interface TextProps extends Record<string, unknown> {
-  text: string
-  tag: TextTag
-}
+type TextProps = Static<typeof TextPropsSchema>
+type TextTag = TextProps['tag']
 
 const TEXT_TAGS = new Set<TextTag>([
   'p',
@@ -84,10 +90,9 @@ export const TextModule: ModuleDefinition<TextProps> = {
     },
   },
 
-  defaults: {
-    text: 'Add your text here.',
-    tag: 'p',
-  },
+  propsSchema: TextPropsSchema,
+
+  defaults: Value.Create(TextPropsSchema),
 
   component: TextEditor,
 

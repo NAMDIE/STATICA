@@ -19,12 +19,15 @@ import type { ModuleDefinition } from '@core/module-engine/types'
 import { registry } from '@core/module-engine/registry'
 import { BracesIcon } from 'pixel-art-icons/icons/braces'
 import { VisualComponentRefEditor } from './VisualComponentRefEditor'
+import { Type } from '@core/utils/typeboxHelpers'
+import type { Static } from '@core/utils/typeboxHelpers'
 
-interface VisualComponentRefProps extends Record<string, unknown> {
-  componentId: string
+const VisualComponentRefPropsSchema = Type.Object({
+  componentId: Type.String({ default: '' }),
   /** Per-param value overrides — keyed by VCParam.id (stable across renames) */
-  propOverrides: Record<string, unknown>
-}
+  propOverrides: Type.Record(Type.String(), Type.Unknown(), { default: {} }),
+})
+type VisualComponentRefProps = Static<typeof VisualComponentRefPropsSchema>
 
 export const VisualComponentRefModule: ModuleDefinition<VisualComponentRefProps> = {
   id: 'base.visual-component-ref',
@@ -40,6 +43,7 @@ export const VisualComponentRefModule: ModuleDefinition<VisualComponentRefProps>
   // renders ComponentRefView instead (Contribution #619 §8.5).
   schema: {},
 
+  propsSchema: VisualComponentRefPropsSchema,
   defaults: {
     componentId: '',
     propOverrides: {},

@@ -27,6 +27,7 @@ import type { TSchema, Static as TBStatic } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
 
 export { Type, Value }
+export type { TSchema }
 export type Static<T extends TSchema> = TBStatic<T>
 
 // Sentinel used to attach a fallback to any schema. Picked up by

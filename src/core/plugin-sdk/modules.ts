@@ -12,6 +12,8 @@
  * with the canvas module registry.
  */
 
+import type { TSchema } from '@core/utils/typeboxHelpers'
+
 // ---------------------------------------------------------------------------
 // Property control — a JSON-friendly subset of the host PropertySchema.
 // We only expose the controls a plugin module can usefully render. The host
@@ -112,6 +114,13 @@ export interface PluginModuleDefinition {
   defaults: Record<string, unknown>
   /** Property controls that drive the editor Properties Panel. */
   schema: PluginPropertySchema
+  /**
+   * Optional TypeBox schema for publisher-boundary prop coercion. When set,
+   * `validateNodeProps` coerces and default-fills props before calling
+   * `render()`. Absence is tolerated — the publisher passes rawProps through
+   * unchanged for modules with no schema.
+   */
+  propsSchema?: TSchema
   /** Whether the module can hold child modules. */
   canHaveChildren?: boolean
   /**

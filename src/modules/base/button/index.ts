@@ -9,14 +9,20 @@ import type { ModuleDefinition } from '@core/module-engine/types'
 import { registry } from '@core/module-engine/registry'
 import { CursorClickSolidIcon } from 'pixel-art-icons/icons/cursor-click-solid'
 import { safeUrl } from '@modules/base/utils/escape'
+import { Type, Value, type Static } from '@core/utils/typeboxHelpers'
 import { ButtonEditor } from './ButtonEditor'
 
-interface ButtonProps extends Record<string, unknown> {
-  label: string
-  href: string
-  target: '_blank' | '_self' | '_parent'
-  disabled: boolean
-}
+const ButtonPropsSchema = Type.Object({
+  label: Type.String({ default: 'Get Started' }),
+  href: Type.String({ default: '' }),
+  target: Type.Union(
+    [Type.Literal('_self'), Type.Literal('_blank'), Type.Literal('_parent')],
+    { default: '_self' },
+  ),
+  disabled: Type.Boolean({ default: false }),
+})
+
+type ButtonProps = Static<typeof ButtonPropsSchema>
 
 export const ButtonModule: ModuleDefinition<ButtonProps> = {
   id: 'base.button',
@@ -47,12 +53,9 @@ export const ButtonModule: ModuleDefinition<ButtonProps> = {
     disabled: { type: 'toggle', label: 'Disabled' },
   },
 
-  defaults: {
-    label: 'Get Started',
-    href: '',
-    target: '_self',
-    disabled: false,
-  },
+  propsSchema: ButtonPropsSchema,
+
+  defaults: Value.Create(ButtonPropsSchema),
 
   component: ButtonEditor,
 

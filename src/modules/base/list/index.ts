@@ -6,13 +6,18 @@
  */
 import type { ModuleDefinition } from '@core/module-engine/types'
 import { registry } from '@core/module-engine/registry'
+import { Type, Value, type Static } from '@core/utils/typeboxHelpers'
 import { ListBoxSolidIcon } from 'pixel-art-icons/icons/list-box-solid'
 import { ListEditor } from './ListEditor'
 
-interface ListProps extends Record<string, unknown> {
-  items: string
-  listType: 'unordered' | 'ordered'
-}
+const ListPropsSchema = Type.Object({
+  items: Type.String({ default: '' }),
+  listType: Type.Union([Type.Literal('unordered'), Type.Literal('ordered')], {
+    default: 'unordered',
+  }),
+})
+
+type ListProps = Static<typeof ListPropsSchema>
 
 function parseItems(raw: string): string[] {
   return raw
@@ -48,10 +53,8 @@ export const ListModule: ModuleDefinition<ListProps> = {
     },
   },
 
-  defaults: {
-    items: '',
-    listType: 'unordered',
-  },
+  propsSchema: ListPropsSchema,
+  defaults: Value.Create(ListPropsSchema) as ListProps,
 
   component: ListEditor,
 

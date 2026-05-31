@@ -147,6 +147,9 @@ export function pluginModuleToHostModule(
     canHaveChildren: Boolean(definition.canHaveChildren),
     schema: translatePropertySchema(definition.schema),
     defaults: definition.defaults,
+    // Pass propsSchema through verbatim — validateNodeProps handles absence
+    // as a no-op, so plugins without a schema are unaffected.
+    ...(definition.propsSchema ? { propsSchema: definition.propsSchema } : {}),
     component: componentFactory(definition),
     htmlTag: typeof definition.htmlTag === 'string' ? definition.htmlTag : undefined,
     // Dependencies declared by the plugin module flow into the site's

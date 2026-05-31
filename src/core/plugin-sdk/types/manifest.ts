@@ -4,6 +4,7 @@ import type { PluginApiVersion } from './apiVersion'
 import type { PluginPermission } from './permissions'
 import type { PluginResource } from './resources'
 import type { ContentAccessEntry } from '../contentSchemas'
+import type { PluginSettingDefinition } from '../builders/settings'
 
 // ---------------------------------------------------------------------------
 // Manifest building blocks
@@ -105,25 +106,9 @@ export interface PluginManifest {
   /**
    * Declarative settings — the host renders a form for them and persists
    * the user's values in `installed_plugins.settings_json`. Plugin reads
-   * values via `api.cms.settings.*`. The full setting definitions live
-   * in `src/core/plugin-sdk/builders/settings.ts`; we keep the type here
-   * loose (`unknown`) so the SDK builder owns the strict shape.
+   * values via `api.cms.settings.*`. Each element is a `PluginSettingDefinition`
+   * from `src/core/plugin-sdk/builders/settings.ts` — a discriminated union
+   * over the eight supported field types.
    */
-  settings?: ReadonlyArray<{
-    id: string
-    label: string
-    description?: string
-    required?: boolean
-    secret?: boolean
-    type: 'text' | 'textarea' | 'number' | 'toggle' | 'select' | 'color' | 'url' | 'password'
-    default?: string | number | boolean
-    options?: ReadonlyArray<{ label: string; value: string }>
-    placeholder?: string
-    rows?: number
-    min?: number
-    max?: number
-    step?: number
-    unit?: string
-    format?: 'hex' | 'rgba'
-  }>
+  settings?: ReadonlyArray<PluginSettingDefinition>
 }

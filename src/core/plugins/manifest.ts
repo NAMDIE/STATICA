@@ -114,39 +114,80 @@ const adminPageSchema = Type.Object({
   content: contentSchema,
 })
 
-// `settings` schema — a discriminated union over the supported types so the
-// host can render the right control without a second parse step.
+// `settings` schema — a discriminated union over the supported types, mirroring
+// `PluginSettingDefinition` in `src/core/plugin-sdk/builders/settings.ts`.
+// The Static type of each variant is assignment-compatible with the
+// corresponding `PluginSettingDefinition` branch (Array<T> extends
+// ReadonlyArray<T>), so parsePluginManifest needs no cast for `settings`.
 const SETTING_ID_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_-]*$/
-const settingTypeSchema = Type.Union([
-  Type.Literal('text'),
-  Type.Literal('textarea'),
-  Type.Literal('number'),
-  Type.Literal('toggle'),
-  Type.Literal('select'),
-  Type.Literal('color'),
-  Type.Literal('url'),
-  Type.Literal('password'),
-])
-const settingDefinitionSchema = Type.Object({
+
+// Base properties shared by every setting variant.
+const settingBaseProps = {
   id: Type.String({ pattern: SETTING_ID_PATTERN.source }),
   label: Type.String({ minLength: 1, maxLength: 80 }),
-  type: settingTypeSchema,
   description: Type.Optional(Type.String({ maxLength: 500 })),
   required: Type.Optional(Type.Boolean()),
   secret: Type.Optional(Type.Boolean()),
-  default: Type.Optional(Type.Union([Type.String(), Type.Number(), Type.Boolean()])),
-  options: Type.Optional(Type.Array(Type.Object({
-    label: Type.String({ minLength: 1, maxLength: 80 }),
-    value: Type.String({ minLength: 1, maxLength: 80 }),
-  }))),
-  placeholder: Type.Optional(Type.String({ maxLength: 120 })),
-  rows: Type.Optional(Type.Number()),
-  min: Type.Optional(Type.Number()),
-  max: Type.Optional(Type.Number()),
-  step: Type.Optional(Type.Number()),
-  unit: Type.Optional(Type.String({ maxLength: 16 })),
-  format: Type.Optional(Type.Union([Type.Literal('hex'), Type.Literal('rgba')])),
+}
+
+const settingOptionSchema = Type.Object({
+  label: Type.String({ minLength: 1, maxLength: 80 }),
+  value: Type.String({ minLength: 1, maxLength: 80 }),
 })
+
+const settingDefinitionSchema = Type.Union([
+  Type.Object({
+    ...settingBaseProps,
+    type: Type.Literal('text'),
+    placeholder: Type.Optional(Type.String({ maxLength: 120 })),
+    default: Type.Optional(Type.String()),
+  }),
+  Type.Object({
+    ...settingBaseProps,
+    type: Type.Literal('textarea'),
+    placeholder: Type.Optional(Type.String({ maxLength: 120 })),
+    rows: Type.Optional(Type.Number({ minimum: 1 })),
+    default: Type.Optional(Type.String()),
+  }),
+  Type.Object({
+    ...settingBaseProps,
+    type: Type.Literal('number'),
+    min: Type.Optional(Type.Number()),
+    max: Type.Optional(Type.Number()),
+    step: Type.Optional(Type.Number()),
+    unit: Type.Optional(Type.String({ maxLength: 16 })),
+    default: Type.Optional(Type.Number()),
+  }),
+  Type.Object({
+    ...settingBaseProps,
+    type: Type.Literal('toggle'),
+    default: Type.Optional(Type.Boolean()),
+  }),
+  Type.Object({
+    ...settingBaseProps,
+    type: Type.Literal('select'),
+    // Required field — a select setting must declare its options.
+    options: Type.Array(settingOptionSchema, { minItems: 1 }),
+    default: Type.Optional(Type.String()),
+  }),
+  Type.Object({
+    ...settingBaseProps,
+    type: Type.Literal('color'),
+    format: Type.Optional(Type.Union([Type.Literal('hex'), Type.Literal('rgba')])),
+    default: Type.Optional(Type.String()),
+  }),
+  Type.Object({
+    ...settingBaseProps,
+    type: Type.Literal('url'),
+    default: Type.Optional(Type.String()),
+  }),
+  Type.Object({
+    ...settingBaseProps,
+    type: Type.Literal('password'),
+    placeholder: Type.Optional(Type.String({ maxLength: 120 })),
+    default: Type.Optional(Type.String()),
+  }),
+])
 
 // Marketplace metadata — author, license, URLs, keywords, visual icon.
 // Validated at the manifest boundary so a malicious zip can't inject
@@ -525,7 +566,7 @@ export function parsePluginManifest(input: unknown): PluginManifest {
     frontend: data.frontend
       ? { assets: data.frontend.assets.map((asset) => ({ ...asset })) } as PluginManifest['frontend']
       : undefined,
-    settings: data.settings as PluginManifest['settings'],
+    settings: data.settings,
     author: data.author,
     license: data.license,
     homepage: data.homepage,

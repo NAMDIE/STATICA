@@ -23,6 +23,7 @@
 
 import type { PageNode } from '@core/page-tree'
 import type { AnyModuleDefinition } from '@core/module-engine/types'
+import { validateNodeProps } from '@core/module-engine'
 import { resolveProps } from '@core/page-tree/selectors'
 import { resolveDynamicProps } from '@core/templates/dynamicBindings'
 import { sanitizeModuleCSS } from './cssCollector'
@@ -114,11 +115,15 @@ function renderStandardNode(
   const effectiveProps = resolveProps(node, ctx.breakpointId, def.schema)
   const resolvedProps = resolveDynamicProps(effectiveProps, node.dynamicBindings, ctx.templateContext)
 
+  // Coerce/default-fill authored props against the module's TypeBox schema
+  // (soft boundary — never throws; unknown injected keys survive the merge).
+  const validatedProps = validateNodeProps(def, resolvedProps)
+
   // Escape all string props (Constraint #211) before calling render(), then
   // attach derived assets that survive the escape boundary unchanged.
-  const safeProps = escapeProps(resolvedProps)
-  attachResolvedMediaByKey(safeProps, def, resolvedProps, ctx.mediaAssets)
-  attachResolvedAutoSizes(safeProps, def, node, resolvedProps, ctx)
+  const safeProps = escapeProps(validatedProps)
+  attachResolvedMediaByKey(safeProps, def, validatedProps, ctx.mediaAssets)
+  attachResolvedAutoSizes(safeProps, def, node, validatedProps, ctx)
 
   const output = def.render(safeProps as never, renderedChildren)
 

@@ -16,12 +16,15 @@ import {
   htmlTagControl,
   resolveHtmlTag,
 } from '@modules/base/utils/htmlTag'
+import { Type, Value, type Static } from '@core/utils/typeboxHelpers'
 import { ContainerEditor } from './ContainerEditor'
 
-interface ContainerProps extends Record<string, unknown> {
-  tag: string
-  customTag: string
-}
+const ContainerPropsSchema = Type.Object({
+  tag: Type.String({ default: 'div' }),
+  customTag: Type.String({ default: '' }),
+})
+
+type ContainerProps = Static<typeof ContainerPropsSchema>
 
 export const ContainerModule: ModuleDefinition<ContainerProps> = {
   id: 'base.container',
@@ -38,10 +41,9 @@ export const ContainerModule: ModuleDefinition<ContainerProps> = {
     customTag: customHtmlTagControl(),
   },
 
-  defaults: {
-    tag: 'div',
-    customTag: '',
-  },
+  propsSchema: ContainerPropsSchema,
+
+  defaults: Value.Create(ContainerPropsSchema),
 
   component: ContainerEditor,
 

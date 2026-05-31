@@ -29,22 +29,28 @@
  */
 import type { ModuleDefinition } from '@core/module-engine/types'
 import { registry } from '@core/module-engine/registry'
+import { Type, Value, type Static } from '@core/utils/typeboxHelpers'
 import { BoxStackSolidIcon } from 'pixel-art-icons/icons/box-stack-solid'
 import { resolveHtmlTag } from '@modules/base/utils/htmlTag'
 import { LoopEditor } from './LoopEditor'
 
-interface LoopProps extends Record<string, unknown> {
-  sourceId: string
-  filters: Record<string, unknown>
-  orderBy: string
-  direction: 'asc' | 'desc'
-  limit: number
-  offset: number
-  pagination: 'none' | 'infinite'
-  pageSize: number
-  tag: string
-  customTag: string
-}
+const LoopPropsSchema = Type.Object({
+  sourceId: Type.String({ default: '' }),
+  // filters is a free-form key→value bag: source plugins may store arbitrary
+  // filter criteria. Type.Record with Unknown values is the most accurate
+  // model; Value.Create yields {} which matches the runtime default.
+  filters: Type.Record(Type.String(), Type.Unknown(), { default: {} }),
+  orderBy: Type.String({ default: '' }),
+  direction: Type.Union([Type.Literal('asc'), Type.Literal('desc')], { default: 'desc' }),
+  limit: Type.Number({ default: 10 }),
+  offset: Type.Number({ default: 0 }),
+  pagination: Type.Union([Type.Literal('none'), Type.Literal('infinite')], { default: 'none' }),
+  pageSize: Type.Number({ default: 10 }),
+  tag: Type.String({ default: 'div' }),
+  customTag: Type.String({ default: '' }),
+})
+
+type LoopProps = Static<typeof LoopPropsSchema>
 
 const LoopModule: ModuleDefinition<LoopProps> = {
   id: 'base.loop',
@@ -62,18 +68,8 @@ const LoopModule: ModuleDefinition<LoopProps> = {
   // which itself renders the shared htmlTag controls.
   schema: {},
 
-  defaults: {
-    sourceId: '',
-    filters: {},
-    orderBy: '',
-    direction: 'desc',
-    limit: 10,
-    offset: 0,
-    pagination: 'none',
-    pageSize: 10,
-    tag: 'div',
-    customTag: '',
-  },
+  propsSchema: LoopPropsSchema,
+  defaults: Value.Create(LoopPropsSchema) as LoopProps,
 
   component: LoopEditor,
 

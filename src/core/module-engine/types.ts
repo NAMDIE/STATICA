@@ -1,5 +1,6 @@
 import type { ComponentType, ReactNode } from 'react'
 import type { IconComponent } from 'pixel-art-icons/types'
+import type { TSchema } from '@core/utils/typeboxHelpers'
 import type { PropertySchema } from './propertySchema'
 
 export type {
@@ -230,6 +231,19 @@ export interface ModuleDefinition<
    * Keys must be flat (no dot-paths). Constraint #212.
    */
   schema: PropertySchema
+
+  /**
+   * Optional TypeBox schema that declares the full shape and per-field
+   * defaults for this module's props. When present, `validateNodeProps`
+   * coerces and default-fills props at the publisher boundary (soft — never
+   * throws). The schema is the single source of truth for shape + defaults;
+   * `defaults` should be derived from it via `Value.Create(propsSchema)`.
+   *
+   * Publisher-injected render-time fields (`_resolvedMediaByKey`,
+   * `_resolvedAutoSizes`) must NOT appear in this schema — they are
+   * injected after the coercion step and survive through the merge.
+   */
+  propsSchema?: TSchema
 
   /** Default property values matching the schema */
   defaults: TProps

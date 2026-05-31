@@ -7,12 +7,15 @@
  */
 import type { ModuleDefinition } from '@core/module-engine/types'
 import { registry } from '@core/module-engine/registry'
+import { Type, Value, type Static } from '@core/utils/typeboxHelpers'
 import { ArticleSolidIcon } from 'pixel-art-icons/icons/article-solid'
 import { ContentEditor } from './ContentEditor'
 
-interface ContentProps extends Record<string, unknown> {
-  html: string
-}
+const ContentPropsSchema = Type.Object({
+  html: Type.String({ default: '' }),
+})
+
+type ContentProps = Static<typeof ContentPropsSchema>
 
 export const ContentModule: ModuleDefinition<ContentProps> = {
   id: 'base.content',
@@ -28,9 +31,8 @@ export const ContentModule: ModuleDefinition<ContentProps> = {
     html: { type: 'richtext', label: 'HTML' },
   },
 
-  defaults: {
-    html: '',
-  },
+  propsSchema: ContentPropsSchema,
+  defaults: Value.Create(ContentPropsSchema) as ContentProps,
 
   component: ContentEditor,
 

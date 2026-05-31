@@ -14,10 +14,13 @@ import type { ModuleDefinition } from '@core/module-engine/types'
 import { registry } from '@core/module-engine/registry'
 import { TargetSolidIcon } from 'pixel-art-icons/icons/target-solid'
 import { SlotOutletEditor } from './SlotOutletEditor'
+import { Type } from '@core/utils/typeboxHelpers'
+import type { Static } from '@core/utils/typeboxHelpers'
 
-interface SlotOutletProps extends Record<string, unknown> {
-  slotName: string
-}
+const SlotOutletPropsSchema = Type.Object({
+  slotName: Type.String({ default: 'children' }),
+})
+type SlotOutletProps = Static<typeof SlotOutletPropsSchema>
 
 export const SlotOutletModule: ModuleDefinition<SlotOutletProps> = {
   id: 'base.slot-outlet',
@@ -38,6 +41,7 @@ export const SlotOutletModule: ModuleDefinition<SlotOutletProps> = {
     },
   },
 
+  propsSchema: SlotOutletPropsSchema,
   defaults: {
     slotName: 'children',
   },

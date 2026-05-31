@@ -25,37 +25,62 @@
  */
 import type { ModuleDefinition } from '@core/module-engine/types'
 import type { RenderResolvedMedia } from '@core/publisher/render'
+import { Type, Value } from '@core/utils/typeboxHelpers'
+import type { Static } from '@core/utils/typeboxHelpers'
 import { registry } from '@core/module-engine/registry'
 import { VideoSolidIcon } from 'pixel-art-icons/icons/video-solid'
 import { safeUrl } from '@modules/base/utils/escape'
 import { VideoEditor } from './VideoEditor'
 import { parseYoutubeId, youtubeEmbedUrl } from './youtube'
 
-interface VideoProps extends Record<string, unknown> {
+// ---------------------------------------------------------------------------
+// Props schema — authored fields only. The publisher-injected field
+// (_resolvedMediaByKey) is NOT declared here; validateNodeProps merges it
+// over the cleaned props so it survives the coercion step untouched.
+// ---------------------------------------------------------------------------
+
+export const VideoPropsSchema = Type.Object({
   /**
    * Source URL. Accepts:
    *   - A library path like `/uploads/intro.mp4` (resolved by the publisher)
    *   - An external video URL (`https://example.com/clip.webm`)
    *   - Any standard YouTube URL — auto-detected, rendered as an iframe
    */
-  videoUrl: string
+  videoUrl: Type.String({ default: '' }),
   /**
    * Poster frame. For uploaded videos, the browser's native poster.
    * For YouTube URLs, also rendered behind the iframe so the page shows
    * our responsive image immediately while YouTube lazy-loads.
    */
-  poster: string
-  autoplay: boolean
-  loop: boolean
-  muted: boolean
-  controls: boolean
+  poster: Type.String({ default: '' }),
+  autoplay: Type.Boolean({ default: false }),
+  loop: Type.Boolean({ default: false }),
+  muted: Type.Boolean({ default: false }),
+  controls: Type.Boolean({ default: true }),
   /** Required for iOS so an uploaded video doesn't take over the screen. */
-  playsinline: boolean
+  playsinline: Type.Boolean({ default: true }),
   /** Bandwidth hint for uploaded videos. Ignored for YouTube embeds. */
-  preload: 'none' | 'metadata' | 'auto'
+  preload: Type.Union(
+    [Type.Literal('none'), Type.Literal('metadata'), Type.Literal('auto')],
+    { default: 'metadata' },
+  ),
+})
+
+/** Authored (stored) props — shape the user edits and the database persists. */
+type VideoStoredProps = Static<typeof VideoPropsSchema>
+
+/**
+ * Full render-time props. Intersects the authored schema shape with the
+ * publisher-injected field that arrives after validateNodeProps runs.
+ * `_resolvedMediaByKey` is NOT in VideoPropsSchema — it bypasses schema
+ * cleaning via the `{ ...rawProps, ...cleaned }` merge in validateNodeProps.
+ * The `& Record<string, unknown>` satisfies the
+ * ModuleDefinition<TProps extends Record<string, unknown>> constraint.
+ */
+type VideoProps = VideoStoredProps & {
   /** Internal: attached by the publisher's prefetchMediaAssets pass. */
   _resolvedMediaByKey?: Record<string, RenderResolvedMedia>
-}
+} & Record<string, unknown>
 
 export const VideoModule: ModuleDefinition<VideoProps> = {
   id: 'base.video',
@@ -66,6 +91,8 @@ export const VideoModule: ModuleDefinition<VideoProps> = {
   icon: VideoSolidIcon,
   trusted: true,
   canHaveChildren: false,
+
+  propsSchema: VideoPropsSchema,
 
   schema: {
     videoUrl: {
@@ -95,16 +122,9 @@ export const VideoModule: ModuleDefinition<VideoProps> = {
     },
   },
 
-  defaults: {
-    videoUrl: '',
-    poster: '',
-    autoplay: false,
-    loop: false,
-    muted: false,
-    controls: true,
-    playsinline: true,
-    preload: 'metadata',
-  },
+  // Single source of truth: defaults are derived from the schema's `default`
+  // annotations so they can never diverge from the declared shape.
+  defaults: Value.Create(VideoPropsSchema),
 
   component: VideoEditor,
 

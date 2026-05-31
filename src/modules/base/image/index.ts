@@ -16,30 +16,57 @@
  */
 import type { ModuleDefinition } from '@core/module-engine/types'
 import type { RenderResolvedMedia } from '@core/publisher/render'
+import { Type, Value } from '@core/utils/typeboxHelpers'
+import type { Static } from '@core/utils/typeboxHelpers'
 import { registry } from '@core/module-engine/registry'
 import { ImageSolidIcon } from 'pixel-art-icons/icons/image-solid'
 import { safeUrl } from '@modules/base/utils/escape'
 import { ImageEditor } from './ImageEditor'
 
-interface ImageProps extends Record<string, unknown> {
-  src: string
-  loading: 'lazy' | 'eager'
+// ---------------------------------------------------------------------------
+// Props schema — authored fields only. Publisher-injected fields (_resolved*)
+// are NOT declared here; validateNodeProps merges them over the cleaned props
+// so they survive the coercion step untouched.
+// ---------------------------------------------------------------------------
+
+export const ImagePropsSchema = Type.Object({
+  src: Type.String({ default: '' }),
+  loading: Type.Union([Type.Literal('lazy'), Type.Literal('eager')], { default: 'lazy' }),
   /**
    * `sizes` attribute. `'auto'` resolves to `100vw` at publish time —
    * future work: derive from canvas breakpoints. A custom string is
    * emitted verbatim.
    */
-  sizes: string
+  sizes: Type.String({ default: 'auto' }),
   /**
    * `fetchpriority` hint. Use `'high'` for hero / above-the-fold images,
    * `'low'` for offscreen marketing chrome.
    */
-  fetchPriority: 'auto' | 'high' | 'low'
-  decoding: 'async' | 'sync' | 'auto'
+  fetchPriority: Type.Union(
+    [Type.Literal('auto'), Type.Literal('high'), Type.Literal('low')],
+    { default: 'auto' },
+  ),
+  decoding: Type.Union(
+    [Type.Literal('async'), Type.Literal('sync'), Type.Literal('auto')],
+    { default: 'async' },
+  ),
+})
+
+/** Authored (stored) props — shape the user edits and the database persists. */
+type ImageStoredProps = Static<typeof ImagePropsSchema>
+
+/**
+ * Full render-time props. Intersects the authored schema shape with
+ * publisher-injected fields that arrive after validateNodeProps runs.
+ * The `_resolved*` fields are NOT in ImagePropsSchema — they bypass
+ * schema cleaning via the `{ ...rawProps, ...cleaned }` merge in
+ * validateNodeProps. The `& Record<string, unknown>` satisfies the
+ * ModuleDefinition<TProps extends Record<string, unknown>> constraint.
+ */
+type ImageProps = ImageStoredProps & {
   /**
    * Internal: attached by the publisher's `prefetchMediaAssets` pass.
-   * Map of prop key → resolved media. Not user-editable — declared here
-   * so render() picks it up without a cast and TypeScript stays happy.
+   * Map of prop key → resolved media. Not user-editable.
    * NOT in the schema (so the picker doesn't show it as a control row).
    */
   _resolvedMediaByKey?: Record<string, RenderResolvedMedia>
@@ -51,7 +78,7 @@ interface ImageProps extends Record<string, unknown> {
    * win.
    */
   _resolvedAutoSizes?: string
-}
+} & Record<string, unknown>
 
 /**
  * Resolve the `sizes` attribute the publisher should emit.
@@ -142,6 +169,8 @@ export const ImageModule: ModuleDefinition<ImageProps> = {
   trusted: true,
   canHaveChildren: false,
 
+  propsSchema: ImagePropsSchema,
+
   schema: {
     src: { type: 'image', label: 'Image' },
     loading: {
@@ -178,13 +207,9 @@ export const ImageModule: ModuleDefinition<ImageProps> = {
     },
   },
 
-  defaults: {
-    src: '',
-    loading: 'lazy',
-    sizes: 'auto',
-    fetchPriority: 'auto',
-    decoding: 'async',
-  },
+  // Single source of truth: defaults are derived from the schema's `default`
+  // annotations so they can never diverge from the declared shape.
+  defaults: Value.Create(ImagePropsSchema),
 
   component: ImageEditor,
 
