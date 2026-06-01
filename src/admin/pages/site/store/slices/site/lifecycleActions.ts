@@ -2,7 +2,7 @@
  * SiteDocument lifecycle actions: createSite, loadSite, clearSite, updateSiteName.
  */
 
-import { findHomePage } from '@core/page-tree'
+import { findHomePage, reconcileSiteExplorerInPlace } from '@core/page-tree'
 import { renderCache } from '@site/canvas/renderCache'
 import {
   clonePackageJson,
@@ -29,6 +29,7 @@ export function createLifecycleActions({
   return {
     createSite: (name) => {
       const site = createDefaultSiteDocument(name)
+      reconcileSiteExplorerInPlace(site)
       const siteRuntime = cloneSiteRuntimeConfig(site.runtime)
       set((state) => {
         state.site = { ...site, runtime: siteRuntime }
@@ -56,6 +57,7 @@ export function createLifecycleActions({
       // (Guideline #307 / Architect message #1216 — critical integration note)
       renderCache.clear()
       reconcileFrameworkClasses(site)
+      reconcileSiteExplorerInPlace(site)
       const packageJson = clonePackageJson(site.packageJson)
       const siteRuntime = cloneSiteRuntimeConfig(site.runtime)
       set((state) => {

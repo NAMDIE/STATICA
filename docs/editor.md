@@ -253,6 +253,12 @@ src/admin/pages/site/
 └── ui/                         ← editor-local UI primitives (Tree*, etc.)
 ```
 
+### Site Explorer
+
+`SiteExplorerPanel` is the editor's concept browser for pages, templates, Visual Components, stylesheets, and scripts. Every section renders through `SiteExplorerTreeSection`, which uses the shared `Tree*` primitives from `src/admin/pages/site/ui/Tree/` for depth indent, chevrons, selection chrome, and DnD row affordances.
+
+Organization is persisted in `site.explorer` on the site shell. Folders are decorative and flat: they group editor rows only, and never change page slugs, public URLs, component identity, or file paths. The homepage is the page whose slug is `index`; it is always pinned as the first Pages row and does not receive organization drag handlers.
+
 ### Editor store
 
 `src/admin/pages/site/store/` is the central state for the editor. Zustand with the `immer` middleware (mutations are written as direct mutation; Immer produces structural sharing) and `subscribeWithSelector` (granular subscriptions without React context re-renders).

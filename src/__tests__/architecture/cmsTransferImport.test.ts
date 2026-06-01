@@ -32,6 +32,7 @@ import { createDataRow, listDataRows } from '../../../server/repositories/data/r
 import { handleImportRoute } from '../../../server/handlers/cms/import'
 import { parseValue } from '@core/utils/typeboxHelpers'
 import { ImportResultSchema } from '@core/data/bundleSchema'
+import { createDefaultSiteExplorerOrganization } from '@core/page-tree'
 import type { DbClient } from '../../../server/db/client'
 import type { SiteShell } from '@core/page-tree'
 import type { DataRow, DataTable } from '@core/data/schemas'
@@ -46,6 +47,7 @@ const TEST_SHELL: SiteShell = {
   breakpoints: [],
   settings: { shortcuts: {} },
   styleRules: {},
+  explorer: createDefaultSiteExplorerOrganization(),
   files: [],
   packageJson: { dependencies: {}, devDependencies: {} },
   runtime: {

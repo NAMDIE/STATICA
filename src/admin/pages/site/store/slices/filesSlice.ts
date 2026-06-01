@@ -20,6 +20,7 @@ import { nanoid } from 'nanoid'
 import type { EditorStoreSliceCreator } from '@site/store/types'
 import type { SiteFile, SiteFileType } from '@core/files/schemas'
 import { isSafePath, normalizePath } from '@core/files/pathValidation'
+import { reconcileSiteExplorerInPlace } from '@core/page-tree'
 
 // ---------------------------------------------------------------------------
 // Slice interface
@@ -107,6 +108,7 @@ export const createFilesSlice: EditorStoreSliceCreator<FilesSlice> = (set, get) 
           updatedAt: now,
         }
         state.site.files.push(newFile)
+        reconcileSiteExplorerInPlace(state.site)
         state.site.updatedAt = now
       })
 
@@ -122,6 +124,7 @@ export const createFilesSlice: EditorStoreSliceCreator<FilesSlice> = (set, get) 
         if (state.site.runtime?.scripts) delete state.site.runtime.scripts[id]
         delete state.siteRuntime.scripts[id]
         if (state.activeEditorFileId === id) state.activeEditorFileId = null
+        reconcileSiteExplorerInPlace(state.site)
         state.site.updatedAt = Date.now()
       })
   },

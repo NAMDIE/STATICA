@@ -39,6 +39,7 @@
 import {
   DndContext,
   PointerSensor,
+  pointerWithin,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -393,7 +394,7 @@ export function AdminCanvasLayout({
         DomPanel has its own nested DndContext for tree-node reordering — that
         context is isolated; nested DndContexts are fully supported by dnd-kit.
       */}
-      <DndContext sensors={canvasDndSensors} onDragEnd={handleCanvasDragEnd}>
+      <DndContext sensors={canvasDndSensors} collisionDetection={pointerWithin} onDragEnd={handleCanvasDragEnd}>
       {/* `ConfirmDeleteProvider` wraps the editor body so the canvas
           Delete-key handler, Layers panel context menu, and other
           descendant destructive actions can call `useConfirmDelete()`
@@ -489,4 +490,3 @@ export function AdminCanvasLayout({
     </EditorPermissionsProvider>
   )
 }
-

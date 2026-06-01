@@ -5,7 +5,7 @@
  * Visual Components are stored in `data_rows` (table_id = 'components').
  * Neither is managed here. The shell contains everything except pages and VCs:
  * id, name, breakpoints, settings, styleRules, files, packageJson, runtime,
- * createdAt, updatedAt.
+ * Site Explorer organization, createdAt, updatedAt.
  *
  * Storage format inside `settings_json`:
  *   { cmsSiteSchemaVersion: 1, site: <SiteShell without name> }
@@ -15,6 +15,7 @@ import type { SiteShell } from '@core/page-tree'
 import {
   DEFAULT_BREAKPOINTS,
   DEFAULT_SITE_SETTINGS,
+  parseSiteExplorerOrganization,
 } from '@core/page-tree'
 import { validateSite } from '@core/persistence/validate'
 import { normalizeSitePackageJson } from '@core/site-dependencies/manifest'
@@ -57,6 +58,7 @@ function readStoredShell(row: SiteRow): SiteShell {
       ? site.settings as unknown as SiteShell['settings']
       : DEFAULT_SITE_SETTINGS,
     styleRules: isRecord(site.styleRules) ? site.styleRules as SiteShell['styleRules'] : {},
+    explorer: parseSiteExplorerOrganization(site.explorer),
     createdAt: typeof site.createdAt === 'number' ? site.createdAt : Date.parse(String(row.created_at)),
     updatedAt: typeof site.updatedAt === 'number' ? site.updatedAt : Date.parse(String(row.updated_at)),
   }

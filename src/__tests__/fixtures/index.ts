@@ -12,7 +12,7 @@
 
 import { nanoid } from 'nanoid'
 import type { Page, PageNode, SiteDocument } from '@core/page-tree'
-import { DEFAULT_BREAKPOINTS, DEFAULT_SITE_SETTINGS } from '@core/page-tree'
+import { DEFAULT_BREAKPOINTS, DEFAULT_SITE_SETTINGS, createDefaultSiteExplorerOrganization } from '@core/page-tree'
 import type { AnyModuleDefinition } from '@core/module-engine'
 import type { VisualComponent, VCNode } from '@core/visualComponents'
 import { SquareSolidIcon } from 'pixel-art-icons/icons/square-solid'
@@ -229,6 +229,7 @@ export function makeSite(overrides: Partial<SiteDocument> = {}): SiteDocument {
     breakpoints: overrides.breakpoints ?? DEFAULT_BREAKPOINTS,
     settings: overrides.settings ?? structuredClone(DEFAULT_SITE_SETTINGS),
     styleRules: overrides.styleRules ?? {},
+    explorer: overrides.explorer ?? createDefaultSiteExplorerOrganization(),
     files: overrides.files ?? [],
     visualComponents: overrides.visualComponents ?? [],
     packageJson: overrides.packageJson ?? normalizeSitePackageJson(undefined),

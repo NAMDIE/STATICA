@@ -18,8 +18,7 @@
 import { nanoid } from 'nanoid'
 import type { EditorStoreSliceCreator } from '@site/store/types'
 import type { VisualComponent, VCParam, VCNode } from '@core/visualComponents'
-import type { PageNode, StyleRule } from '@core/page-tree'
-import type { BaseNode } from '@core/page-tree'
+import type { BaseNode, PageNode, StyleRule } from '@core/page-tree'
 import {
   validateComponentName,
   validateParamName,
@@ -409,7 +408,7 @@ declare module '@site/store/types' {
 export const createVisualComponentsSlice: EditorStoreSliceCreator<VisualComponentsSlice> = (set, get) => {
   // Build the closure-shared mutation helpers. `mutateSite` commits undo
   // history only when the producer reports a semantic document mutation.
-  const { mutateSite, mutateSiteState } = buildSiteHelpers(set, get)
+  const { mutateSite, mutateSiteState, mutateSiteWithExplorerReconcile } = buildSiteHelpers(set, get)
 
   return {
 
@@ -448,7 +447,7 @@ export const createVisualComponentsSlice: EditorStoreSliceCreator<VisualComponen
       createdAt: now,
     }
 
-    mutateSite((site) => {
+    mutateSiteWithExplorerReconcile((site) => {
       if (!site.visualComponents) site.visualComponents = []
       site.visualComponents.push(newVC)
       return true
@@ -478,7 +477,7 @@ export const createVisualComponentsSlice: EditorStoreSliceCreator<VisualComponen
   },
 
   deleteVisualComponent(id) {
-    mutateSite((site) => {
+    mutateSiteWithExplorerReconcile((site) => {
       const idx = (site.visualComponents ?? []).findIndex((v) => v.id === id)
       if (idx === -1) return false
 

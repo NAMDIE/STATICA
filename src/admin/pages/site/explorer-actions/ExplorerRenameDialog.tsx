@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { createPortal } from 'react-dom'
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import type { Page } from '@core/page-tree'
 import {
   normalizePageSlug,
@@ -7,9 +6,8 @@ import {
   pageSlugError,
 } from '@core/page-tree'
 import { Button } from '@ui/components/Button'
+import { Dialog } from '@ui/components/Dialog'
 import { Input } from '@ui/components/Input'
-import { useDialogEscape } from '@ui/lib/useDialogEscape'
-import { CloseIcon } from 'pixel-art-icons/icons/close'
 import styles from '../../../shared/dialogs/SiteCreateDialog/SiteCreateDialog.module.css'
 
 export interface ExplorerRenamePayload {
@@ -28,6 +26,8 @@ interface ExplorerRenameDialogProps {
   onRename: (payload: ExplorerRenamePayload) => void | Promise<void>
 }
 
+const EMPTY_PAGES: Page[] = []
+
 function errorMessage(err: unknown) {
   return err instanceof Error ? err.message.replace(/^\[[^\]]+\]\s*/, '') : 'Unable to rename item'
 }
@@ -36,7 +36,7 @@ export function ExplorerRenameDialog({
   title,
   fieldLabel,
   initialValue,
-  pages = [],
+  pages = EMPTY_PAGES,
   pageId,
   initialSlug,
   onCancel,
@@ -46,6 +46,8 @@ export function ExplorerRenameDialog({
   const [slug, setSlug] = useState(initialSlug ?? '')
   const [submitError, setSubmitError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const valueInputId = useId()
+  const slugInputId = useId()
   const trimmedValue = value.trim()
   const isPage = initialSlug !== undefined
   const pageSlug = normalizePageSlug(slug)
@@ -56,8 +58,6 @@ export function ExplorerRenameDialog({
   useEffect(() => {
     requestAnimationFrame(() => inputRef.current?.select())
   }, [])
-
-  useDialogEscape(onCancel)
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -70,93 +70,77 @@ export function ExplorerRenameDialog({
     }
   }
 
-  return createPortal(
-    <div
-      className={styles.backdrop}
-      data-testid="explorer-rename-dialog-backdrop"
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onCancel()
-      }}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="explorer-rename-dialog-title"
-        className={styles.dialog}
-        data-testid="explorer-rename-dialog"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className={styles.header}>
-          <h2 id="explorer-rename-dialog-title" className={styles.title}>
-            {title}
-          </h2>
-          <Button
-            variant="ghost"
-            size="xs"
-            iconOnly
-            aria-label="Close dialog"
-            onClick={onCancel}
-          >
-            <CloseIcon size={12} color="currentColor" aria-hidden="true" />
+  return (
+    <Dialog
+      open
+      onClose={onCancel}
+      title={title}
+      size="sm"
+      initialFocusRef={inputRef}
+      footer={
+        <>
+          <Button variant="secondary" size="sm" type="button" onClick={onCancel}>
+            Cancel
           </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            type="submit"
+            form="explorer-rename-form"
+            disabled={!trimmedValue || Boolean(slugValidation)}
+          >
+            Save
+          </Button>
+        </>
+      }
+    >
+      <form id="explorer-rename-form" className={styles.form} onSubmit={handleSubmit}>
+        <div className={styles.field}>
+          <label htmlFor={valueInputId} className={styles.label}>{fieldLabel}</label>
+          <Input
+            id={valueInputId}
+            ref={inputRef}
+            fieldSize="sm"
+            value={value}
+            onChange={(event) => {
+              setValue(event.target.value)
+              setSubmitError(null)
+            }}
+            autoComplete="off"
+            spellCheck={false}
+          />
         </div>
 
-        <form className={styles.form} onSubmit={handleSubmit}>
-          <label className={styles.field}>
-            <span className={styles.label}>{fieldLabel}</span>
+        {isPage && (
+          <div className={styles.field}>
+            <label htmlFor={slugInputId} className={styles.label}>Slug</label>
             <Input
-              ref={inputRef}
+              id={slugInputId}
               fieldSize="sm"
-              value={value}
+              value={slug}
               onChange={(event) => {
-                setValue(event.target.value)
+                setSlug(normalizePageSlug(event.target.value))
                 setSubmitError(null)
               }}
               autoComplete="off"
               spellCheck={false}
+              invalid={Boolean(slugValidation)}
+              aria-describedby={slugValidation ? 'explorer-rename-slug-error' : undefined}
             />
-          </label>
-
-          {isPage && (
-            <label className={styles.field}>
-              <span className={styles.label}>Slug</span>
-              <Input
-                fieldSize="sm"
-                value={slug}
-                onChange={(event) => {
-                  setSlug(normalizePageSlug(event.target.value))
-                  setSubmitError(null)
-                }}
-                autoComplete="off"
-                spellCheck={false}
-                invalid={Boolean(slugValidation)}
-                aria-describedby={slugValidation ? 'explorer-rename-slug-error' : undefined}
-              />
-              {slugValidation && (
-                <p id="explorer-rename-slug-error" role="alert" className={styles.errorText}>
-                  {slugValidation}
-                </p>
-              )}
-            </label>
-          )}
-
-          {submitError && (
-            <p role="alert" className={styles.errorText}>
-              {submitError}
-            </p>
-          )}
-
-          <div className={styles.actions}>
-            <Button variant="secondary" size="sm" type="button" onClick={onCancel}>
-              Cancel
-            </Button>
-            <Button variant="primary" size="sm" type="submit" disabled={!trimmedValue || Boolean(slugValidation)}>
-              Save
-            </Button>
+            {slugValidation && (
+              <p id="explorer-rename-slug-error" role="alert" className={styles.errorText}>
+                {slugValidation}
+              </p>
+            )}
           </div>
-        </form>
-      </div>
-    </div>,
-    document.body,
+        )}
+
+        {submitError && (
+          <p role="alert" className={styles.errorText}>
+            {submitError}
+          </p>
+        )}
+      </form>
+    </Dialog>
   )
 }

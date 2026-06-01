@@ -45,6 +45,10 @@ const EXPLORER_PATH = resolve(
   PROJECT_ROOT,
   'src/admin/pages/site/panels/SiteExplorerPanel/SiteExplorerPanel.tsx',
 )
+const EXPLORER_TREE_SECTION_PATH = resolve(
+  PROJECT_ROOT,
+  'src/admin/pages/site/panels/SiteExplorerPanel/SiteExplorerTreeSection.tsx',
+)
 const CONTEXT_MENU_PATH = resolve(
   PROJECT_ROOT,
   'src/admin/pages/site/panels/DomPanel/LayerNodeContextMenu.tsx',
@@ -120,15 +124,15 @@ describe('G1 — ModulePickerDropdown calls insertComponentRef for VC insertion 
 // ---------------------------------------------------------------------------
 
 describe("G2 — SiteExplorerPanel drag source uses 'visualComponentRef' payload kind (Phase 4)", () => {
-  test("SiteExplorerPanel.tsx drag payload kind must be 'visualComponentRef'", () => {
-    const src = readSource(EXPLORER_PATH)
+  test("SiteExplorer tree drag payload kind must be 'visualComponentRef'", () => {
+    const src = readSource(EXPLORER_TREE_SECTION_PATH)
     if (!src.includes("'visualComponentRef'")) {
       throw new Error(
-        "[Phase 4 / G2] SiteExplorerPanel.tsx drag payload does not use kind: 'visualComponentRef'.\n" +
+        "[Phase 4 / G2] Site Explorer drag payload does not use kind: 'visualComponentRef'.\n" +
         "The DraggableComponentRow must register the dnd-kit draggable with:\n" +
         "  data: { kind: 'visualComponentRef', componentId: component.id }\n" +
         "Without this, AdminCanvasLayout's onDragEnd cannot identify the drag as a VC insertion.\n" +
-        'File: src/admin/pages/site/components/SiteExplorerPanel/SiteExplorerPanel.tsx',
+        'File: src/admin/pages/site/panels/SiteExplorerPanel/SiteExplorerTreeSection.tsx',
       )
     }
     expect(src).toContain("'visualComponentRef'")

@@ -21,7 +21,7 @@ import type {
   FrameworkColorToken,
 } from '@core/page-tree'
 import type { SiteRuntimeConfig } from '@core/site-runtime'
-import { addPage, createNode } from '@core/page-tree'
+import { addPage, createNode, reconcileSiteExplorerInPlace } from '@core/page-tree'
 import { syncSlotInstances, applySlotSyncResult } from '@core/visualComponents'
 import type { Draft } from 'immer'
 import type { ImportFragment } from '@core/htmlImport'
@@ -237,6 +237,14 @@ export function buildSiteHelpers(
     })
     return changed
   }
+
+  const mutateSiteWithExplorerReconcile: SiteSliceHelpers['mutateSiteWithExplorerReconcile'] = (fn) =>
+    mutateSite((site) => {
+      const result = fn(site)
+      if (!recipeDidMutate(result)) return false
+      reconcileSiteExplorerInPlace(site)
+      return result
+    })
 
   /** Mutate editor state and site together — auto-snapshots undo history on real changes. */
   const mutateSiteState: SiteSliceHelpers['mutateSiteState'] = (fn) => {
@@ -470,6 +478,7 @@ export function buildSiteHelpers(
     mutateActiveTree,
     mutateActiveTreeAndSite,
     mutateSite,
+    mutateSiteWithExplorerReconcile,
     mutateSiteState,
     mutateAllPagesAndSite,
   }

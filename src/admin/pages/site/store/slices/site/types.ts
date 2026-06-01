@@ -28,6 +28,7 @@ import type {
   FrameworkTypographyClassGenerator,
   FrameworkTypographyGroup,
   ConditionDef,
+  SiteExplorerSectionId,
 } from '@core/page-tree'
 import type { ImportFragment } from '@core/htmlImport'
 import type { NewStyleRule, ImportFontFamily, ImportColorToken, ImportScript } from '@core/siteImport'
@@ -177,6 +178,17 @@ export interface SiteSlice {
   reorderPages: (fromIndex: number, toIndex: number) => void
   convertPageToTemplate: (pageId: string, config: PageTemplateConfig) => void
   convertTemplateToPage: (pageId: string) => void
+  createExplorerFolder: (sectionId: SiteExplorerSectionId, name: string) => string
+  renameExplorerFolder: (sectionId: SiteExplorerSectionId, folderId: string, name: string) => void
+  deleteExplorerFolder: (sectionId: SiteExplorerSectionId, folderId: string) => void
+  moveExplorerFolder: (sectionId: SiteExplorerSectionId, folderId: string, nextIndex: number) => void
+  moveExplorerItem: (
+    sectionId: SiteExplorerSectionId,
+    itemId: string,
+    parentFolderId: string | null,
+    nextIndex: number,
+  ) => void
+  setPageAsHomepage: (pageId: string) => void
 
   // Node mutations (operate on the active page)
   insertNode: (moduleId: string, defaults: Record<string, unknown>, parentId: string, index?: number) => string
@@ -408,6 +420,9 @@ export interface SiteSliceHelpers {
 
   /** Mutate the site — commits undo history only on real changes. */
   mutateSite: (fn: (site: SiteDocument) => SiteMutationResult) => boolean
+
+  /** Mutate the site and reconcile Site Explorer organization after a real change. */
+  mutateSiteWithExplorerReconcile: (fn: (site: SiteDocument) => SiteMutationResult) => boolean
 
   /**
    * Mutate the full editor state and site document in one undoable transaction.
