@@ -370,7 +370,7 @@ Architectural rules live as tests in `src/__tests__/architecture/*.test.ts` and 
 | Provider SDKs only inside `server/ai/drivers/`; `@anthropic-ai/sdk` banned everywhere                 | `ai-driver-isolation.test.ts`                                   |
 | UI primitives live in `src/ui/components/`                                                            | `ui-primitives-location.test.ts`                                |
 
-See [docs/reference/architecture-tests.md](reference/architecture-tests.md) for the complete catalog (80+ gates).
+See [docs/reference/architecture-tests.md](reference/architecture-tests.md) for the complete catalog (84 gate files).
 
 ---
 
