@@ -19,6 +19,7 @@ const TREE_ROW_CSS = join(ROOT, 'src/admin/pages/site/ui/Tree/TreeRow.module.css
 const DOM_PANEL_TSX = join(ROOT, 'src/admin/pages/site/panels/DomPanel/DomPanel.tsx')
 const DOM_TREE_NODE_TSX = join(ROOT, 'src/admin/pages/site/panels/DomPanel/TreeNode.tsx')
 const PROJECT_EXPLORER_TSX = join(ROOT, 'src/admin/pages/site/panels/SiteExplorerPanel/SiteExplorerPanel.tsx')
+const SITE_EXPLORER_TREE_SECTION_TSX = join(ROOT, 'src/admin/pages/site/panels/SiteExplorerPanel/SiteExplorerTreeSection.tsx')
 const PROJECT_CREATE_DIALOG_TSX = join(ROOT, 'src/admin/shared/dialogs/SiteCreateDialog/SiteCreateDialog.tsx')
 const UI_SLICE_TS = join(ROOT, 'src/admin/pages/site/store/slices/uiSlice.ts')
 const LAYOUT_STORAGE_TS = join(ROOT, 'src/admin/pages/site/layout/panelLayoutStorage.ts')
@@ -108,10 +109,16 @@ describe('Site Explorer architecture', () => {
     expect(layoutPersistence.includes('panels?.files')).toBe(false)
   })
 
-  it('does not use the file-tree primitive for site concepts', () => {
-    const source = src(PROJECT_EXPLORER_TSX)
+  it('renders site concepts through the shared Tree primitive', () => {
+    const source = src(SITE_EXPLORER_TREE_SECTION_TSX)
+    expect(source.includes("from '@site/ui/Tree'") || source.includes('from "@site/ui/Tree"')).toBe(true)
+    expect(source.includes('<TreeContainer')).toBe(true)
+    expect(source.includes('<TreeRow')).toBe(true)
     expect(source.includes("from '@ui/Tree'") || source.includes('from "@ui/Tree"')).toBe(false)
-    expect(source.includes('<Tree')).toBe(false)
+  })
+
+  it('keeps Site Explorer focused on site concepts instead of generated source paths', () => {
+    const source = src(PROJECT_EXPLORER_TSX)
     expect(source.includes('src/pages/')).toBe(false)
     expect(source.includes('src/components/')).toBe(false)
     expect(source.includes('window.prompt')).toBe(false)

@@ -44,6 +44,11 @@ import { normalizeSiteRuntimeConfig } from '@core/site-runtime/runtimeConfig'
 import { SitePackageJsonSchema, type SitePackageJson } from '@core/site-dependencies/manifest'
 import { type VisualComponent } from '@core/visualComponents'
 import type { Page } from './page'
+import {
+  SiteExplorerOrganizationSchema,
+  parseSiteExplorerOrganization,
+  type SiteExplorerOrganization,
+} from './siteExplorer'
 
 // ---------------------------------------------------------------------------
 // SiteDocumentSchema — top-level persisted site shell (pages and VCs stored separately)
@@ -71,6 +76,8 @@ const SiteDocumentSchema = Type.Object({
   styleRules: Type.Record(Type.String(), StyleRuleSchema),
   /** Site files — required array */
   files: Type.Array(SiteFileSchema),
+  /** Editor-only organization for Site Explorer sections. */
+  explorer: SiteExplorerOrganizationSchema,
   packageJson: SitePackageJsonSchema,
   runtime: SiteRuntimeConfigSchema,
   createdAt: Type.Number(),
@@ -235,6 +242,9 @@ export function parseSiteDocument(raw: unknown): SiteShell {
       })
     : []
 
+  // Site Explorer organization — editor-only, tolerant to missing legacy data.
+  const explorer: SiteExplorerOrganization = parseSiteExplorerOrganization(r.explorer)
+
   // Settings — resilient, falls back to DEFAULT_SITE_SETTINGS
   const settings = parseSiteSettings(r.settings)
 
@@ -255,6 +265,7 @@ export function parseSiteDocument(raw: unknown): SiteShell {
     settings,
     styleRules,
     files,
+    explorer,
     packageJson,
     runtime,
     createdAt: r.createdAt,

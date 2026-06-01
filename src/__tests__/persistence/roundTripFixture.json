@@ -3,6 +3,13 @@
   "name": "Round-Trip Fixture",
   "createdAt": 1700000000000,
   "updatedAt": 1700000001000,
+  "explorer": {
+    "pages": { "folders": [], "items": [] },
+    "templates": { "folders": [], "items": [] },
+    "components": { "folders": [], "items": [] },
+    "styles": { "folders": [], "items": [] },
+    "scripts": { "folders": [], "items": [] }
+  },
   "breakpoints": [
     { "id": "mobile",  "label": "Mobile",  "width": 375,  "icon": "smartphone" },
     { "id": "desktop", "label": "Desktop", "width": 1440, "icon": "monitor"    }

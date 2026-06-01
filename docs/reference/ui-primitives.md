@@ -315,10 +315,10 @@ import { Widget } from '@ui/components/Widget'
 Tree rows live in `src/admin/pages/site/ui/Tree/`, not in `src/ui/components/`. They're admin-specific (DOM panel, site explorer, layers panel).
 
 ```tsx
-import { TreeRow, TreeChildList } from '@site/ui/Tree'
+import { TreeContainer, TreeRow, TreeChevron, TreeIconSlot, TreeLabel } from '@site/ui/Tree'
 ```
 
-Use these for any hierarchical row list. They support drag/drop, indent guides, selection highlight (`--canvas-selection-ring`), and density (`data-editor-density='comfortable'`).
+Use these for any hierarchical row list. The DOM panel and Site Explorer both rely on this contract for tree semantics, drag/drop row affordances, depth indentation, chevrons, selection highlight (`--canvas-selection-ring`), and density (`data-editor-density='comfortable'`).
 
 ---
 

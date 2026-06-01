@@ -19,7 +19,7 @@
 
 .sectionHeader {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
     align-items: center;
     gap: 6px;
 }
@@ -46,6 +46,113 @@
     display: flex;
     flex-direction: column;
     gap: 1px;
+}
+
+.treeRows {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.treeRowButton {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    padding: 0;
+    gap: 3px;
+    border-radius: 0;
+    background: transparent;
+    color: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    justify-content: flex-start;
+    text-align: left;
+}
+
+.treeRowButton:hover,
+.treeRowButton:active {
+    background: transparent;
+    color: inherit;
+}
+
+.componentDragHandle {
+    flex: 0 0 auto;
+    color: var(--editor-text-subtle);
+}
+
+.inlineRenameInput {
+    flex: 1;
+    min-width: 0;
+}
+
+.dragOverlayRow {
+    width: min(240px, 70vw);
+    border-radius: var(--panel-radius);
+    background: var(--panel-bg);
+    box-shadow: var(--panel-shadow);
+    pointer-events: none;
+}
+
+.dropBefore,
+.dropAfter,
+.dropInside {
+    position: relative;
+}
+
+.rootDropGap {
+    position: relative;
+    flex: 0 0 auto;
+    height: 6px;
+}
+
+.dropBefore::before,
+.dropAfter::after,
+.dropRoot::after {
+    content: "";
+    position: absolute;
+    left: max(6px, var(--tree-row-pl));
+    right: 8px;
+    z-index: 2;
+    height: 2px;
+    border-radius: 999px;
+    background: var(--editor-success-green);
+    box-shadow: 0 0 0 1px var(--editor-success-border);
+    pointer-events: none;
+}
+
+.dropBefore::before {
+    top: 0;
+}
+
+.dropAfter::after {
+    bottom: 0;
+}
+
+.dropRoot::after {
+    left: 8px;
+    bottom: 0;
+}
+
+.rootDropGapActive::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 8px;
+    right: 8px;
+    z-index: 2;
+    height: 2px;
+    border-radius: 999px;
+    background: var(--editor-success-green);
+    box-shadow: 0 0 0 1px var(--editor-success-border);
+    transform: translateY(-50%);
+    pointer-events: none;
+}
+
+.dropInside {
+    background: var(--editor-success-bg);
+    outline: 1px solid var(--editor-success-border);
+    outline-offset: -2px;
 }
 
 .mediaGrid {

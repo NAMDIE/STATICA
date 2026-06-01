@@ -13,6 +13,7 @@
  *   - `./site/undoRedoActions`  — undo / redo
  *   - `./site/lifecycleActions` — createSite / loadSite / clearSite / updateSiteName
  *   - `./site/pageActions`      — page CRUD + template conversions
+ *   - `./site/explorerActions`  — Site Explorer folder/order organization
  *   - `./site/nodeActions`      — the 11 named tree mutations + multi-select variants + dynamic bindings
  *   - `./site/breakpointActions`— breakpoint CRUD
  *   - `./site/settingsActions`  — site-level settings patch
@@ -25,6 +26,7 @@ import { buildSiteHelpers } from './site/helpers'
 import { createUndoRedoActions } from './site/undoRedoActions'
 import { createLifecycleActions } from './site/lifecycleActions'
 import { createPageActions } from './site/pageActions'
+import { createExplorerActions } from './site/explorerActions'
 import { createNodeActions } from './site/nodeActions'
 import { createBreakpointActions } from './site/breakpointActions'
 import { createSettingsActions } from './site/settingsActions'
@@ -73,6 +75,7 @@ export const createSiteSlice: EditorStoreSliceCreator<SiteSlice> = (set, get) =>
     ...createUndoRedoActions(helpers),
     ...createLifecycleActions(helpers),
     ...createPageActions(helpers),
+    ...createExplorerActions(helpers),
     ...createNodeActions(helpers),
     ...createBreakpointActions(helpers),
     ...createSettingsActions(helpers),

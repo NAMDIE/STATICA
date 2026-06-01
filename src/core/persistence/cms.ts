@@ -1,4 +1,4 @@
-import type { SiteDocument, SiteShell } from '@core/page-tree'
+import { reconcileSiteExplorerOrganization, type SiteDocument, type SiteShell } from '@core/page-tree'
 import type { IPersistenceAdapter } from './types'
 import { parseJsonResponse } from '@core/utils/jsonValidate'
 import { assertOk } from '@core/http'
@@ -119,7 +119,9 @@ export class CmsAdapter implements IPersistenceAdapter {
     const rawPages = rawDataRows.map(pageFromRow)
     const pages = validatePages(shell, rawPages, visualComponents)
 
-    return { ...shell, pages, visualComponents }
+    const site: SiteDocument = { ...shell, pages, visualComponents }
+    site.explorer = reconcileSiteExplorerOrganization(site.explorer, site)
+    return site
   }
 }
 

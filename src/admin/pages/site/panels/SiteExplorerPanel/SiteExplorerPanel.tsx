@@ -1,22 +1,18 @@
 import { useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
-import { useDraggable } from '@dnd-kit/core'
+import { DragOverlay } from '@dnd-kit/core'
 import { useEditorStore } from '@site/store/store'
 import type { SiteFile } from '@core/files/schemas'
-import type { Page } from '@core/page-tree'
-import type { VisualComponent } from '@core/visualComponents'
+import type { Page, SiteExplorerSectionId } from '@core/page-tree'
 import { createUniquePageSlug, pagePublicPath, isHomePage } from '@core/page-tree'
 import { Panel, useAutoFocusPanel } from '@admin/shared/Panel'
-import { Button } from '@ui/components/Button'
-import { EmptyState } from '@ui/components/EmptyState'
 import { SkeletonBlock } from '@ui/components/Skeleton'
-import type { IconComponent } from 'pixel-art-icons/types'
 import { FilePlusSolidIcon } from 'pixel-art-icons/icons/file-plus-solid'
 import { FileTextSolidIcon } from 'pixel-art-icons/icons/file-text-solid'
 import { BracesIcon } from 'pixel-art-icons/icons/braces'
 import { PaintBucketSolidIcon } from 'pixel-art-icons/icons/paint-bucket-solid'
 import { CodeIcon } from 'pixel-art-icons/icons/code'
 import { ExternalLinkSolidIcon } from 'pixel-art-icons/icons/external-link-solid'
-import { cn } from '@ui/cn'
+import { GlobeSolidIcon } from 'pixel-art-icons/icons/globe-solid'
 import {
   SiteCreateDialog,
   buildScriptPath,
@@ -25,13 +21,18 @@ import {
   type SiteCreatePayload,
   type SiteCreateKind,
 } from '@admin/shared/dialogs/SiteCreateDialog'
-import { ExplorerItemContextMenu, ExplorerRenameDialog, type ExplorerRenamePayload } from '@site/explorer-actions'
+import { ExplorerItemContextMenu } from '@site/explorer-actions'
 import { TemplateSettingsDialog, type TemplateSettingsPayload } from '@admin/shared/dialogs/TemplateSettingsDialog'
 import { useVCDeletionConfirm } from '@admin/shared/dialogs/VCDeletionConfirmDialog'
+import { TreeIconSlot, TreeLabel, TreeRow } from '@site/ui/Tree'
+import { buildSiteExplorerTreeSection, type SiteExplorerTreeFolder, type SiteExplorerTreeItem } from './siteExplorerModel'
+import { SiteExplorerTreeSection, type SiteExplorerInlineRenameTarget } from './SiteExplorerTreeSection'
+import { useSiteExplorerDnd, type SiteExplorerDragData, type SiteExplorerDropTarget } from './useSiteExplorerDnd'
 import styles from './SiteExplorerPanel.module.css'
 
 interface SiteExplorerPanelProps {
   variant?: 'docked'
+  organizationDndEnabled?: boolean
 }
 
 type FileBucket = 'styles' | 'scripts'
@@ -40,6 +41,7 @@ type SiteExplorerContextTarget =
   | { kind: 'page'; id: string; title: string; slug: string }
   | { kind: 'component'; id: string; name: string }
   | { kind: 'file'; id: string; path: string }
+  | { kind: 'folder'; sectionId: SiteExplorerSectionId; id: string; name: string }
 
 interface ContextMenuState {
   x: number
@@ -48,6 +50,12 @@ interface ContextMenuState {
 }
 
 const EMPTY_FILES: SiteFile[] = []
+const EMPTY_DND: SiteExplorerDndState = { active: null, target: null }
+
+interface SiteExplorerDndState {
+  active: SiteExplorerDragData | null
+  target: SiteExplorerDropTarget | null
+}
 
 function fileName(path: string) {
   return path.split('/').pop() ?? path
@@ -78,6 +86,17 @@ function keyboardMenuPosition(element: HTMLElement) {
   }
 }
 
+function renameValueForTarget(target: SiteExplorerContextTarget): string {
+  if (target.kind === 'page') return target.title
+  if (target.kind === 'component') return target.name
+  if (target.kind === 'folder') return target.name
+  return fileName(target.path)
+}
+
+function folderTarget(sectionId: SiteExplorerSectionId, folder: SiteExplorerTreeFolder): SiteExplorerContextTarget {
+  return { kind: 'folder', sectionId, id: folder.id, name: folder.name }
+}
+
 function groupSiteFiles(files: SiteFile[]) {
   const visible = files.filter((file) => !file.generated || file.ejected)
   return {
@@ -88,11 +107,13 @@ function groupSiteFiles(files: SiteFile[]) {
 
 export function SiteExplorerPanel({
   variant = 'docked',
+  organizationDndEnabled = false,
 }: SiteExplorerPanelProps) {
   const isOpen = useEditorStore((s) => s.siteExplorerPanelOpen)
   const site = useEditorStore((s) => s.site)
   const activePageId = useEditorStore((s) => s.activePageId)
   const activeDocument = useEditorStore((s) => s.activeDocument)
+  const activeEditorFileId = useEditorStore((s) => s.activeEditorFileId)
   const setSiteExplorerPanelOpen = useEditorStore((s) => s.setSiteExplorerPanelOpen)
   const openPageInCanvas = useEditorStore((s) => s.openPageInCanvas)
   const setActiveDocument = useEditorStore((s) => s.setActiveDocument)
@@ -108,10 +129,14 @@ export function SiteExplorerPanel({
   const renameFile = useEditorStore((s) => s.renameFile)
   const deleteFile = useEditorStore((s) => s.deleteFile)
   const openInEditor = useEditorStore((s) => s.openInEditor)
+  const createExplorerFolder = useEditorStore((s) => s.createExplorerFolder)
+  const renameExplorerFolder = useEditorStore((s) => s.renameExplorerFolder)
+  const deleteExplorerFolder = useEditorStore((s) => s.deleteExplorerFolder)
+  const setPageAsHomepage = useEditorStore((s) => s.setPageAsHomepage)
   const confirmVCDeletion = useVCDeletionConfirm()
   const [createKind, setCreateKind] = useState<SiteCreateKind | null>(null)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
-  const [renameTarget, setRenameTarget] = useState<SiteExplorerContextTarget | null>(null)
+  const [inlineRenameTarget, setInlineRenameTarget] = useState<SiteExplorerContextTarget | null>(null)
   const [templateSettingsTarget, setTemplateSettingsTarget] = useState<Page | null>(null)
   const panelRef = useRef<HTMLElement>(null)
 
@@ -146,12 +171,7 @@ export function SiteExplorerPanel({
   }
 
   const pages = site?.pages ?? []
-  // Pin the home page (slug `index`) to the top of the list; keep the rest in
-  // their existing order. A stable sort preserves relative order for non-home
-  // pages.
-  const normalPages = pages
-    .filter((page) => !page.template)
-    .sort((a, b) => Number(isHomePage(b)) - Number(isHomePage(a)))
+  const normalPages = pages.filter((page) => !page.template)
   const templatePages = pages.filter((page) => page.template)
   const components = site?.visualComponents ?? []
 
@@ -173,18 +193,64 @@ export function SiteExplorerPanel({
     setContextMenu({ ...keyboardMenuPosition(event.currentTarget), target })
   }
 
-  function handleRename(payload: ExplorerRenamePayload) {
-    if (!renameTarget) return
-
-    if (renameTarget.kind === 'page') {
-      renamePage(renameTarget.id, payload.value, payload.slug)
-    } else if (renameTarget.kind === 'component') {
-      renameVisualComponent(renameTarget.id, payload.value)
+  function inlineRenameSectionTarget(sectionId: SiteExplorerSectionId): SiteExplorerInlineRenameTarget | null {
+    if (!inlineRenameTarget) return null
+    if (inlineRenameTarget.kind === 'folder') {
+      if (inlineRenameTarget.sectionId !== sectionId) return null
+      return {
+        kind: 'folder',
+        sectionId,
+        id: inlineRenameTarget.id,
+        value: inlineRenameTarget.name,
+      }
+    }
+    if (inlineRenameTarget.kind === 'page') {
+      const page = pageForTarget(inlineRenameTarget)
+      const targetSectionId: SiteExplorerSectionId = page?.template ? 'templates' : 'pages'
+      if (targetSectionId !== sectionId) return null
+    } else if (inlineRenameTarget.kind === 'component') {
+      if (sectionId !== 'components') return null
     } else {
-      renameFile(renameTarget.id, pathFromRenameInput(renameTarget.path, payload.value))
+      const file = files.find((candidate) => candidate.id === inlineRenameTarget.id)
+      if (!file) return null
+      const targetSectionId: SiteExplorerSectionId | null = file.type === 'style'
+        ? 'styles'
+        : file.type === 'script'
+          ? 'scripts'
+          : null
+      if (targetSectionId !== sectionId) return null
     }
 
-    setRenameTarget(null)
+    return {
+      kind: 'item',
+      sectionId,
+      id: inlineRenameTarget.id,
+      value: renameValueForTarget(inlineRenameTarget),
+    }
+  }
+
+  function startInlineRename(target: SiteExplorerContextTarget) {
+    setInlineRenameTarget(target)
+    setContextMenu(null)
+  }
+
+  function handleInlineRename(value: string) {
+    if (!inlineRenameTarget) return
+
+    try {
+      if (inlineRenameTarget.kind === 'page') {
+        renamePage(inlineRenameTarget.id, value)
+      } else if (inlineRenameTarget.kind === 'component') {
+        renameVisualComponent(inlineRenameTarget.id, value)
+      } else if (inlineRenameTarget.kind === 'folder') {
+        renameExplorerFolder(inlineRenameTarget.sectionId, inlineRenameTarget.id, value)
+      } else {
+        renameFile(inlineRenameTarget.id, pathFromRenameInput(inlineRenameTarget.path, value))
+      }
+      setInlineRenameTarget(null)
+    } catch (err) {
+      console.error('[SiteExplorerPanel] rename site item error:', err)
+    }
   }
 
   function handleDelete(target: SiteExplorerContextTarget) {
@@ -200,6 +266,8 @@ export function SiteExplorerPanel({
           }
         },
       })
+    } else if (target.kind === 'folder') {
+      deleteExplorerFolder(target.sectionId, target.id)
     } else {
       deleteFile(target.id)
     }
@@ -261,6 +329,14 @@ export function SiteExplorerPanel({
     if (!page) return []
 
     return [
+      ...(!page.template && !isHomePage(page) ? [{
+        label: 'Set as homepage',
+        icon: <GlobeSolidIcon size={13} />,
+        action: () => {
+          setPageAsHomepage(page.id)
+          setContextMenu(null)
+        },
+      }] : []),
       {
         label: 'Open in new tab',
         icon: <ExternalLinkSolidIcon size={13} />,
@@ -273,8 +349,131 @@ export function SiteExplorerPanel({
     ]
   }
 
-  return (
-    <>
+  function handleCreateFolder(sectionId: SiteExplorerSectionId) {
+    const folderId = createExplorerFolder(sectionId, 'New folder')
+    setInlineRenameTarget({ kind: 'folder', sectionId, id: folderId, name: 'New folder' })
+  }
+
+  function openExplorerItem(item: SiteExplorerTreeItem<SiteExplorerContextTarget>) {
+    const target = item.target
+    if (target.kind === 'page') {
+      openPageInCanvas(target.id)
+    } else if (target.kind === 'component') {
+      setActiveDocument({ kind: 'visualComponent', vcId: target.id })
+    } else if (target.kind === 'file') {
+      openInEditor(target.id)
+    }
+  }
+
+  function contextMenuForItem(item: SiteExplorerTreeItem<SiteExplorerContextTarget>, event: MouseEvent<HTMLButtonElement>) {
+    openContextMenu(item.target, event)
+  }
+
+  function renameExplorerItem(item: SiteExplorerTreeItem<SiteExplorerContextTarget>) {
+    startInlineRename(item.target)
+  }
+
+  function keyboardContextMenuForItem(
+    item: SiteExplorerTreeItem<SiteExplorerContextTarget>,
+    event: KeyboardEvent<HTMLButtonElement>,
+  ) {
+    openKeyboardContextMenu(item.target, event)
+  }
+
+  function renameExplorerFolderTarget(sectionId: SiteExplorerSectionId, folder: SiteExplorerTreeFolder) {
+    startInlineRename(folderTarget(sectionId, folder))
+  }
+
+  const pageTreeModel = site
+    ? buildSiteExplorerTreeSection<SiteExplorerContextTarget>(
+      'pages',
+      site.explorer.pages.folders,
+      site.explorer.pages.items,
+      normalPages.map((page) => ({
+        id: page.id,
+        label: page.title,
+        meta: pagePublicPath(page.slug),
+        icon: FileTextSolidIcon,
+        active: page.id === activePageId && activeDocument?.kind !== 'visualComponent',
+        pinned: isHomePage(page),
+        ariaLabel: `Open page ${page.title}`,
+        target: { kind: 'page', id: page.id, title: page.title, slug: page.slug },
+      })),
+    )
+    : null
+  const templateTreeModel = site
+    ? buildSiteExplorerTreeSection<SiteExplorerContextTarget>(
+      'templates',
+      site.explorer.templates.folders,
+      site.explorer.templates.items,
+      templatePages.map((page) => ({
+        id: page.id,
+        label: page.title,
+        meta: page.template?.tableSlug ?? '',
+        icon: FileTextSolidIcon,
+        active: page.id === activePageId && activeDocument?.kind !== 'visualComponent',
+        ariaLabel: `Open template ${page.title}`,
+        target: { kind: 'page', id: page.id, title: page.title, slug: page.slug },
+      })),
+    )
+    : null
+  const componentTreeModel = site
+    ? buildSiteExplorerTreeSection<SiteExplorerContextTarget>(
+      'components',
+      site.explorer.components.folders,
+      site.explorer.components.items,
+      components.map((component) => ({
+        id: component.id,
+        label: component.name,
+        meta: `${component.params.length} props`,
+        icon: BracesIcon,
+        active: activeDocument?.kind === 'visualComponent' && activeDocument.vcId === component.id,
+        ariaLabel: `Open component ${component.name}`,
+        target: { kind: 'component', id: component.id, name: component.name },
+        canvasDrag: {
+          id: `site-explorer-vc-${component.id}`,
+          componentId: component.id,
+          ariaLabel: `Drag component ${component.name} to canvas`,
+        },
+      })),
+    )
+    : null
+  const styleTreeModel = site
+    ? buildSiteExplorerTreeSection<SiteExplorerContextTarget>(
+      'styles',
+      site.explorer.styles.folders,
+      site.explorer.styles.items,
+      fileBuckets.styles.map((file) => ({
+        id: file.id,
+        label: fileName(file.path),
+        meta: file.path,
+        icon: PaintBucketSolidIcon,
+        active: activeEditorFileId === file.id,
+        ariaLabel: `Open ${fileName(file.path)}`,
+        target: { kind: 'file', id: file.id, path: file.path },
+      })),
+    )
+    : null
+  const scriptTreeModel = site
+    ? buildSiteExplorerTreeSection<SiteExplorerContextTarget>(
+      'scripts',
+      site.explorer.scripts.folders,
+      site.explorer.scripts.items,
+      fileBuckets.scripts.map((file) => ({
+        id: file.id,
+        label: fileName(file.path),
+        meta: file.path,
+        icon: CodeIcon,
+        active: activeEditorFileId === file.id,
+        ariaLabel: `Open ${fileName(file.path)}`,
+        target: { kind: 'file', id: file.id, path: file.path },
+      })),
+    )
+    : null
+
+  function renderPanel(explorerDnd: SiteExplorerDndState) {
+    return (
+      <>
       <Panel
         ref={panelRef}
         panelId="site-explorer"
@@ -287,144 +486,120 @@ export function SiteExplorerPanel({
             <SkeletonBlock minHeight={160} ariaLabel="Loading site" />
           ) : (
             <>
-              <ExplorerSection
+              {pageTreeModel && (
+                <SiteExplorerTreeSection
                 title="Pages"
                 count={normalPages.length}
                 actionLabel="New page"
                 actionIcon={FilePlusSolidIcon}
                 onAction={() => setCreateKind('page')}
-              >
-                {normalPages.map((page) => (
-                  <ExplorerRow
-                    key={page.id}
-                    icon={FileTextSolidIcon}
-                    label={page.title}
-                    meta={page.slug === 'index' ? '/' : `/${page.slug}`}
-                    active={page.id === activePageId && activeDocument?.kind !== 'visualComponent'}
-                    ariaLabel={`Open page ${page.title}`}
-                    onClick={() => openPageInCanvas(page.id)}
-                    onContextMenu={(event) => openContextMenu({
-                      kind: 'page',
-                      id: page.id,
-                      title: page.title,
-                      slug: page.slug,
-                    }, event)}
-                    onKeyDown={(event) => openKeyboardContextMenu({
-                      kind: 'page',
-                      id: page.id,
-                      title: page.title,
-                      slug: page.slug,
-                    }, event)}
-                  />
-                ))}
-              </ExplorerSection>
+                model={pageTreeModel}
+                dropTarget={explorerDnd.target}
+                inlineRenameTarget={inlineRenameSectionTarget('pages')}
+                onCreateFolder={() => handleCreateFolder('pages')}
+                onRenameItem={renameExplorerItem}
+                onRenameFolder={(folder) => renameExplorerFolderTarget('pages', folder)}
+                onCommitInlineRename={handleInlineRename}
+                onCancelInlineRename={() => setInlineRenameTarget(null)}
+                onOpenItem={openExplorerItem}
+                onContextMenuItem={contextMenuForItem}
+                onKeyDownItem={keyboardContextMenuForItem}
+                onContextMenuFolder={(folder, event) => openContextMenu(folderTarget('pages', folder), event)}
+                onKeyDownFolder={(folder, event) => openKeyboardContextMenu(folderTarget('pages', folder), event)}
+              />
+              )}
 
-              <ExplorerSection
+              {templateTreeModel && (
+                <SiteExplorerTreeSection
                 title="Templates"
                 count={templatePages.length}
                 actionLabel="New template"
                 actionIcon={FilePlusSolidIcon}
                 onAction={handleCreateTemplate}
-              >
-                {templatePages.map((page) => (
-                  <ExplorerRow
-                    key={page.id}
-                    icon={FileTextSolidIcon}
-                    label={page.title}
-                    meta={page.template?.tableSlug ?? ''}
-                    active={page.id === activePageId && activeDocument?.kind !== 'visualComponent'}
-                    ariaLabel={`Open template ${page.title}`}
-                    onClick={() => openPageInCanvas(page.id)}
-                    onContextMenu={(event) => openContextMenu({
-                      kind: 'page',
-                      id: page.id,
-                      title: page.title,
-                      slug: page.slug,
-                    }, event)}
-                    onKeyDown={(event) => openKeyboardContextMenu({
-                      kind: 'page',
-                      id: page.id,
-                      title: page.title,
-                      slug: page.slug,
-                    }, event)}
-                  />
-                ))}
-              </ExplorerSection>
+                model={templateTreeModel}
+                dropTarget={explorerDnd.target}
+                inlineRenameTarget={inlineRenameSectionTarget('templates')}
+                onCreateFolder={() => handleCreateFolder('templates')}
+                onRenameItem={renameExplorerItem}
+                onRenameFolder={(folder) => renameExplorerFolderTarget('templates', folder)}
+                onCommitInlineRename={handleInlineRename}
+                onCancelInlineRename={() => setInlineRenameTarget(null)}
+                onOpenItem={openExplorerItem}
+                onContextMenuItem={contextMenuForItem}
+                onKeyDownItem={keyboardContextMenuForItem}
+                onContextMenuFolder={(folder, event) => openContextMenu(folderTarget('templates', folder), event)}
+                onKeyDownFolder={(folder, event) => openKeyboardContextMenu(folderTarget('templates', folder), event)}
+              />
+              )}
 
-              <ExplorerSection
+              {componentTreeModel && (
+                <SiteExplorerTreeSection
                 title="Components"
                 count={components.length}
                 actionLabel="New component"
                 actionIcon={BracesIcon}
                 onAction={() => setCreateKind('component')}
-              >
-                {components.map((component) => (
-                  <DraggableComponentRow
-                    key={component.id}
-                    component={component}
-                    active={activeDocument?.kind === 'visualComponent' && activeDocument.vcId === component.id}
-                    onOpen={() => setActiveDocument({ kind: 'visualComponent', vcId: component.id })}
-                    onContextMenu={(event) => openContextMenu({
-                      kind: 'component',
-                      id: component.id,
-                      name: component.name,
-                    }, event)}
-                    onKeyDown={(event) => openKeyboardContextMenu({
-                      kind: 'component',
-                      id: component.id,
-                      name: component.name,
-                    }, event)}
-                  />
-                ))}
-              </ExplorerSection>
+                model={componentTreeModel}
+                dropTarget={explorerDnd.target}
+                inlineRenameTarget={inlineRenameSectionTarget('components')}
+                onCreateFolder={() => handleCreateFolder('components')}
+                onRenameItem={renameExplorerItem}
+                onRenameFolder={(folder) => renameExplorerFolderTarget('components', folder)}
+                onCommitInlineRename={handleInlineRename}
+                onCancelInlineRename={() => setInlineRenameTarget(null)}
+                onOpenItem={openExplorerItem}
+                onContextMenuItem={contextMenuForItem}
+                onKeyDownItem={keyboardContextMenuForItem}
+                onContextMenuFolder={(folder, event) => openContextMenu(folderTarget('components', folder), event)}
+                onKeyDownFolder={(folder, event) => openKeyboardContextMenu(folderTarget('components', folder), event)}
+              />
+              )}
 
-              <ExplorerSection
+              {styleTreeModel && (
+                <SiteExplorerTreeSection
                 title="Styles"
                 count={fileBuckets.styles.length}
                 actionLabel="New stylesheet"
                 actionIcon={PaintBucketSolidIcon}
                 onAction={() => setCreateKind('style')}
-              >
-                <FileRows
-                  files={fileBuckets.styles}
-                  icon={PaintBucketSolidIcon}
-                  onOpen={openInEditor}
-                  onContextMenu={(file, event) => openContextMenu({
-                    kind: 'file',
-                    id: file.id,
-                    path: file.path,
-                  }, event)}
-                  onKeyDown={(file, event) => openKeyboardContextMenu({
-                    kind: 'file',
-                    id: file.id,
-                    path: file.path,
-                  }, event)}
-                />
-              </ExplorerSection>
+                model={styleTreeModel}
+                dropTarget={explorerDnd.target}
+                inlineRenameTarget={inlineRenameSectionTarget('styles')}
+                onCreateFolder={() => handleCreateFolder('styles')}
+                onRenameItem={renameExplorerItem}
+                onRenameFolder={(folder) => renameExplorerFolderTarget('styles', folder)}
+                onCommitInlineRename={handleInlineRename}
+                onCancelInlineRename={() => setInlineRenameTarget(null)}
+                onOpenItem={openExplorerItem}
+                onContextMenuItem={contextMenuForItem}
+                onKeyDownItem={keyboardContextMenuForItem}
+                onContextMenuFolder={(folder, event) => openContextMenu(folderTarget('styles', folder), event)}
+                onKeyDownFolder={(folder, event) => openKeyboardContextMenu(folderTarget('styles', folder), event)}
+              />
+              )}
 
-              <ExplorerSection
+              {scriptTreeModel && (
+                <SiteExplorerTreeSection
                 title="Scripts"
                 count={fileBuckets.scripts.length}
                 actionLabel="New script"
                 actionIcon={CodeIcon}
                 onAction={() => setCreateKind('script')}
-              >
-                <FileRows
-                  files={fileBuckets.scripts}
-                  icon={CodeIcon}
-                  onOpen={openInEditor}
-                  onContextMenu={(file, event) => openContextMenu({
-                    kind: 'file',
-                    id: file.id,
-                    path: file.path,
-                  }, event)}
-                  onKeyDown={(file, event) => openKeyboardContextMenu({
-                    kind: 'file',
-                    id: file.id,
-                    path: file.path,
-                  }, event)}
-                />
-              </ExplorerSection>
+                model={scriptTreeModel}
+                dropTarget={explorerDnd.target}
+                inlineRenameTarget={inlineRenameSectionTarget('scripts')}
+                onCreateFolder={() => handleCreateFolder('scripts')}
+                onRenameItem={renameExplorerItem}
+                onRenameFolder={(folder) => renameExplorerFolderTarget('scripts', folder)}
+                onCommitInlineRename={handleInlineRename}
+                onCancelInlineRename={() => setInlineRenameTarget(null)}
+                onOpenItem={openExplorerItem}
+                onContextMenuItem={contextMenuForItem}
+                onKeyDownItem={keyboardContextMenuForItem}
+                onContextMenuFolder={(folder, event) => openContextMenu(folderTarget('scripts', folder), event)}
+                onKeyDownFolder={(folder, event) => openKeyboardContextMenu(folderTarget('scripts', folder), event)}
+              />
+              )}
             </>
           )}
       </Panel>
@@ -446,10 +621,7 @@ export function SiteExplorerPanel({
           deleteDisabled={contextMenu.target.kind === 'page' && pages.length <= 1}
           extraItems={pageMenuItems(contextMenu.target)}
           onClose={() => setContextMenu(null)}
-          onRename={() => {
-            setRenameTarget(contextMenu.target)
-            setContextMenu(null)
-          }}
+          onRename={() => startInlineRename(contextMenu.target)}
           onDelete={() => handleDelete(contextMenu.target)}
         />
       )}
@@ -463,195 +635,55 @@ export function SiteExplorerPanel({
         />
       )}
 
-      {renameTarget && (
-        <ExplorerRenameDialog
-          title={
-            renameTarget.kind === 'page'
-              ? 'Rename page'
-              : renameTarget.kind === 'component'
-                ? 'Rename component'
-                : 'Rename file'
-          }
-          fieldLabel={renameTarget.kind === 'file' ? 'Path' : 'Name'}
-          initialValue={
-            renameTarget.kind === 'page'
-              ? renameTarget.title
-              : renameTarget.kind === 'component'
-                ? renameTarget.name
-                : renameTarget.path
-          }
-          initialSlug={renameTarget.kind === 'page' ? renameTarget.slug : undefined}
-          pageId={renameTarget.kind === 'page' ? renameTarget.id : undefined}
-          pages={pages}
-          onCancel={() => setRenameTarget(null)}
-          onRename={handleRename}
-        />
-      )}
+      </>
+    )
+  }
+
+  return (
+    <SiteExplorerDndScope enabled={organizationDndEnabled}>
+      {renderPanel}
+    </SiteExplorerDndScope>
+  )
+}
+
+interface SiteExplorerDndScopeProps {
+  enabled: boolean
+  children: (dnd: SiteExplorerDndState) => ReactNode
+}
+
+function SiteExplorerDndScope({ enabled, children }: SiteExplorerDndScopeProps) {
+  if (!enabled) return <>{children(EMPTY_DND)}</>
+  return <SiteExplorerDndEnabled>{children}</SiteExplorerDndEnabled>
+}
+
+function SiteExplorerDndEnabled({ children }: Pick<SiteExplorerDndScopeProps, 'children'>) {
+  const explorerDnd = useSiteExplorerDnd({ enabled: true })
+
+  return (
+    <>
+      {children(explorerDnd)}
+      <SiteExplorerDragOverlay active={explorerDnd.active} />
     </>
   )
 }
 
-// ─── DraggableComponentRow ────────────────────────────────────────────────────
-// Wraps ExplorerRow with a dnd-kit draggable so the component row can be
-// dragged onto the canvas. Payload: { kind: 'visualComponentRef', componentId }.
-// A DndContext ancestor (provided by the canvas layer) is required for the
-// drag to activate — without it, the row still renders and clicks work normally.
-
-interface DraggableComponentRowProps {
-  component: VisualComponent
-  active: boolean
-  onOpen: () => void
-  onContextMenu: (event: MouseEvent<HTMLButtonElement>) => void
-  onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => void
-}
-
-function DraggableComponentRow({
-  component,
-  active,
-  onOpen,
-  onContextMenu,
-  onKeyDown,
-}: DraggableComponentRowProps) {
-  const { listeners, setNodeRef, isDragging } = useDraggable({
-    id: `site-explorer-vc-${component.id}`,
-    data: { kind: 'visualComponentRef', componentId: component.id },
-  })
+function SiteExplorerDragOverlay({ active }: { active: SiteExplorerDragData | null }) {
+  const ActiveIcon = active?.icon
 
   return (
-    <div
-      ref={setNodeRef}
-      data-testid="site-explorer-component-drag-handle"
-      className={isDragging ? styles.draggingComponent : undefined}
-      {...listeners}
-    >
-      <ExplorerRow
-        icon={BracesIcon}
-        label={component.name}
-        meta={`${component.params.length} props`}
-        active={active}
-        ariaLabel={`Open component ${component.name}`}
-        onClick={onOpen}
-        onContextMenu={onContextMenu}
-        onKeyDown={onKeyDown}
-      />
-    </div>
+    <DragOverlay dropAnimation={null}>
+      {active ? (
+        <TreeRow depth={0} className={styles.dragOverlayRow}>
+          {ActiveIcon && (
+            <TreeIconSlot
+              icon={ActiveIcon}
+              iconSize={12}
+              iconColor="var(--editor-text-subtle)"
+            />
+          )}
+          <TreeLabel>{active.label}</TreeLabel>
+        </TreeRow>
+      ) : null}
+    </DragOverlay>
   )
-}
-
-interface ExplorerSectionProps {
-  title: string
-  count: number
-  actionLabel: string
-  actionIcon: IconComponent
-  onAction?: () => void
-  emptyLabel?: string
-  children: ReactNode
-}
-
-function ExplorerSection({
-  title,
-  count,
-  actionLabel,
-  actionIcon,
-  onAction,
-  emptyLabel = 'None yet',
-  children,
-}: ExplorerSectionProps) {
-  const ActionIcon = actionIcon
-  return (
-    <section className={styles.section} aria-labelledby={`site-section-${title.toLowerCase()}`}>
-      <div className={styles.sectionHeader}>
-        <h2 id={`site-section-${title.toLowerCase()}`} className={styles.sectionTitle}>
-          {title}
-        </h2>
-        <span className={styles.sectionCount}>{count}</span>
-        <Button
-          variant="ghost"
-          size="xs"
-          iconOnly
-          aria-label={actionLabel}
-          tooltip={actionLabel}
-          onClick={onAction}
-        >
-          <ActionIcon size={13} />
-        </Button>
-      </div>
-      <div className={styles.rows}>
-        {count === 0 ? (
-          <EmptyState
-            compact
-            title={emptyLabel}
-            className={styles.sectionEmpty}
-          />
-        ) : children}
-      </div>
-    </section>
-  )
-}
-
-interface ExplorerRowProps {
-  icon: IconComponent
-  label: string
-  meta?: string
-  active?: boolean
-  ariaLabel: string
-  onClick: () => void
-  onContextMenu?: (event: MouseEvent<HTMLButtonElement>) => void
-  onKeyDown?: (event: KeyboardEvent<HTMLButtonElement>) => void
-}
-
-function ExplorerRow({
-  icon,
-  label,
-  meta,
-  active = false,
-  ariaLabel,
-  onClick,
-  onContextMenu,
-  onKeyDown,
-}: ExplorerRowProps) {
-  const RowIcon = icon
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className={cn(styles.row, active && styles.rowActive)}
-      aria-label={ariaLabel}
-      aria-current={active ? 'page' : undefined}
-      onClick={onClick}
-      onContextMenu={onContextMenu}
-      onKeyDown={onKeyDown}
-    >
-      <RowIcon size={13} />
-      <span className={styles.rowLabel}>{label}</span>
-      {meta && <span className={styles.rowMeta}>{meta}</span>}
-    </Button>
-  )
-}
-
-function FileRows({
-  files,
-  icon,
-  onOpen,
-  onContextMenu,
-  onKeyDown,
-}: {
-  files: SiteFile[]
-  icon: IconComponent
-  onOpen: (fileId: string) => void
-  onContextMenu: (file: SiteFile, event: MouseEvent<HTMLButtonElement>) => void
-  onKeyDown: (file: SiteFile, event: KeyboardEvent<HTMLButtonElement>) => void
-}) {
-  return files.map((file) => (
-    <ExplorerRow
-      key={file.id}
-      icon={icon}
-      label={fileName(file.path)}
-      meta={file.path}
-      ariaLabel={`Open ${fileName(file.path)}`}
-      onClick={() => onOpen(file.id)}
-      onContextMenu={(event) => onContextMenu(file, event)}
-      onKeyDown={(event) => onKeyDown(file, event)}
-    />
-  ))
 }

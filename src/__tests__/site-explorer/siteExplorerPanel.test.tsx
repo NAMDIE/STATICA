@@ -164,6 +164,106 @@ describe('SiteExplorerPanel', () => {
     expect(within(panel).queryByText('src/components/HeroCard.tsx')).toBeNull()
   })
 
+  it('renders Pages as a tree with the homepage pinned first', () => {
+    loadSite()
+    render(<SiteExplorerPanel variant="docked" />)
+
+    const panel = screen.getByTestId('site-explorer-panel')
+    const pagesTree = within(panel).getByRole('tree', { name: 'Pages' })
+    const rows = within(pagesTree).getAllByRole('treeitem')
+
+    expect(rows[0].textContent).toContain('Home')
+    expect(rows[0].getAttribute('data-pinned')).toBe('true')
+    expect(rows[0].getAttribute('draggable')).not.toBe('true')
+  })
+
+  it('uses left-aligned tree row buttons and DOM-panel-style drop helpers', () => {
+    const treeSectionSource = readFileSync(
+      new URL('../../admin/pages/site/panels/SiteExplorerPanel/SiteExplorerTreeSection.tsx', import.meta.url),
+      'utf-8',
+    )
+    const panelSource = readFileSync(
+      new URL('../../admin/pages/site/panels/SiteExplorerPanel/SiteExplorerPanel.tsx', import.meta.url),
+      'utf-8',
+    )
+    const layoutSource = readFileSync(
+      new URL('../../admin/layouts/AdminCanvasLayout/AdminCanvasLayout.tsx', import.meta.url),
+      'utf-8',
+    )
+    const css = readFileSync(
+      new URL('../../admin/pages/site/panels/SiteExplorerPanel/SiteExplorerPanel.module.css', import.meta.url),
+      'utf-8',
+    )
+
+    expect(treeSectionSource).toContain('align="start"')
+    expect(treeSectionSource).toContain('data-drop-position')
+    expect(treeSectionSource).toContain('RootDropGap')
+    expect(panelSource).toContain('DragOverlay')
+    expect(layoutSource).toContain('collisionDetection={pointerWithin}')
+    expect(css).toContain('justify-content: flex-start')
+    expect(css).toContain('.dropBefore::before')
+    expect(css).toContain('.dropAfter::after')
+    expect(css).toContain('.rootDropGapActive::after')
+    expect(css).toContain('.dropInside')
+    expect(css).toContain('.dragOverlayRow')
+
+    const beforeAfterBlock = css.match(/\.dropBefore::before,\n\.dropAfter::after,\n\.dropRoot::after\s*\{[^}]*\}/s)?.[0] ?? ''
+    expect(beforeAfterBlock).toContain('position: absolute')
+    expect(beforeAfterBlock).not.toMatch(/(?:^|\n)\s*(margin|padding)\b/)
+  })
+
+  it('uses inline rename in Site Explorer and keeps the shared rename dialog chrome valid elsewhere', () => {
+    const renameSource = readFileSync(
+      new URL('../../admin/pages/site/explorer-actions/ExplorerRenameDialog.tsx', import.meta.url),
+      'utf-8',
+    )
+    const panelSource = readFileSync(
+      new URL('../../admin/pages/site/panels/SiteExplorerPanel/SiteExplorerPanel.tsx', import.meta.url),
+      'utf-8',
+    )
+    const treeSectionSource = readFileSync(
+      new URL('../../admin/pages/site/panels/SiteExplorerPanel/SiteExplorerTreeSection.tsx', import.meta.url),
+      'utf-8',
+    )
+
+    expect(renameSource).toContain("import { Dialog } from '@ui/components/Dialog'")
+    expect(renameSource).not.toContain('createPortal')
+    expect(renameSource).not.toContain('styles.backdrop')
+    expect(renameSource).not.toContain('styles.dialog')
+    expect(panelSource).not.toContain('ExplorerRenameDialog')
+    expect(treeSectionSource).toContain('InlineRenameInput')
+  })
+
+  it('renders page folders and nested page rows from explorer organization', () => {
+    loadSite()
+    const folderId = useEditorStore.getState().createExplorerFolder('pages', 'Marketing')
+    useEditorStore.getState().moveExplorerItem('pages', 'page-pricing', folderId, 0)
+
+    render(<SiteExplorerPanel variant="docked" />)
+
+    const pagesTree = within(screen.getByTestId('site-explorer-panel')).getByRole('tree', { name: 'Pages' })
+    expect(within(pagesTree).getByRole('treeitem', { name: 'Marketing' })).toBeDefined()
+    const pricingRow = within(pagesTree).getByRole('treeitem', { name: /open page pricing/i })
+    expect(pricingRow.getAttribute('aria-level')).toBe('2')
+  })
+
+  it('interleaves root folders and root items by their explorer order', () => {
+    loadSite()
+    const folderId = useEditorStore.getState().createExplorerFolder('pages', 'Marketing')
+    useEditorStore.getState().moveExplorerItem('pages', 'page-pricing', null, 0)
+    useEditorStore.getState().moveExplorerFolder('pages', folderId, 2)
+
+    render(<SiteExplorerPanel variant="docked" />)
+
+    const pagesTree = within(screen.getByTestId('site-explorer-panel')).getByRole('tree', { name: 'Pages' })
+    const rows = within(pagesTree).getAllByRole('treeitem')
+    expect(rows.map((row) => row.textContent?.replace(/\s+/g, ' ').trim())).toEqual([
+      'Home/',
+      'Pricing/pricing',
+      'Marketing',
+    ])
+  })
+
   it('Media Explorer uses CMS media instead of base64 site files', () => {
     const source = readFileSync(
       new URL('../../admin/pages/site/panels/MediaExplorerPanel/MediaExplorerPanel.tsx', import.meta.url),
@@ -585,18 +685,15 @@ describe('SiteExplorerPanel', () => {
     })
     fireEvent.click(screen.getByRole('menuitem', { name: /rename/i }))
 
-    const dialog = screen.getByRole('dialog', { name: 'Rename page' })
-    fireEvent.change(within(dialog).getByLabelText('Name'), {
+    const input = screen.getByRole('textbox', { name: 'Rename Pricing' })
+    fireEvent.change(input, {
       target: { value: 'Plans' },
     })
-    fireEvent.change(within(dialog).getByLabelText('Slug'), {
-      target: { value: 'plans' },
-    })
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    fireEvent.keyDown(input, { key: 'Enter' })
 
     let renamed = useEditorStore.getState().site?.pages.find((page) => page.id === 'page-pricing')
     expect(renamed?.title).toBe('Plans')
-    expect(renamed?.slug).toBe('plans')
+    expect(renamed?.slug).toBe('pricing')
 
     fireEvent.contextMenu(screen.getByRole('button', { name: /open page plans/i }), {
       clientX: 120,
@@ -618,11 +715,11 @@ describe('SiteExplorerPanel', () => {
     })
     fireEvent.click(screen.getByRole('menuitem', { name: /rename/i }))
 
-    const dialog = screen.getByRole('dialog', { name: 'Rename component' })
-    fireEvent.change(within(dialog).getByLabelText('Name'), {
+    const input = screen.getByRole('textbox', { name: 'Rename HeroCard' })
+    fireEvent.change(input, {
       target: { value: 'Promo card' },
     })
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    fireEvent.keyDown(input, { key: 'Enter' })
 
     let component = useEditorStore.getState().site?.visualComponents.find((item) => item.id === 'vc-HeroCard')
     // Component names are stored verbatim (free-form, no PascalCase coercion).
@@ -648,11 +745,11 @@ describe('SiteExplorerPanel', () => {
     })
     fireEvent.click(screen.getByRole('menuitem', { name: /rename/i }))
 
-    const dialog = screen.getByRole('dialog', { name: 'Rename file' })
-    fireEvent.change(within(dialog).getByLabelText('Path'), {
+    const input = screen.getByRole('textbox', { name: 'Rename theme.css' })
+    fireEvent.change(input, {
       target: { value: 'src/styles/site.css' },
     })
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    fireEvent.keyDown(input, { key: 'Enter' })
 
     const styleFile = useEditorStore.getState().site?.files.find((file) => file.id === 'style-1')
     expect(styleFile?.path).toBe('src/styles/site.css')

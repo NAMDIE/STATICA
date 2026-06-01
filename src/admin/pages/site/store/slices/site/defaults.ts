@@ -9,6 +9,7 @@ import {
   DEFAULT_BREAKPOINTS,
   DEFAULT_SITE_SETTINGS,
   createNode,
+  createDefaultSiteExplorerOrganization,
 } from '@core/page-tree'
 import {
   clonePackageJson,
@@ -42,6 +43,7 @@ export function createDefaultSiteDocument(name: string): SiteDocument {
     breakpoints: DEFAULT_BREAKPOINTS,
     settings: structuredClone(DEFAULT_SITE_SETTINGS),
     styleRules: {},
+    explorer: createDefaultSiteExplorerOrganization(),
     createdAt: Date.now(),
     updatedAt: Date.now(),
   }

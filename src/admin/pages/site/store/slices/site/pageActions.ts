@@ -10,6 +10,7 @@ import {
   renamePage,
   reorderPages,
   duplicatePage,
+  reconcileSiteExplorerInPlace,
 } from '@core/page-tree'
 import type { SiteSlice, SiteSliceHelpers } from './types'
 
@@ -34,6 +35,7 @@ export function createPageActions({
       let newPage!: Page
       mutateSite((p) => {
         newPage = addPage(p, title, slug ?? title)
+        reconcileSiteExplorerInPlace(p)
         return true
       })
       set((state) => { state.activePageId = newPage.id })
@@ -44,6 +46,7 @@ export function createPageActions({
       const deleted = mutateSite((p) => {
         if (!p.pages.some((page) => page.id === pageId)) return false
         deletePage(p, pageId)
+        reconcileSiteExplorerInPlace(p)
         return true
       })
       const { site, activePageId } = get()
@@ -65,6 +68,7 @@ export function createPageActions({
       let newPage!: Page
       mutateSite((p) => {
         newPage = duplicatePage(p, sourcePageId, title, slug)
+        reconcileSiteExplorerInPlace(p)
         return true
       })
       return newPage
@@ -91,6 +95,7 @@ export function createPageActions({
         const page = site.pages.find((candidate) => candidate.id === pageId)
         if (!page) return false
         page.template = config
+        reconcileSiteExplorerInPlace(site)
         return true
       })
     },
@@ -108,6 +113,7 @@ export function createPageActions({
         for (const node of Object.values(page.nodes)) {
           delete node.dynamicBindings
         }
+        reconcileSiteExplorerInPlace(site)
         return true
       })
     },

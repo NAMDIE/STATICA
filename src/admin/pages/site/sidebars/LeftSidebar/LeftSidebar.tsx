@@ -112,7 +112,7 @@ export function LeftSidebar({ workspace = 'site', contentPanel, editable = true 
             <DomPanel variant="docked" editable={editable} />
           </div>
           <div className={styles.panelMount} hidden={effectiveActivePanel !== 'site'}>
-            {workspace === 'content' ? contentPanel : <SiteExplorerPanel variant="docked" />}
+            {workspace === 'content' ? contentPanel : <SiteExplorerPanel variant="docked" organizationDndEnabled={editable} />}
           </div>
           <div className={styles.panelMount} hidden={effectiveActivePanel !== 'media'}>
             <MediaExplorerPanel variant="docked" />

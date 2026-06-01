@@ -1,0 +1,655 @@
+import { Fragment, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
+import { useDraggable, useDroppable } from '@dnd-kit/core'
+import type { IconComponent } from 'pixel-art-icons/types'
+import { DragAndDropSolidIcon } from 'pixel-art-icons/icons/drag-and-drop-solid'
+import { FolderGlyphIcon } from 'pixel-art-icons/icons/folder-glyph'
+import { Button } from '@ui/components/Button'
+import { EmptyState } from '@ui/components/EmptyState'
+import { Input } from '@ui/components/Input'
+import { cn } from '@ui/cn'
+import {
+  TreeChevron,
+  TreeContainer,
+  TreeIconSlot,
+  TreeLabel,
+  TreeLabelGroup,
+  TreeMeta,
+  TreeRow,
+} from '@site/ui/Tree'
+import type { SiteExplorerSectionId } from '@core/page-tree'
+import type {
+  SiteExplorerTreeFolder,
+  SiteExplorerTreeItem,
+  SiteExplorerTreeSectionModel,
+} from './siteExplorerModel'
+import type {
+  SiteExplorerDragData,
+  SiteExplorerDropData,
+  SiteExplorerDropPosition,
+  SiteExplorerDropTarget,
+} from './useSiteExplorerDnd'
+import styles from './SiteExplorerPanel.module.css'
+
+export interface SiteExplorerInlineRenameTarget {
+  kind: 'item' | 'folder'
+  sectionId: SiteExplorerSectionId
+  id: string
+  value: string
+}
+
+interface SiteExplorerTreeSectionProps<TTarget> {
+  title: string
+  count: number
+  actionLabel: string
+  actionIcon: IconComponent
+  model: SiteExplorerTreeSectionModel<TTarget>
+  dropTarget: SiteExplorerDropTarget | null
+  inlineRenameTarget: SiteExplorerInlineRenameTarget | null
+  onAction: () => void
+  onCreateFolder: () => void
+  onRenameItem: (item: SiteExplorerTreeItem<TTarget>) => void
+  onRenameFolder: (folder: SiteExplorerTreeFolder) => void
+  onCommitInlineRename: (value: string) => void
+  onCancelInlineRename: () => void
+  onOpenItem: (item: SiteExplorerTreeItem<TTarget>) => void
+  onContextMenuItem: (item: SiteExplorerTreeItem<TTarget>, event: MouseEvent<HTMLButtonElement>) => void
+  onKeyDownItem: (item: SiteExplorerTreeItem<TTarget>, event: KeyboardEvent<HTMLButtonElement>) => void
+  onContextMenuFolder: (folder: SiteExplorerTreeFolder, event: MouseEvent<HTMLButtonElement>) => void
+  onKeyDownFolder: (folder: SiteExplorerTreeFolder, event: KeyboardEvent<HTMLButtonElement>) => void
+  emptyLabel?: string
+}
+
+export function SiteExplorerTreeSection<TTarget>({
+  title,
+  count,
+  actionLabel,
+  actionIcon,
+  model,
+  dropTarget,
+  inlineRenameTarget,
+  onAction,
+  onCreateFolder,
+  onRenameItem,
+  onRenameFolder,
+  onCommitInlineRename,
+  onCancelInlineRename,
+  onOpenItem,
+  onContextMenuItem,
+  onKeyDownItem,
+  onContextMenuFolder,
+  onKeyDownFolder,
+  emptyLabel = 'None yet',
+}: SiteExplorerTreeSectionProps<TTarget>) {
+  const [expandedFolderIds, setExpandedFolderIds] = useState(() => new Set(model.folders.map((folder) => folder.id)))
+  const ActionIcon = actionIcon
+  const hasRows = model.pinnedItems.length > 0 || model.rootEntries.length > 0
+  const rootDrop = useDroppable({
+    id: `site-explorer-drop-root:${model.sectionId}`,
+    disabled: hasRows,
+    data: {
+      kind: 'siteExplorerRoot',
+      sectionId: model.sectionId,
+      parentFolderId: null,
+      index: model.rootEntries.length,
+    } satisfies SiteExplorerDropData,
+  })
+  const rootDropActive = !hasRows && isRootDropActive(dropTarget, model.sectionId, 0)
+
+  function toggleFolder(folderId: string) {
+    setExpandedFolderIds((current) => {
+      const next = new Set(current)
+      if (next.has(folderId)) {
+        next.delete(folderId)
+      } else {
+        next.add(folderId)
+      }
+      return next
+    })
+  }
+
+  return (
+    <section className={styles.section} aria-labelledby={`site-section-${title.toLowerCase()}`}>
+      <div className={styles.sectionHeader}>
+        <h2 id={`site-section-${title.toLowerCase()}`} className={styles.sectionTitle}>
+          {title}
+        </h2>
+        <span className={styles.sectionCount}>{count}</span>
+        <Button
+          variant="ghost"
+          size="xs"
+          iconOnly
+          aria-label={`New ${title.toLowerCase()} folder`}
+          tooltip={`New ${title.toLowerCase()} folder`}
+          onClick={onCreateFolder}
+        >
+          <FolderGlyphIcon size={13} />
+        </Button>
+        <Button
+          variant="ghost"
+          size="xs"
+          iconOnly
+          aria-label={actionLabel}
+          tooltip={actionLabel}
+          onClick={onAction}
+        >
+          <ActionIcon size={13} />
+        </Button>
+      </div>
+
+      <TreeContainer
+        ariaLabel={title}
+        className={cn(styles.treeRows, rootDropActive && styles.dropRoot)}
+        containerRef={rootDrop.setNodeRef}
+      >
+        {!hasRows ? (
+          <EmptyState
+            compact
+            title={emptyLabel}
+            className={styles.sectionEmpty}
+          />
+        ) : (
+          <>
+            {model.pinnedItems.map((item) => (
+              <ExplorerItemRow
+                key={item.id}
+                item={item}
+                sectionId={model.sectionId}
+                depth={0}
+                index={0}
+                parentFolderId={null}
+                dropPosition={dropPositionForItem(dropTarget, model.sectionId, item.id)}
+                renameActive={isInlineRenaming(inlineRenameTarget, 'item', model.sectionId, item.id)}
+                renameValue={inlineRenameTarget?.value ?? item.label}
+                onOpen={onOpenItem}
+                onRename={onRenameItem}
+                onCommitRename={onCommitInlineRename}
+                onCancelRename={onCancelInlineRename}
+                onContextMenu={onContextMenuItem}
+                onKeyDown={onKeyDownItem}
+              />
+            ))}
+
+            <RootDropGap
+              sectionId={model.sectionId}
+              index={0}
+              active={isRootDropActive(dropTarget, model.sectionId, 0)}
+            />
+
+            {model.rootEntries.map((entry, rootIndex) => {
+              if (entry.kind === 'item') {
+                return (
+                  <Fragment key={entry.item.id}>
+                    <ExplorerItemRow
+                      item={entry.item}
+                      sectionId={model.sectionId}
+                      depth={0}
+                      index={rootIndex}
+                      parentFolderId={null}
+                      dropPosition={dropPositionForItem(dropTarget, model.sectionId, entry.item.id)}
+                      renameActive={isInlineRenaming(inlineRenameTarget, 'item', model.sectionId, entry.item.id)}
+                      renameValue={inlineRenameTarget?.value ?? entry.item.label}
+                      onOpen={onOpenItem}
+                      onRename={onRenameItem}
+                      onCommitRename={onCommitInlineRename}
+                      onCancelRename={onCancelInlineRename}
+                      onContextMenu={onContextMenuItem}
+                      onKeyDown={onKeyDownItem}
+                    />
+                    <RootDropGap
+                      sectionId={model.sectionId}
+                      index={rootIndex + 1}
+                      active={isRootDropActive(dropTarget, model.sectionId, rootIndex + 1)}
+                    />
+                  </Fragment>
+                )
+              }
+
+              const expanded = expandedFolderIds.has(entry.folder.id)
+              return (
+                <Fragment key={entry.folder.id}>
+                  <ExplorerFolderRow
+                    folder={entry.folder}
+                    sectionId={model.sectionId}
+                    rootIndex={rootIndex}
+                    itemCount={entry.items.length}
+                    expanded={expanded}
+                    dropPosition={dropPositionForFolder(dropTarget, model.sectionId, entry.folder.id)}
+                    renameActive={isInlineRenaming(inlineRenameTarget, 'folder', model.sectionId, entry.folder.id)}
+                    renameValue={inlineRenameTarget?.value ?? entry.folder.name}
+                    onToggle={() => toggleFolder(entry.folder.id)}
+                    onRename={onRenameFolder}
+                    onCommitRename={onCommitInlineRename}
+                    onCancelRename={onCancelInlineRename}
+                    onContextMenu={onContextMenuFolder}
+                    onKeyDown={onKeyDownFolder}
+                  />
+                  {expanded && entry.items.map((item, index) => (
+                    <ExplorerItemRow
+                      key={item.id}
+                      item={item}
+                      sectionId={model.sectionId}
+                      depth={1}
+                      index={index}
+                      parentFolderId={entry.folder.id}
+                      dropPosition={dropPositionForItem(dropTarget, model.sectionId, item.id)}
+                      renameActive={isInlineRenaming(inlineRenameTarget, 'item', model.sectionId, item.id)}
+                      renameValue={inlineRenameTarget?.value ?? item.label}
+                      onOpen={onOpenItem}
+                      onRename={onRenameItem}
+                      onCommitRename={onCommitInlineRename}
+                      onCancelRename={onCancelInlineRename}
+                      onContextMenu={onContextMenuItem}
+                      onKeyDown={onKeyDownItem}
+                    />
+                  ))}
+                  <RootDropGap
+                    sectionId={model.sectionId}
+                    index={rootIndex + 1}
+                    active={isRootDropActive(dropTarget, model.sectionId, rootIndex + 1)}
+                  />
+                </Fragment>
+              )
+            })}
+          </>
+        )}
+      </TreeContainer>
+    </section>
+  )
+}
+
+interface RootDropGapProps {
+  sectionId: SiteExplorerSectionId
+  index: number
+  active: boolean
+}
+
+function RootDropGap({ sectionId, index, active }: RootDropGapProps) {
+  const { setNodeRef } = useDroppable({
+    id: `site-explorer-drop-root-gap:${sectionId}:${index}`,
+    data: {
+      kind: 'siteExplorerRoot',
+      sectionId,
+      parentFolderId: null,
+      index,
+    } satisfies SiteExplorerDropData,
+  })
+
+  return (
+    <div
+      ref={setNodeRef}
+      aria-hidden="true"
+      className={cn(styles.rootDropGap, active && styles.rootDropGapActive)}
+    />
+  )
+}
+
+interface ExplorerFolderRowProps {
+  folder: SiteExplorerTreeFolder
+  sectionId: SiteExplorerSectionId
+  rootIndex: number
+  itemCount: number
+  expanded: boolean
+  renameActive: boolean
+  renameValue: string
+  onToggle: () => void
+  onRename: (folder: SiteExplorerTreeFolder) => void
+  onCommitRename: (value: string) => void
+  onCancelRename: () => void
+  onContextMenu: (folder: SiteExplorerTreeFolder, event: MouseEvent<HTMLButtonElement>) => void
+  onKeyDown: (folder: SiteExplorerTreeFolder, event: KeyboardEvent<HTMLButtonElement>) => void
+  dropPosition: SiteExplorerDropPosition | null
+}
+
+function ExplorerFolderRow({
+  folder,
+  sectionId,
+  rootIndex,
+  itemCount,
+  expanded,
+  renameActive,
+  renameValue,
+  onToggle,
+  onRename,
+  onCommitRename,
+  onCancelRename,
+  onContextMenu,
+  onKeyDown,
+  dropPosition,
+}: ExplorerFolderRowProps) {
+  const draggable = useDraggable({
+    id: `site-explorer-drag-folder:${sectionId}:${folder.id}`,
+    disabled: renameActive,
+    data: {
+      kind: 'siteExplorerFolder',
+      sectionId,
+      folderId: folder.id,
+      label: folder.name,
+      icon: FolderGlyphIcon,
+    } satisfies SiteExplorerDragData,
+  })
+  const droppable = useDroppable({
+    id: `site-explorer-drop-folder:${sectionId}:${folder.id}`,
+    data: {
+      kind: 'siteExplorerFolder',
+      sectionId,
+      folderId: folder.id,
+      rootIndex,
+      itemCount,
+    } satisfies SiteExplorerDropData,
+  })
+
+  function setRowRef(node: HTMLDivElement | null) {
+    draggable.setNodeRef(node)
+    droppable.setNodeRef(node)
+  }
+
+  return (
+    <TreeRow
+      ref={setRowRef}
+      depth={0}
+      dragging={draggable.isDragging}
+      className={cn(
+        dropPosition === 'before' && styles.dropBefore,
+        dropPosition === 'after' && styles.dropAfter,
+        dropPosition === 'inside' && styles.dropInside,
+      )}
+      data-drop-position={dropPosition ?? undefined}
+      {...(renameActive ? undefined : draggable.attributes)}
+      {...(renameActive ? undefined : draggable.listeners)}
+      role="treeitem"
+      aria-label={folder.name}
+      aria-level={1}
+      aria-expanded={expanded}
+    >
+      {renameActive ? (
+        <>
+          <TreeChevron expanded={expanded} />
+          <TreeIconSlot icon={FolderGlyphIcon} iconSize={12} />
+          <InlineRenameInput
+            value={renameValue}
+            ariaLabel={`Rename ${folder.name}`}
+            onCommit={onCommitRename}
+            onCancel={onCancelRename}
+          />
+          {itemCount > 0 && <TreeMeta>{itemCount}</TreeMeta>}
+        </>
+      ) : (
+        <Button
+          variant="ghost"
+          size="sm"
+          align="start"
+          className={styles.treeRowButton}
+          aria-label={folder.name}
+          onClick={onToggle}
+          onContextMenu={(event) => onContextMenu(folder, event)}
+          onKeyDown={(event) => {
+            if (event.key === 'F2') {
+              event.preventDefault()
+              event.stopPropagation()
+              onRename(folder)
+              return
+            }
+            onKeyDown(folder, event)
+          }}
+        >
+          <TreeChevron expanded={expanded} />
+          <TreeIconSlot icon={FolderGlyphIcon} iconSize={12} />
+          <TreeLabelGroup>
+            <TreeLabel>{folder.name}</TreeLabel>
+            {itemCount > 0 && <TreeMeta>{itemCount}</TreeMeta>}
+          </TreeLabelGroup>
+        </Button>
+      )}
+    </TreeRow>
+  )
+}
+
+interface ExplorerItemRowProps<TTarget> {
+  item: SiteExplorerTreeItem<TTarget>
+  sectionId: SiteExplorerSectionId
+  depth: number
+  index: number
+  parentFolderId: string | null
+  onOpen: (item: SiteExplorerTreeItem<TTarget>) => void
+  renameActive: boolean
+  renameValue: string
+  onRename: (item: SiteExplorerTreeItem<TTarget>) => void
+  onCommitRename: (value: string) => void
+  onCancelRename: () => void
+  onContextMenu: (item: SiteExplorerTreeItem<TTarget>, event: MouseEvent<HTMLButtonElement>) => void
+  onKeyDown: (item: SiteExplorerTreeItem<TTarget>, event: KeyboardEvent<HTMLButtonElement>) => void
+  dropPosition: SiteExplorerDropPosition | null
+}
+
+function ExplorerItemRow<TTarget>({
+  item,
+  sectionId,
+  depth,
+  index,
+  parentFolderId,
+  onOpen,
+  renameActive,
+  renameValue,
+  onRename,
+  onCommitRename,
+  onCancelRename,
+  onContextMenu,
+  onKeyDown,
+  dropPosition,
+}: ExplorerItemRowProps<TTarget>) {
+  const draggable = useDraggable({
+    id: `site-explorer-drag-item:${sectionId}:${item.id}`,
+    disabled: item.pinned === true || renameActive,
+    data: {
+      kind: 'siteExplorerItem',
+      sectionId,
+      itemId: item.id,
+      label: item.label,
+      icon: item.icon,
+    } satisfies SiteExplorerDragData,
+  })
+  const droppable = useDroppable({
+    id: `site-explorer-drop-item:${sectionId}:${item.id}`,
+    disabled: item.pinned === true,
+    data: {
+      kind: 'siteExplorerItem',
+      sectionId,
+      itemId: item.id,
+      parentFolderId,
+      index,
+    } satisfies SiteExplorerDropData,
+  })
+
+  function setRowRef(node: HTMLDivElement | null) {
+    draggable.setNodeRef(node)
+    droppable.setNodeRef(node)
+  }
+
+  return (
+    <TreeRow
+      ref={setRowRef}
+      depth={depth}
+      selected={item.active}
+      dragging={draggable.isDragging}
+      className={cn(
+        dropPosition === 'before' && styles.dropBefore,
+        dropPosition === 'after' && styles.dropAfter,
+        dropPosition === 'inside' && styles.dropInside,
+      )}
+      data-drop-position={dropPosition ?? undefined}
+      {...(item.pinned || renameActive ? undefined : draggable.attributes)}
+      {...(item.pinned || renameActive ? undefined : draggable.listeners)}
+      role="treeitem"
+      aria-label={item.ariaLabel}
+      aria-level={depth + 1}
+      data-pinned={item.pinned ? 'true' : undefined}
+    >
+      {renameActive ? (
+        <>
+          <TreeChevron visible={false} />
+          <TreeIconSlot icon={item.icon} iconSize={12} />
+          <InlineRenameInput
+            value={renameValue}
+            ariaLabel={`Rename ${item.label}`}
+            onCommit={onCommitRename}
+            onCancel={onCancelRename}
+          />
+        </>
+      ) : (
+        <Button
+          variant="ghost"
+          size="sm"
+          align="start"
+          className={styles.treeRowButton}
+          aria-label={item.ariaLabel}
+          aria-current={item.active ? 'page' : undefined}
+          onClick={() => onOpen(item)}
+          onContextMenu={(event) => onContextMenu(item, event)}
+          onKeyDown={(event) => {
+            if (event.key === 'F2') {
+              event.preventDefault()
+              event.stopPropagation()
+              onRename(item)
+              return
+            }
+            onKeyDown(item, event)
+          }}
+        >
+          <TreeChevron visible={false} />
+          <TreeIconSlot icon={item.icon} iconSize={12} />
+          <TreeLabelGroup>
+            <TreeLabel>{item.label}</TreeLabel>
+            {item.meta && <TreeMeta>{item.meta}</TreeMeta>}
+          </TreeLabelGroup>
+        </Button>
+      )}
+      {item.canvasDrag && <ComponentCanvasDragHandle drag={item.canvasDrag} />}
+    </TreeRow>
+  )
+}
+
+interface InlineRenameInputProps {
+  value: string
+  ariaLabel: string
+  onCommit: (value: string) => void
+  onCancel: () => void
+}
+
+function InlineRenameInput({
+  value,
+  ariaLabel,
+  onCommit,
+  onCancel,
+}: InlineRenameInputProps) {
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    requestAnimationFrame(() => inputRef.current?.select())
+  }, [])
+
+  function commit() {
+    const trimmed = inputRef.current?.value.trim() ?? ''
+    if (!trimmed) {
+      onCancel()
+      return
+    }
+    onCommit(trimmed)
+  }
+
+  return (
+    <Input
+      ref={inputRef}
+      fieldSize="xs"
+      autoFocus
+      defaultValue={value}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault()
+          event.stopPropagation()
+          commit()
+        }
+        if (event.key === 'Escape') {
+          event.preventDefault()
+          event.stopPropagation()
+          onCancel()
+        }
+      }}
+      onClick={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
+      aria-label={ariaLabel}
+      className={styles.inlineRenameInput}
+    />
+  )
+}
+
+function isInlineRenaming(
+  target: SiteExplorerInlineRenameTarget | null,
+  kind: SiteExplorerInlineRenameTarget['kind'],
+  sectionId: SiteExplorerSectionId,
+  id: string,
+): boolean {
+  return target?.kind === kind && target.sectionId === sectionId && target.id === id
+}
+
+function dropPositionForFolder(
+  dropTarget: SiteExplorerDropTarget | null,
+  sectionId: SiteExplorerSectionId,
+  folderId: string,
+): SiteExplorerDropPosition | null {
+  if (dropTarget?.drop.kind !== 'siteExplorerFolder') return null
+  if (dropTarget.drop.sectionId !== sectionId || dropTarget.drop.folderId !== folderId) return null
+  return dropTarget.position
+}
+
+function dropPositionForItem(
+  dropTarget: SiteExplorerDropTarget | null,
+  sectionId: SiteExplorerSectionId,
+  itemId: string,
+): SiteExplorerDropPosition | null {
+  if (dropTarget?.drop.kind !== 'siteExplorerItem') return null
+  if (dropTarget.drop.sectionId !== sectionId || dropTarget.drop.itemId !== itemId) return null
+  return dropTarget.position
+}
+
+function isRootDropActive(
+  dropTarget: SiteExplorerDropTarget | null,
+  sectionId: SiteExplorerSectionId,
+  index: number,
+): boolean {
+  if (dropTarget?.drop.kind !== 'siteExplorerRoot') return false
+  return dropTarget.drop.sectionId === sectionId && dropTarget.drop.index === index
+}
+
+interface ComponentCanvasDragHandleProps {
+  drag: NonNullable<SiteExplorerTreeItem<unknown>['canvasDrag']>
+}
+
+function ComponentCanvasDragHandle({ drag }: ComponentCanvasDragHandleProps) {
+  const {
+    listeners,
+    setNodeRef,
+    isDragging,
+  } = useDraggable({
+    id: drag.id,
+    data: { kind: 'visualComponentRef', componentId: drag.componentId },
+  })
+
+  return (
+    <Button
+      ref={setNodeRef}
+      variant="ghost"
+      size="xs"
+      iconOnly
+      aria-label={drag.ariaLabel}
+      tooltip={drag.ariaLabel}
+      data-testid="site-explorer-component-drag-handle"
+      className={cn(styles.componentDragHandle, isDragging && styles.draggingComponent)}
+      onClick={(event) => event.stopPropagation()}
+      onPointerDownCapture={(event) => event.stopPropagation()}
+      {...listeners}
+    >
+      <DragAndDropSolidIcon size={12} />
+    </Button>
+  )
+}

@@ -1,6 +1,6 @@
 # Site Shell
 
-The site shell — the top-level persisted site config. Everything that's "the site" but **not** a page or a Visual Component lives here: name, breakpoints, settings (colors, typography, spacing), class registry, files, dependencies, and runtime config.
+The site shell — the top-level persisted site config. Everything that's "the site" but **not** a page or a Visual Component lives here: name, breakpoints, settings (colors, typography, spacing), class registry, files, Site Explorer organization, dependencies, and runtime config.
 
 The shell is stored in a single `site` row. Pages and VCs live separately in `data_rows`. The adapter assembles a full `SiteDocument` (shell + pages + VCs) on load.
 
@@ -15,6 +15,7 @@ The shell is stored in a single `site` row. Pages and VCs live separately in `da
   - `SiteSettings` — color tokens, typography, spacing scale, framework tokens
   - `Record<string, StyleRule>` — the style rule registry (user-defined CSS rules)
   - `SiteFile[]` — arbitrary text/CSS/JS files attached to the site
+  - `SiteExplorerOrganization` — decorative folders and ordering for Site Explorer sections
   - `SitePackageJson` — `package.json` for the per-site `bun install` workspace
   - `SiteRuntimeConfig` — dependency lock + scripts
 - Pages and VCs are **not** embedded. The architecture gate `no-vc-in-site-shell.test.ts` enforces this.
@@ -34,6 +35,7 @@ export type SiteShell = {
   settings:     SiteSettings
   styleRules:   Record<string, StyleRule>
   files:        SiteFile[]
+  explorer:     SiteExplorerOrganization
   packageJson:  SitePackageJson
   runtime:      SiteRuntimeConfig
   createdAt:    number
@@ -160,6 +162,44 @@ Schema source of truth: `src/core/files/schemas.ts`.
 
 Generated files (e.g. `package.json`, `vite.config.ts`) are hidden in the Site Explorer until the user ejects them. Files are created and renamed through the Site Explorer panel and edited with the CodeMirror-backed code editor.
 
+### Site Explorer organization — `SiteExplorerOrganization`
+
+Decorative folders and ordering for the Site Explorer. This is editor organization only; it does not change page routing, component identity, file paths, or published URLs.
+
+```ts
+type SiteExplorerSectionId =
+  | 'pages'
+  | 'templates'
+  | 'components'
+  | 'styles'
+  | 'scripts'
+
+type SiteExplorerFolder = {
+  id: string
+  name: string
+}
+
+type SiteExplorerItemPlacement = {
+  id: string
+  parentFolderId?: string
+  order: number
+}
+
+type SiteExplorerOrganization = Record<SiteExplorerSectionId, {
+  folders: SiteExplorerFolder[]
+  items: SiteExplorerItemPlacement[]
+}>
+```
+
+`src/core/page-tree/siteExplorer.ts` owns the schema and reconciliation helpers. On load and after item lifecycle mutations, the editor reconciles placements against the current pages, templates, Visual Components, styles, and scripts:
+
+- stale item placements are dropped
+- missing items are appended in current item order
+- generated non-ejected files stay hidden
+- the homepage (`slug: 'index'`) is pinned to the root of the Pages section and rendered first
+
+Folders are intentionally flat and decorative. Pages remain individual rows with flat slugs; putting a page in a folder does not create a parent route.
+
 ### `SitePackageJson` — the per-site `package.json`
 
 ```ts
@@ -242,6 +282,7 @@ The shell's `parseSiteDocument(raw)` is **tolerant in the right places**:
 | `settings`    | Fall back to `DEFAULT_SITE_SETTINGS`             |
 | `classes`     | Per-entry: drop entries missing `id` or `name`   |
 | `files`       | Per-entry: drop invalid entries                  |
+| `explorer`    | Fall back to empty folders / current item order  |
 | `packageJson` | Fall back to `{ dependencies: {}, devDependencies: {} }` |
 | `runtime`     | Fall back to empty lock + scripts                |
 

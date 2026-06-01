@@ -23,6 +23,10 @@ export { PageSchema } from './page'
 export { StyleRuleSchema, StyleRuleKindSchema, classKindSelector, parseStyleRule } from './styleRule'
 export { ConditionSchema, ConditionDefSchema } from './condition'
 export { SiteShellSchema } from './siteDocument'
+export {
+  SiteExplorerOrganizationSchema,
+  SiteExplorerSectionIdSchema,
+} from './siteExplorer'
 
 // Types — derived from schemas. Schemas are the source of truth.
 export type { Breakpoint } from './breakpoint'
@@ -36,6 +40,13 @@ export type { StyleRule, StyleRuleKind } from './styleRule'
 export type { Condition, ConditionDef } from './condition'
 export type { SiteSettings } from './siteSettings'
 export type { SiteShell, SiteDocument } from './siteDocument'
+export type {
+  SiteExplorerFolder,
+  SiteExplorerItemPlacement,
+  SiteExplorerOrganization,
+  SiteExplorerSection,
+  SiteExplorerSectionId,
+} from './siteExplorer'
 
 // Defaults
 export { DEFAULT_BREAKPOINTS } from './breakpoint'
@@ -47,6 +58,18 @@ export { conditionId, conditionLabel, sameCondition, makeConditionDef, parseCond
 // Tolerant parsers — boundary helpers for persisted data.
 export { parsePage } from './page'
 export { parseSiteDocument } from './siteDocument'
+export {
+  SITE_EXPLORER_SECTION_IDS,
+  createDefaultSiteExplorerOrganization,
+  createExplorerFolder,
+  deleteExplorerFolder,
+  moveExplorerFolder,
+  moveExplorerItem,
+  parseSiteExplorerOrganization,
+  reconcileSiteExplorerInPlace,
+  reconcileSiteExplorerOrganization,
+  renameExplorerFolder,
+} from './siteExplorer'
 
 // Slug → public path + internal page-reference links.
 export {
