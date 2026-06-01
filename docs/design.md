@@ -8,7 +8,7 @@ The design is a **two-layer color model**: an achromatic base (surfaces, borders
 
 ## TL;DR
 
-- **Base is achromatic; color is the layer on top.** Surfaces, borders, and default text are neutral. Color is used to convey **identity** (rail tints — mint, lilac, sky, peach) and **state** (danger, warning, success, info, canvas selection / hover). Color is never decorative — every colored pixel carries meaning.
+- **Base is achromatic; color is the layer on top.** Surfaces, borders, and default text are neutral. Color is used to convey **identity** (automatic rail tints and tag-pill tints) and **state** (danger, warning, success, info, canvas selection / hover). Color is never decorative — every colored pixel carries meaning.
 - **Borderless tile cards.** Dashboard widgets and equivalent surfaces sit on a darker parent (`--editor-surface`) with a 1px grid gap, no border, `--card-radius` (16px). The gap reveals the parent and reads as a divider. Hover lifts the surface tone, never the border. Canonical implementation: `src/ui/components/Widget/Widget.module.css`.
 - **Bordered transparent inputs.** Inputs have a 1px white-alpha border, transparent background, and a pill 1em radius. Focus adds an inset achromatic glow.
 - **Floating overlay panels.** Spotlight, popovers, modals use `--panel-*` tokens: panel background, 12px radius, blur backdrop, 3-layer composite shadow.
@@ -33,7 +33,7 @@ If a color isn't carrying information, it doesn't belong in the chrome.
 ```text
 ┌────────────────────────────────────────────────────────────────┐
 │  Layer 2 — SEMANTIC + CATEGORICAL COLOR                        │
-│  rail tints (mint/lilac/sky/peach), state (danger/warning/     │
+│  automatic rail tints, state (danger/warning/                   │
 │  success/info), canvas neon (selection/hover)                  │
 ├────────────────────────────────────────────────────────────────┤
 │  Layer 1 — ACHROMATIC BASE                                     │
@@ -93,9 +93,14 @@ Categories of things have an associated color drawn from the **rail tints**. Eac
 | `--rail-tint-lilac`| `#c8b6ff` | "Pages / structure" categories                          |
 | `--rail-tint-sky`  | `#9bdcff` | "Storage / data / configuration" categories             |
 | `--rail-tint-peach`| `#ffc7a8` | "Posts / media / activity" categories                   |
-| `--rail-tint-rose` | `#ffb6cd` | Fifth-hue overflow — used by breakdowns that need 5 categorical chips (e.g. Storage: images/videos/documents/plugins/database) |
+| `--rail-tint-rose` | `#ffb6cd` | Secondary warm identity tint                          |
+| `--rail-tint-lime` | `#b8f28b` | Secondary green identity tint                         |
+| `--rail-tint-gold` | `#f7df72` | Secondary yellow identity tint                        |
+| `--rail-tint-cyan` | `#83e7ff` | Secondary blue identity tint                          |
+| `--rail-tint-violet` | `#f0a6ff` | Secondary violet identity tint                      |
+| `--rail-tint-coral` | `#ff9f9f` | Secondary red identity tint                          |
 
-Rail tints don't live in `src/styles/globals.css` to be decorative — they're part of the design system, and primitives like `Widget` accept a `tint` prop that maps to one of them. New rail tints are added by extending the token group, not by inlining a color.
+Rail tints don't live in `src/styles/globals.css` to be decorative — they're part of the design system. Panel rails assign these tints automatically from the full panel identity and avoid repeats inside the visible rail group. Primitives like `Widget` can still accept an explicit tint when the category is product-defined. New rail tints are added by extending the token group, not by inlining a color.
 
 ### 7. The canvas owns its own palette
 
@@ -141,7 +146,8 @@ White accent (still in the base layer — alpha variants of white):
 
 Rail tints (categorical identity layer):
   --rail-tint-mint, --rail-tint-lilac, --rail-tint-sky, --rail-tint-peach,
-  --rail-tint-rose
+  --rail-tint-rose, --rail-tint-lime, --rail-tint-gold, --rail-tint-cyan,
+  --rail-tint-violet, --rail-tint-coral
 
 Semantic state (meaning layer):
   --editor-danger, --editor-danger-light, --editor-danger-lighter,
@@ -320,20 +326,19 @@ The border is the input's identity. Don't fill them. Don't square the corners.
 
 ### 4. Panel rail (the colored sidebar)
 
-42px-wide vertical rail of icon buttons. Each button declares a `data-accent="mint|lilac|sky|peach"` attribute that picks its tint, semi-transparent hover/active background, and glow:
+42px-wide vertical rail of icon buttons. Each button carries a `data-accent` identity and a `--rail-icon-tint` custom property from the automatic rail-accent helper. The CSS derives the icon color, semi-transparent hover/active background, and glow from that token:
 
 ```css
-.railButton[data-accent="mint"] {
-  --rail-icon-color: var(--rail-tint-mint);
-  --rail-icon-active-bg: rgba(142, 230, 200, 0.16);
-  --rail-icon-hover-bg:  rgba(142, 230, 200, 0.10);
-  --rail-icon-glow:      rgba(142, 230, 200, 0.28);
+.railButton {
+  --rail-icon-tint: var(--rail-tint-mint);
+  --rail-icon-color: var(--rail-icon-tint);
+  --rail-icon-active-bg: color-mix(in oklab, var(--rail-icon-tint) 16%, transparent);
 }
 ```
 
 Icons in the rail get a `drop-shadow` glow matching their tint. The active rail item has a 2px tinted indicator on its left edge. Canonical implementation: `src/admin/pages/site/sidebars/PanelRail/PanelRail.module.css`.
 
-This pattern (per-item rail tint via `data-accent`) is the recipe for any equivalent sidebar — media sidebar, data sidebar, etc.
+This pattern (automatic per-item rail tint plus `data-accent` for inspection) is the recipe for any equivalent sidebar — media sidebar, data sidebar, etc.
 
 ### 5. Scrollbar chrome
 
@@ -405,7 +410,7 @@ Rules:
 - No barrel import (`import { X } from 'pixel-art-icons'`) — always `pixel-art-icons/icons/<name>`.
 - No `lucide-react`, `heroicons`, `phosphor-icons`, or other catalogs. Gated by `no-third-party-icons.test.ts`.
 - No inline SVG strings in components. Gated by `direct-icon-imports.test.ts`.
-- Icons in the panel rail or equivalent identity surfaces are colored via `--rail-icon-color` (which is set from a rail tint by `data-accent`). Don't hardcode `color` on the icon itself.
+- Icons in the panel rail or equivalent identity surfaces are colored via `--rail-icon-color` (which is derived from `--rail-icon-tint`). Don't hardcode `color` on the icon itself.
 - Adding a new icon: import it normally, then run `bun run icons:sync`. The vendored set is gated for freshness by `vendor-icons-fresh.test.ts`.
 
 The full set (~4,053 icons) lives in the sibling repo `../pixel-art-icons`; the CMS vendors only the icons it actually imports.
@@ -513,7 +518,7 @@ The HTML `title` attribute is banned for hover hints — gated by `no-native-tit
 | Card with a colored border                               | Borderless tile on a darker parent (1px gap pattern)     |
 | Hover that changes a card's border color                 | Hover that lifts the surface tone (`-surface-2` → `-3`)  |
 | Filling an input with a tinted background                | Transparent fill, white-alpha border                     |
-| Inventing a one-off color for a category                 | Pick a rail tint, or add a new tint token in `globals.css`|
+| Inventing a one-off color for a category                 | Use the rail accent helper, or add a new tint token in `globals.css`|
 
 ---
 
@@ -538,7 +543,7 @@ The HTML `title` attribute is banned for hover hints — gated by `no-native-tit
 2. The tile body is `background: var(--editor-surface-2)`, `border: 0`, `border-radius: var(--card-radius)`.
 3. Hover lifts to `--editor-surface-3` — never recolor the border.
 4. Add a title row with a rail-tint dot (7px, `--editor-radius-sm` (3px), `background: var(--tint)`).
-5. Pick a rail tint per the table in §6 (Identity is a color).
+5. Use the rail accent helper unless the surface has a product-defined category.
 6. Reuse `Widget` from `src/ui/components/Widget/` unless the surface fundamentally differs.
 
 ---

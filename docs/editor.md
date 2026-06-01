@@ -458,7 +458,7 @@ Canvas-internal values are not CSS tokens — they are raw integers intentionall
 
 ### Panel rail
 
-42px-wide vertical strip on the far left. Each button is a rail tint (mint / lilac / sky / peach) and opens a panel in the left sidebar. Implementation: `src/admin/pages/site/sidebars/PanelRail/PanelRail.module.css`.
+42px-wide vertical strip on the far left. Each button gets an automatic rail tint from its full panel identity, with repeats avoided inside the visible rail group, and opens a panel in the left sidebar. Implementation: `src/admin/pages/site/sidebars/PanelRail/PanelRail.module.css`.
 
 ### Left sidebar
 

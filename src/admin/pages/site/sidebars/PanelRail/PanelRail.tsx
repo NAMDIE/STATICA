@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from 'react'
+import { useEffect, useSyncExternalStore, type CSSProperties } from 'react'
 import { useEditorStore } from '@site/store/store'
 import type { LeftSidebarPanelId } from '@site/store/slices/uiSlice'
 import type { IconComponent } from 'pixel-art-icons/types'
@@ -12,21 +12,17 @@ import { ColorsSwatchSolidIcon } from 'pixel-art-icons/icons/colors-swatch-solid
 import { TextStartTIcon } from 'pixel-art-icons/icons/text-start-t'
 import { RulerDimensionSolidIcon } from 'pixel-art-icons/icons/ruler-dimension-solid'
 import { Button } from '@ui/components/Button'
+import { assignRailAccents, railTintVar, type RailAccent } from '@ui/railAccent'
 import { pluginRuntime } from '@core/plugins/runtime'
 import { getKeybindingForCommand, formatShortcut } from '@admin/spotlight/keybindings'
 import { resolvePluginPanelIcon } from './pluginPanelIcons'
 import styles from './PanelRail.module.css'
-
-const ACCENT_CYCLE: ReadonlyArray<RailAccent> = ['mint', 'lilac', 'sky', 'peach']
-
-type RailAccent = 'mint' | 'lilac' | 'sky' | 'peach'
 
 interface PrimaryRailItem {
   id: LeftSidebarPanelId
   label: string
   icon: IconComponent
   iconName: string
-  accent: RailAccent
   /**
    * commandId links this panel button to a keybinding in the registry.
    * The ariaKeyshortcuts and shortcutLabel tooltip are derived from it
@@ -55,7 +51,6 @@ const PRIMARY_RAIL_ITEMS: PrimaryRailItem[] = [
     label: 'Layers',
     icon: DatabaseSolidIcon,
     iconName: 'database-solid',
-    accent: 'mint',
     // No keyboard shortcut registered for the Layers panel.
   },
   {
@@ -63,7 +58,6 @@ const PRIMARY_RAIL_ITEMS: PrimaryRailItem[] = [
     label: 'AI assistant',
     icon: AiSettingsSolidIcon,
     iconName: 'ai-settings-solid',
-    accent: 'lilac',
     commandId: 'panels.toggleAgent',
   },
   {
@@ -71,7 +65,6 @@ const PRIMARY_RAIL_ITEMS: PrimaryRailItem[] = [
     label: 'Site',
     icon: FilesStack2SolidIcon,
     iconName: 'files-stack-2',
-    accent: 'sky',
     commandId: 'panels.toggleSiteExplorer',
   },
   {
@@ -79,35 +72,30 @@ const PRIMARY_RAIL_ITEMS: PrimaryRailItem[] = [
     label: 'Selectors',
     icon: PaintBucketSolidIcon,
     iconName: 'paint-bucket',
-    accent: 'peach',
   },
   {
     id: 'colors',
     label: 'Colors',
     icon: ColorsSwatchSolidIcon,
     iconName: 'colors-swatch',
-    accent: 'peach',
   },
   {
     id: 'typography',
     label: 'Typography',
     icon: TextStartTIcon,
     iconName: 'text-start-t',
-    accent: 'mint',
   },
   {
     id: 'spacing',
     label: 'Spacing',
     icon: RulerDimensionSolidIcon,
     iconName: 'ruler-dimension',
-    accent: 'lilac',
   },
   {
     id: 'media',
     label: 'Media',
     icon: ImagesSolidIcon,
     iconName: 'images',
-    accent: 'sky',
     commandId: 'panels.toggleMedia',
   },
   {
@@ -115,7 +103,6 @@ const PRIMARY_RAIL_ITEMS: PrimaryRailItem[] = [
     label: 'Dependencies',
     icon: BoxStackSolidIcon,
     iconName: 'box-stack',
-    accent: 'peach',
   },
 ]
 
@@ -219,9 +206,17 @@ export function PanelRail({ workspace = 'site', editable = true }: PanelRailProp
   const visiblePrimaryItems = editable
     ? PRIMARY_RAIL_ITEMS
     : PRIMARY_RAIL_ITEMS.filter((item) => READ_ONLY_RAIL_IDS.has(item.id))
+  const primaryAccents = assignRailAccents(
+    visiblePrimaryItems,
+    (item) => `${workspace}:${item.id}:${railLabel(item)}`,
+  )
 
-  const primaryItems: RailItem[] = visiblePrimaryItems.map((item) => {
-    const label = workspace === 'content' && item.id === 'site' ? 'Content' : item.label
+  function railLabel(item: PrimaryRailItem) {
+    return workspace === 'content' && item.id === 'site' ? 'Content' : item.label
+  }
+
+  const primaryItems: RailItem[] = visiblePrimaryItems.map((item, index) => {
+    const label = railLabel(item)
     // Shortcut labels and ARIA keyshortcuts come from the keybindings registry.
     const kb = item.commandId ? getKeybindingForCommand(item.commandId) : undefined
     const shortcutLabel = kb ? formatShortcut(kb.shortcut) : undefined
@@ -233,20 +228,25 @@ export function PanelRail({ workspace = 'site', editable = true }: PanelRailProp
       onToggle: () => toggleLeftSidebarPanel(item.id),
       shortcutLabel,
       ariaKeyshortcuts,
+      accent: primaryAccents[index] ?? 'mint',
     }
   })
 
-  // Plugin panels show up after the primary group when editing. They cycle
-  // through the four accent colors so plugins that don't pick one still get
-  // visual differentiation; the order is stable across renders because
-  // `getPanels()` returns insertion order.
+  // Plugin panels show up after the primary group when editing. Panels with an
+  // explicit accent keep it; the rest get deterministic identity colors with
+  // repeat avoidance within the plugin rail group.
+  const pluginAccents = assignRailAccents(
+    pluginPanels,
+    (panel) => `plugin:${panel.id}:${panel.label}`,
+    (panel) => panel.accent,
+  )
   const pluginItems: RailItem[] = editable
     ? pluginPanels.map((panel, index) => ({
         id: `plugin:${panel.id}`,
         label: panel.label,
         icon: resolvePluginPanelIcon(panel.iconName),
         iconName: panel.iconName,
-        accent: panel.accent ?? ACCENT_CYCLE[index % ACCENT_CYCLE.length],
+        accent: pluginAccents[index] ?? 'mint',
         open: activePluginPanelId === panel.id,
         onToggle: () => toggleActivePluginPanel(panel.id),
         shortcutLabel: panel.shortcutLabel,
@@ -278,6 +278,9 @@ export function PanelRail({ workspace = 'site', editable = true }: PanelRailProp
 function RailButton({ item }: { item: RailItem }) {
   const RailIcon = item.icon
   const action = item.open ? 'Close' : 'Open'
+  const style = {
+    '--rail-icon-tint': railTintVar(item.accent),
+  } as CSSProperties
   const title = item.disabled
     ? item.disabledTitle
     : item.shortcutLabel
@@ -297,6 +300,7 @@ function RailButton({ item }: { item: RailItem }) {
       data-testid={`panel-rail-${item.id}`}
       data-icon={item.iconName}
       data-accent={item.accent}
+      style={style}
       onClick={item.onToggle}
       className={styles.railButton}
     >

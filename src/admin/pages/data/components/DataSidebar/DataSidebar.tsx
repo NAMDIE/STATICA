@@ -12,6 +12,7 @@
 import { useRef, type CSSProperties } from 'react'
 import { Button } from '@ui/components/Button'
 import { Skeleton } from '@ui/components/Skeleton'
+import { railAccent, railTintVar } from '@ui/railAccent'
 import { DatabaseSolidIcon } from 'pixel-art-icons/icons/database-solid'
 import { PlusIcon } from 'pixel-art-icons/icons/plus'
 import { ArrowDownIcon } from 'pixel-art-icons/icons/arrow-down'
@@ -71,6 +72,10 @@ export function DataSidebar({
   const style = {
     '--left-sidebar-panel-width': `${panelWidth}px`,
   } as CSSProperties
+  const tablesRailAccent = railAccent('data:tables:Data tables')
+  const tablesRailButtonStyle = {
+    '--rail-icon-tint': railTintVar(tablesRailAccent),
+  } as CSSProperties
 
   return (
     <aside
@@ -96,7 +101,8 @@ export function DataSidebar({
             tooltip="Data tables panel"
             data-testid="data-panel-rail-tables"
             data-icon="database"
-            data-accent="sky"
+            data-accent={tablesRailAccent}
+            style={tablesRailButtonStyle}
             onClick={() => setDataSidebarCollapsed(dataSidebarCollapsed ? false : true)}
             className={panelRailStyles.railButton}
           >

@@ -258,7 +258,7 @@ The redirect handler is `tryServeMediaRedirect` in `server/router.ts`. The redir
 
 1. Add the panel id to `MediaSidebarPanelId` in `components/MediaSidebar/MediaSidebar.tsx`.
 2. Render the panel body inside the sidebar conditional.
-3. Add the rail button (with a rail tint from the design tokens) for the panel.
+3. Add the rail button and let the shared rail accent helper derive its tint from the panel identity.
 
 ### Register a plugin storage adapter
 

@@ -4,6 +4,7 @@ import { BookOpenSolidIcon } from 'pixel-art-icons/icons/book-open-solid'
 import { ImagesSolidIcon } from 'pixel-art-icons/icons/images-solid'
 import { AiSettingsSolidIcon } from 'pixel-art-icons/icons/ai-settings-solid'
 import type { IconComponent } from 'pixel-art-icons/types'
+import { railAccent, railTintVar } from '@ui/railAccent'
 import { useEditorStore } from '@site/store/store'
 import leftSidebarStyles from '../../../site/sidebars/LeftSidebar/LeftSidebar.module.css'
 import panelRailStyles from '../../../site/sidebars/PanelRail/PanelRail.module.css'
@@ -59,7 +60,6 @@ export function ContentSidebar({
             label="Content"
             icon={BookOpenSolidIcon}
             iconName="book-open"
-            accent="mint"
             active={activePanel === 'content'}
             onToggle={() => onActivePanelChange(activePanel === 'content' ? null : 'content')}
           />
@@ -68,7 +68,6 @@ export function ContentSidebar({
             label="Media"
             icon={ImagesSolidIcon}
             iconName="images"
-            accent="sky"
             active={activePanel === 'media'}
             onToggle={() => onActivePanelChange(activePanel === 'media' ? null : 'media')}
           />
@@ -77,7 +76,6 @@ export function ContentSidebar({
             label="AI assistant"
             icon={AiSettingsSolidIcon}
             iconName="ai-settings-solid"
-            accent="lilac"
             active={activePanel === 'agent'}
             onToggle={() => onActivePanelChange(activePanel === 'agent' ? null : 'agent')}
           />
@@ -119,7 +117,6 @@ interface ContentRailButtonProps {
   label: string
   icon: IconComponent
   iconName: string
-  accent: 'mint' | 'sky' | 'lilac'
   active: boolean
   onToggle: () => void
 }
@@ -129,12 +126,15 @@ function ContentRailButton({
   label,
   icon,
   iconName,
-  accent,
   active,
   onToggle,
 }: ContentRailButtonProps) {
   const RailIcon = icon
   const action = active ? 'Close' : 'Open'
+  const accent = railAccent(`content:${id}:${label}`)
+  const style = {
+    '--rail-icon-tint': railTintVar(accent),
+  } as CSSProperties
 
   return (
     <Button
@@ -147,6 +147,7 @@ function ContentRailButton({
       data-testid={`panel-rail-${id}`}
       data-icon={iconName}
       data-accent={accent}
+      style={style}
       onClick={onToggle}
       className={panelRailStyles.railButton}
     >

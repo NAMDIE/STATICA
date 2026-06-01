@@ -3,10 +3,21 @@
 // ---------------------------------------------------------------------------
 
 /**
- * Accent palette for the editor panel rail. Mirrors the four CSS-side
- * accents already declared in `PanelRail` (mint, lilac, sky, peach).
+ * Optional accent override for the editor panel rail. When omitted, the host
+ * assigns a deterministic identity tint from the panel id + label and avoids
+ * repeats inside the visible plugin rail group.
  */
-export type PluginEditorPanelAccent = 'mint' | 'lilac' | 'sky' | 'peach'
+export type PluginEditorPanelAccent =
+  | 'mint'
+  | 'sky'
+  | 'lilac'
+  | 'peach'
+  | 'rose'
+  | 'lime'
+  | 'gold'
+  | 'cyan'
+  | 'violet'
+  | 'coral'
 
 /**
  * Editor panel registered by a plugin via `editor.panels.register`. Mounts in

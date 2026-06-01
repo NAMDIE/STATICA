@@ -14,6 +14,7 @@
  */
 import { useRef, type CSSProperties } from 'react'
 import { Button } from '@ui/components/Button'
+import { assignRailAccents, railTintVar } from '@ui/railAccent'
 import { CloudUploadSolidIcon } from 'pixel-art-icons/icons/cloud-upload-solid'
 import { FolderGlyphIcon } from 'pixel-art-icons/icons/folder-glyph'
 import type { IconComponent } from 'pixel-art-icons/types'
@@ -41,7 +42,6 @@ interface RailItem {
   label: string
   icon: IconComponent
   iconName: string
-  accent: 'mint' | 'lilac' | 'sky' | 'peach'
 }
 
 /**
@@ -51,8 +51,8 @@ interface RailItem {
  * rather than showing a button that produces a 403 on first click.
  */
 const ALL_RAIL_ITEMS: RailItem[] = [
-  { id: 'folders', label: 'Folders', icon: FolderGlyphIcon, iconName: 'folder', accent: 'sky' },
-  { id: 'storage', label: 'Storage', icon: CloudUploadSolidIcon, iconName: 'cloud-upload', accent: 'mint' },
+  { id: 'folders', label: 'Folders', icon: FolderGlyphIcon, iconName: 'folder' },
+  { id: 'storage', label: 'Storage', icon: CloudUploadSolidIcon, iconName: 'cloud-upload' },
 ]
 
 const PANEL_TITLES: Record<MediaSidebarPanelId, string> = {
@@ -78,6 +78,10 @@ export function MediaSidebar({ workspace, activePanel, onActivePanelChange }: Me
     if (item.id === 'storage') return hasCapability(currentUser, 'storage.elect')
     return true
   })
+  const railAccents = assignRailAccents(
+    railItems,
+    (item) => `media:${item.id}:${item.label}`,
+  )
 
   // Defensive: if the user previously had the storage panel open and then
   // had their capability revoked, collapse it on the next render so they
@@ -106,10 +110,14 @@ export function MediaSidebar({ workspace, activePanel, onActivePanelChange }: Me
         data-testid="media-panel-rail"
       >
         <div className={panelRailStyles.itemGroup}>
-          {railItems.map((item) => {
+          {railItems.map((item, index) => {
             const Icon = item.icon
             const active = activePanel === item.id
             const action = active ? 'Close' : 'Open'
+            const accent = railAccents[index] ?? 'mint'
+            const buttonStyle = {
+              '--rail-icon-tint': railTintVar(accent),
+            } as CSSProperties
             return (
               <Button
                 key={item.id}
@@ -121,7 +129,8 @@ export function MediaSidebar({ workspace, activePanel, onActivePanelChange }: Me
                 tooltip={`${item.label} panel`}
                 data-testid={`media-panel-rail-${item.id}`}
                 data-icon={item.iconName}
-                data-accent={item.accent}
+                data-accent={accent}
+                style={buttonStyle}
                 onClick={() => handleRailToggle(item.id)}
                 className={panelRailStyles.railButton}
               >

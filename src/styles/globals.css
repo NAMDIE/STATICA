@@ -89,12 +89,12 @@
     --rail-tint-lilac: #c8b6ff;
     --rail-tint-sky: #9bdcff;
     --rail-tint-peach: #ffc7a8;
-    /* `--rail-tint-rose` extends the categorical palette with a fifth hue
-       for breakdowns that genuinely need five distinct identity tints
-       (e.g. the dashboard Storage widget's images/videos/documents/
-       plugins/database split). Same saturation envelope as the other
-       four — keeps the chip row visually balanced. */
     --rail-tint-rose: #ffb6cd;
+    --rail-tint-lime: #b8f28b;
+    --rail-tint-gold: #f7df72;
+    --rail-tint-cyan: #83e7ff;
+    --rail-tint-violet: #f0a6ff;
+    --rail-tint-coral: #ff9f9f;
 
     /* ─── Tag pill accent tints (first meaningful character identity) ────── */
     --tag-pill-tint-a: #8ee6c8;

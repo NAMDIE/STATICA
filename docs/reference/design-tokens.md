@@ -98,9 +98,9 @@ Alpha-variants of white used for selected rows, pressed states, focus rings.
 
 ---
 
-## Rail tints (categorical identity layer)
+## Rail tints (automatic identity layer)
 
-Four colors used as per-category identity — widget category, panel rail, sidebar icons, storage breakdown segments.
+Token-backed identity colors for widget categories, panel rails, sidebar icons, and storage breakdown segments. Panel rails assign these automatically from the full panel identity with repeat avoidance inside the visible rail group.
 
 | Token              | Hex       | Conventional category                                                  |
 |--------------------|-----------|------------------------------------------------------------------------|
@@ -108,9 +108,14 @@ Four colors used as per-category identity — widget category, panel rail, sideb
 | `--rail-tint-lilac`| `#c8b6ff` | "Pages / structure"                                                        |
 | `--rail-tint-sky`  | `#9bdcff` | "Storage / data / configuration"                                           |
 | `--rail-tint-peach`| `#ffc7a8` | "Posts / media / activity"                                                 |
-| `--rail-tint-rose` | `#ffb6cd` | Fifth-hue overflow — breakdowns that need 5 segments (e.g. Storage widget) |
+| `--rail-tint-rose` | `#ffb6cd` | Secondary warm identity tint                                               |
+| `--rail-tint-lime` | `#b8f28b` | Secondary green identity tint                                              |
+| `--rail-tint-gold` | `#f7df72` | Secondary yellow identity tint                                             |
+| `--rail-tint-cyan` | `#83e7ff` | Secondary blue identity tint                                               |
+| `--rail-tint-violet` | `#f0a6ff` | Secondary violet identity tint                                           |
+| `--rail-tint-coral` | `#ff9f9f` | Secondary red identity tint                                               |
 
-Used by `Widget` (`tint` prop), `PanelRail` (`data-accent="<tint>"`), and the storage breakdown chart. Adding a sixth tint requires a new token — don't inline a color.
+Used by `Widget` (`tint` prop), the rail accent helper (`src/ui/railAccent.ts`), and the storage breakdown chart. Adding another tint requires a new token — don't inline a color.
 
 ---
 
@@ -419,7 +424,7 @@ The two `!important` declarations here are the **only legitimate `!important` us
 | `box-shadow: 0 4px 16px rgba(0,0,0,0.5);`            | `box-shadow: var(--panel-shadow-drop);`  |
 | Inventing a one-off radius                           | Use the radius scale                     |
 | Inventing a one-off z-index                          | Use the existing z-index tokens          |
-| Reaching for a fifth rail tint                       | Either add a token or pick from the four |
+| Reaching for a one-off rail color                    | Use `railAccent` / `assignRailAccents`, or add a token |
 | Hardcoding the canvas selection ring color           | `var(--canvas-selection-ring)`           |
 
 ---

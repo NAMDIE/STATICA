@@ -383,7 +383,7 @@ describe('AdminCanvasLayout — permanent panel rail', () => {
     expect(siteButton.getAttribute('aria-pressed')).toBe('true')
   })
 
-  it('orders primary rail panels by importance and uses the chosen panel icons', () => {
+  it('orders primary rail panels by importance and assigns automatic rail accents', () => {
     renderEditorLayout()
 
     const rail = screen.getByRole('navigation', { name: /panel dock/i })
@@ -403,13 +403,9 @@ describe('AdminCanvasLayout — permanent panel rail', () => {
       'paint-bucket',
       'colors-swatch',
     ])
-    expect(primaryButtons.map((button) => button.getAttribute('data-accent'))).toEqual([
-      'mint',
-      'lilac',
-      'sky',
-      'peach',
-      'peach',
-    ])
+    const primaryAccents = primaryButtons.map((button) => button.getAttribute('data-accent'))
+    expect(primaryAccents.every(Boolean)).toBe(true)
+    expect(new Set(primaryAccents).size).toBe(primaryAccents.length)
   })
 
   it('docks left rail panels into an expanding sidebar and switches between them', () => {
