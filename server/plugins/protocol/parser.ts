@@ -7,7 +7,7 @@
 
 import { Value } from '@sinclair/typebox/value'
 import type { TSchema } from '@sinclair/typebox'
-import { ALLOWED_API_TARGETS, isAllowedApiTarget, type AllowedApiTarget } from './targets'
+import { ALLOWED_API_TARGETS, isAllowedApiTarget } from './targets'
 import { ApiCallSchemas, type ValidatedApiCall } from './apiCallSchema'
 
 export class ApiCallValidationError extends Error {
@@ -49,89 +49,6 @@ function validateApiCallSemantics(call: ValidatedApiCall): void {
   }
 }
 
-function decodeApiCall(target: AllowedApiTarget, value: unknown): ValidatedApiCall {
-  switch (target) {
-    case 'cms.routes.register':
-      return Value.Decode(ApiCallSchemas['cms.routes.register'], value)
-    case 'cms.hooks.on':
-      return Value.Decode(ApiCallSchemas['cms.hooks.on'], value)
-    case 'cms.hooks.filter':
-      return Value.Decode(ApiCallSchemas['cms.hooks.filter'], value)
-    case 'cms.hooks.emit':
-      return Value.Decode(ApiCallSchemas['cms.hooks.emit'], value)
-    case 'cms.loops.registerSource':
-      return Value.Decode(ApiCallSchemas['cms.loops.registerSource'], value)
-    case 'cms.storage.list':
-      return Value.Decode(ApiCallSchemas['cms.storage.list'], value)
-    case 'cms.storage.create':
-      return Value.Decode(ApiCallSchemas['cms.storage.create'], value)
-    case 'cms.storage.update':
-      return Value.Decode(ApiCallSchemas['cms.storage.update'], value)
-    case 'cms.storage.delete':
-      return Value.Decode(ApiCallSchemas['cms.storage.delete'], value)
-    case 'cms.settings.replace':
-      return Value.Decode(ApiCallSchemas['cms.settings.replace'], value)
-    case 'network.fetch':
-      return Value.Decode(ApiCallSchemas['network.fetch'], value)
-    case 'network.abort':
-      return Value.Decode(ApiCallSchemas['network.abort'], value)
-    case 'cms.schedule.register':
-      return Value.Decode(ApiCallSchemas['cms.schedule.register'], value)
-    case 'cms.schedule.cancel':
-      return Value.Decode(ApiCallSchemas['cms.schedule.cancel'], value)
-    case 'cms.media.registerStorageAdapter':
-      return Value.Decode(ApiCallSchemas['cms.media.registerStorageAdapter'], value)
-    case 'cms.media.registerUrlTransformer':
-      return Value.Decode(ApiCallSchemas['cms.media.registerUrlTransformer'], value)
-    case 'cms.media.registerVariantDelegate':
-      return Value.Decode(ApiCallSchemas['cms.media.registerVariantDelegate'], value)
-    case 'crypto.digest':
-      return Value.Decode(ApiCallSchemas['crypto.digest'], value)
-    case 'crypto.signHmac':
-      return Value.Decode(ApiCallSchemas['crypto.signHmac'], value)
-    case 'cms.content.tables.list':
-      return Value.Decode(ApiCallSchemas['cms.content.tables.list'], value)
-    case 'cms.content.tables.get':
-      return Value.Decode(ApiCallSchemas['cms.content.tables.get'], value)
-    case 'cms.content.tables.create':
-      return Value.Decode(ApiCallSchemas['cms.content.tables.create'], value)
-    case 'cms.content.entries.list':
-      return Value.Decode(ApiCallSchemas['cms.content.entries.list'], value)
-    case 'cms.content.entries.get':
-      return Value.Decode(ApiCallSchemas['cms.content.entries.get'], value)
-    case 'cms.content.entries.getBySlug':
-      return Value.Decode(ApiCallSchemas['cms.content.entries.getBySlug'], value)
-    case 'cms.content.entries.create':
-      return Value.Decode(ApiCallSchemas['cms.content.entries.create'], value)
-    case 'cms.content.entries.update':
-      return Value.Decode(ApiCallSchemas['cms.content.entries.update'], value)
-    case 'cms.content.entries.delete':
-      return Value.Decode(ApiCallSchemas['cms.content.entries.delete'], value)
-    case 'cms.content.entries.publish':
-      return Value.Decode(ApiCallSchemas['cms.content.entries.publish'], value)
-    case 'cms.content.entries.moveTable':
-      return Value.Decode(ApiCallSchemas['cms.content.entries.moveTable'], value)
-    case 'cms.content.entries.createMany':
-      return Value.Decode(ApiCallSchemas['cms.content.entries.createMany'], value)
-    case 'cms.content.entries.updateMany':
-      return Value.Decode(ApiCallSchemas['cms.content.entries.updateMany'], value)
-    case 'cms.content.entries.deleteMany':
-      return Value.Decode(ApiCallSchemas['cms.content.entries.deleteMany'], value)
-    case 'cms.content.tree.read':
-      return Value.Decode(ApiCallSchemas['cms.content.tree.read'], value)
-    case 'cms.content.tree.mutate':
-      return Value.Decode(ApiCallSchemas['cms.content.tree.mutate'], value)
-    case 'cms.content.tree.replace':
-      return Value.Decode(ApiCallSchemas['cms.content.tree.replace'], value)
-    case 'cms.content.search':
-      return Value.Decode(ApiCallSchemas['cms.content.search'], value)
-    case 'cms.content.snapshot':
-      return Value.Decode(ApiCallSchemas['cms.content.snapshot'], value)
-    case 'cms.content.republishAll':
-      return Value.Decode(ApiCallSchemas['cms.content.republishAll'], value)
-  }
-}
-
 export function parseApiCall(value: unknown): ValidatedApiCall {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new ApiCallValidationError('Invalid api-call payload: expected object')
@@ -149,7 +66,7 @@ export function parseApiCall(value: unknown): ValidatedApiCall {
     )
   }
 
-  const parsed = decodeApiCall(target, value)
+  const parsed = Value.Decode(schema, value)
   validateApiCallSemantics(parsed)
   return parsed
 }
