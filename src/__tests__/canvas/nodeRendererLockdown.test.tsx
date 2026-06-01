@@ -105,6 +105,7 @@ function setupAnnotatedPage() {
     site: makeSite({ pages: [page] }),
     activePageId: 'page-1',
     activeDocument: null,  // page mode (not VC edit mode)
+    activeBreakpointId: 'mobile',
     selectedNodeId: null,
     selectedNodeIds: [],
     hoveredNodeId: null,

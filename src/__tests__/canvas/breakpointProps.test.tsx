@@ -77,7 +77,7 @@ describe('canvas breakpoint rendering', () => {
     expect(mobileDoc!.body.textContent).not.toContain('Mobile headline')
   })
 
-  it('activates the clicked breakpoint when selecting a node inside that frame', () => {
+  it('selects the clicked node on an inactive breakpoint when no layer is already being edited', () => {
     const site = useEditorStore.getState().createSite('Breakpoint Selection')
     const page = site.pages[0]
     const textId = useEditorStore.getState().insertNode('base.text', {
@@ -91,11 +91,14 @@ describe('canvas breakpoint rendering', () => {
     const mobileNode = queryCanvasNodeInFrame('mobile', textId)
     expect(mobileNode).toBeTruthy()
 
-    fireEvent.click(mobileNode!)
+    act(() => {
+      fireEvent.click(mobileNode!)
+    })
 
     const state = useEditorStore.getState()
-    expect(state.selectedNodeId).toBe(textId)
     expect(state.activeBreakpointId).toBe('mobile')
+    expect(state.selectedNodeId).toBe(textId)
+    expect(state.selectedNodeIds).toEqual([textId])
   })
 
   it('scopes canvas hover to the concrete breakpoint frame under the pointer', () => {
@@ -113,13 +116,17 @@ describe('canvas breakpoint rendering', () => {
     expect(mobileNode).toBeTruthy()
     expect(desktopNode).toBeTruthy()
 
-    fireEvent.mouseEnter(mobileNode!)
+    act(() => {
+      fireEvent.mouseEnter(mobileNode!)
+    })
 
     expect(mobileNode!.getAttribute('data-hovered')).toBe('true')
     expect(desktopNode!.hasAttribute('data-hovered')).toBe(false)
 
-    fireEvent.mouseLeave(mobileNode!)
-    fireEvent.mouseEnter(desktopNode!)
+    act(() => {
+      fireEvent.mouseLeave(mobileNode!)
+      fireEvent.mouseEnter(desktopNode!)
+    })
 
     expect(mobileNode!.hasAttribute('data-hovered')).toBe(false)
     expect(desktopNode!.getAttribute('data-hovered')).toBe('true')

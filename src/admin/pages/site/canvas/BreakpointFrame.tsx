@@ -26,8 +26,10 @@ import { CanvasBreakpointContext, CanvasTemplateContext } from './CanvasContexts
 import { IframeFrameSurface, type IframeFrameSurfaceHandle } from './IframeFrameSurface'
 import type { InjectableRuntimeScript } from './useRuntimeScriptBuild'
 import { Button } from '@ui/components/Button'
+import { CursorTooltip, type CursorTooltipPoint } from '@ui/components/Tooltip'
 import { cn } from '@ui/cn'
 import { useEditorPermissions } from '@site/editorPermissionsContext'
+import { clientPointToEditorDoc } from './canvasDomGeometry'
 import styles from './BreakpointFrame.module.css'
 
 interface BreakpointFrameProps {
@@ -35,6 +37,7 @@ interface BreakpointFrameProps {
   breakpoint: Breakpoint
   isActive: boolean
   isDimmed?: boolean
+  activationHintEnabled?: boolean
   onActivate: (breakpointId: string) => void
   templateContext?: TemplateRenderDataContext
   /** Opt-in runtime scripts injected into this frame; empty/undefined = none. */
@@ -46,6 +49,7 @@ export function BreakpointFrame({
   breakpoint,
   isActive,
   isDimmed = false,
+  activationHintEnabled = false,
   onActivate,
   templateContext,
   runtimeScripts,
@@ -66,6 +70,7 @@ export function BreakpointFrame({
   // `getBoundingClientRect()` call. State (not ref) so the overlay re-renders
   // when the iframe mounts.
   const [iframeEl, setIframeEl] = useState<HTMLIFrameElement | null>(null)
+  const [activationHintPoint, setActivationHintPoint] = useState<CursorTooltipPoint | null>(null)
 
   // Breakpoint chrome (active highlight + label-click-to-activate) is a style
   // editing affordance — picking the "active" breakpoint controls where per-
@@ -82,6 +87,16 @@ export function BreakpointFrame({
   const handleEmptyFrameClick = () => {
     if (!breakpointChromeVisible) return
     onActivate(breakpoint.id)
+  }
+
+  const inactiveFrameActivates = breakpointChromeVisible && activationHintEnabled && !isActive
+  const handleFrameCursorMove = (event: MouseEvent) => {
+    if (!inactiveFrameActivates) return
+    setActivationHintPoint(clientPointToEditorDoc(event))
+  }
+
+  const handleFrameCursorLeave = () => {
+    setActivationHintPoint(null)
   }
 
   return (
@@ -131,6 +146,8 @@ export function BreakpointFrame({
           breakpointId={breakpoint.id}
           width={breakpoint.width}
           onClick={handleEmptyFrameClick}
+          onCursorMove={handleFrameCursorMove}
+          onCursorLeave={handleFrameCursorLeave}
           runtimeScripts={runtimeScripts}
         >
           <CanvasTemplateContext.Provider value={templateContext}>
@@ -147,6 +164,10 @@ export function BreakpointFrame({
           breakpointId={breakpoint.id}
           viewportRef={viewportRef}
           iframeElement={iframeEl}
+        />
+        <CursorTooltip
+          content={`Click to activate ${breakpoint.label} breakpoint`}
+          point={inactiveFrameActivates ? activationHintPoint : null}
         />
       </div>
     </div>

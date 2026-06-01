@@ -77,6 +77,7 @@ import { UserStylesheetInjector } from './UserStylesheetInjector'
 import { EditorChromeInjector } from './EditorChromeInjector'
 import { RuntimeScriptInjector } from './RuntimeScriptInjector'
 import type { InjectableRuntimeScript } from './useRuntimeScriptBuild'
+import { useIframeCursorBridge } from './useIframeCursorBridge'
 import { CANVAS_VIEWPORT_HEIGHT, type CanvasViewport } from './resolveViewportUnits'
 import styles from './IframeFrameSurface.module.css'
 
@@ -110,6 +111,10 @@ interface IframeFrameSurfaceProps {
    * so clicking the empty area still activates the breakpoint.
    */
   onClick?: () => void
+  /** Cursor movement inside the iframe, translated by callers as needed. */
+  onCursorMove?: (event: MouseEvent) => void
+  /** Cursor leave from the iframe element. */
+  onCursorLeave?: () => void
   /** Page tree React subtree to mount inside the iframe's body. */
   children: ReactNode
   /**
@@ -141,6 +146,8 @@ export interface IframeFrameSurfaceHandle {
   contentBody: HTMLBodyElement | null
 }
 
+type IframeWithCleanup = HTMLIFrameElement & { _pbCleanup?: () => void }
+
 export const IframeFrameSurface = forwardRef<IframeFrameSurfaceHandle, IframeFrameSurfaceProps>(
   function IframeFrameSurface(
     {
@@ -149,16 +156,20 @@ export const IframeFrameSurface = forwardRef<IframeFrameSurfaceHandle, IframeFra
       className,
       style,
       onClick,
+      onCursorMove,
+      onCursorLeave,
       children,
       dataAttrs,
       interaction = 'canvas',
       runtimeScripts,
     },
     ref,
-  ) {
-    const isLive = interaction === 'live'
-    const iframeRef = useRef<HTMLIFrameElement | null>(null)
-    const [iframeDoc, setIframeDoc] = useState<Document | null>(null)
+    ) {
+      const isLive = interaction === 'live'
+      const iframeRef = useRef<HTMLIFrameElement | null>(null)
+      const [iframeDoc, setIframeDoc] = useState<Document | null>(null)
+
+    useIframeCursorBridge(iframeRef, iframeDoc, { onCursorMove, onCursorLeave })
 
     // Bridge the iframe handle out to the parent (selection overlay reads
     // `iframeElement` to translate inside-iframe rects into editor coordinates).
@@ -178,6 +189,11 @@ export const IframeFrameSurface = forwardRef<IframeFrameSurfaceHandle, IframeFra
     // the iframe element; we still listen for `load` as a fallback in case
     // the browser deferred parsing.
     const attachIframeDoc = (iframe: HTMLIFrameElement | null) => {
+      const previousIframe = iframeRef.current as IframeWithCleanup | null
+      if (previousIframe && previousIframe !== iframe) {
+        previousIframe._pbCleanup?.()
+        previousIframe._pbCleanup = undefined
+      }
       iframeRef.current = iframe
       if (!iframe) {
         setIframeDoc(null)
@@ -192,19 +208,12 @@ export const IframeFrameSurface = forwardRef<IframeFrameSurfaceHandle, IframeFra
       // Stash the cleanup on the ref so React's ref-callback contract (the
       // function may be called again with null on unmount) doesn't leak
       // listeners.
-      ;(iframe as HTMLIFrameElement & { _pbCleanup?: () => void })._pbCleanup = () => {
+      const cleanableIframe = iframe as IframeWithCleanup
+      cleanableIframe._pbCleanup = () => {
         iframe.removeEventListener('load', tryCapture)
+        cleanableIframe._pbCleanup = undefined
       }
     }
-
-    useEffect(() => {
-      return () => {
-        const iframe = iframeRef.current as
-          | (HTMLIFrameElement & { _pbCleanup?: () => void })
-          | null
-        iframe?._pbCleanup?.()
-      }
-    }, [])
 
     // Tag the iframe body with `data-breakpoint-id` (matches the existing
     // canvasClassCss selector `[data-breakpoint-id="..."] .myClass`) and

@@ -356,7 +356,7 @@ Every interactive control in the admin and editor goes through a primitive from 
 | `FloatingActionBar`  | Multi-select bulk-action bar.                                               |
 | `EmptyState`         | Empty-list / empty-page placeholder.                                        |
 | `Dialog`             | Modal dialog with a title and content.                                      |
-| `Tooltip`            | Hover tooltips. Replaces the native `title` attribute (gated).              |
+| `Tooltip`            | Hover and cursor-anchored tooltips. Replaces the native `title` attribute (gated). |
 | `Toast`              | Transient confirmation / error notifications.                               |
 | `DataTable`          | Tabular data with sorting and selection.                                    |
 | `Widget`, `WidgetList`| Borderless tile card (the dashboard pattern). Accepts a `tint`.            |

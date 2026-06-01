@@ -136,6 +136,7 @@ export function CanvasRoot({ editable = true }: CanvasRootProps) {
   const dimInactiveBreakpointsPref = useEditorPreference('dimInactiveBreakpoints')
   const focusActiveBreakpoint =
     dimInactiveBreakpointsPref && Boolean(selectedNodeId && rightSidebarExpanded)
+  const preserveSelectionWhenActivatingBreakpoint = Boolean(selectedNodeId && rightSidebarExpanded)
 
   // Routes destructive actions through the editor's central confirm dialog.
   // When the `confirmBeforeDelete` preference is off, the commit callback
@@ -196,6 +197,10 @@ export function CanvasRoot({ editable = true }: CanvasRootProps) {
     e.stopPropagation()
     if (breakpointId && breakpointId !== activeBreakpointId) {
       setActiveBreakpoint(breakpointId)
+      if (preserveSelectionWhenActivatingBreakpoint) {
+        setFocusedPanel('canvas')
+        return
+      }
     }
     // Modifier-aware selection (multi-select): Cmd/Ctrl-click toggles, Shift-
     // click extends a range from the anchor. Plain clicks replace the
@@ -394,6 +399,7 @@ export function CanvasRoot({ editable = true }: CanvasRootProps) {
                 breakpoints={breakpoints}
                 activeBreakpointId={activeBreakpointId}
                 dimInactiveBreakpoints={focusActiveBreakpoint}
+                activationHintEnabled={preserveSelectionWhenActivatingBreakpoint}
                 onBreakpointActivate={setActiveBreakpoint}
                 templateContext={templatePreviewContext}
                 runtimeScripts={runtimeScripts}

@@ -220,6 +220,8 @@ Replaces native `title="..."` (gated by `no-native-title-tooltips.test.ts`). Wor
 
 `Button` accepts a `tooltip` prop and wraps itself — prefer that over composing `<Tooltip><Button .../></Tooltip>` for buttons.
 
+`CursorTooltip` lives in the same module for canvas/editor chrome that must follow a pointer coordinate instead of anchoring to a trigger element.
+
 ---
 
 ## `Toast`

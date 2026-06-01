@@ -121,6 +121,8 @@ Native events require explicit forwarding for two cases:
 - **Wheel events (design mode):** `IframeFrameSurface` listens for `wheel` inside the iframe document and re-dispatches a new `WheelEvent` on the iframe element (parent document) so `useCanvas`'s pan/zoom handler picks it up.
 - **Pointer events (design mode):** Middle-click pan, space+left-click pan, and active reorder drags (`data-pb-canvas-dragging` on `<html>`) all need to cross the iframe boundary. `IframeFrameSurface` tracks `spaceHeld` and `panPointerId` state to identify when a pointerdown starts a pan, then forwards `pointerdown`/`pointermove`/`pointerup`/`pointercancel` to the parent document.
 
+Native mouse movement is also surfaced for editor chrome that must follow the cursor in the parent document, such as inactive-breakpoint activation hints. These events are not forwarded as new DOM events; `IframeFrameSurface` invokes callback props with the iframe-native `MouseEvent`, and callers translate the point with `clientPointToEditorDoc`.
+
 Live frames skip all forwarding — they scroll natively and have no pan/zoom.
 
 ---

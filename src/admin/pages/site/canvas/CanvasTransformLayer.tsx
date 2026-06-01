@@ -21,6 +21,7 @@ interface CanvasTransformLayerProps {
   breakpoints: Breakpoint[]
   activeBreakpointId: string
   dimInactiveBreakpoints?: boolean
+  activationHintEnabled?: boolean
   onBreakpointActivate: (id: string) => void
   templateContext?: TemplateRenderDataContext
   /** Opt-in runtime scripts injected into every frame; empty/undefined = none. */
@@ -34,11 +35,17 @@ export function CanvasTransformLayer({
   breakpoints,
   activeBreakpointId,
   dimInactiveBreakpoints = false,
+  activationHintEnabled = false,
   onBreakpointActivate,
   templateContext,
   runtimeScripts,
   ref,
 }: CanvasTransformLayerProps) {
+  const framedBreakpoints: Breakpoint[] = []
+  for (const breakpoint of breakpoints) {
+    if (breakpoint.previewFrame !== false) framedBreakpoints.push(breakpoint)
+  }
+
   return (
     <div
       ref={ref}
@@ -55,20 +62,19 @@ export function CanvasTransformLayer({
         // Frame-less breakpoints are still selectable editing contexts in the
         // toolbar switcher and still publish their @media CSS — they just don't
         // spawn an editor iframe.
-        breakpoints
-          .filter((bp) => bp.previewFrame !== false)
-          .map((bp) => (
-            <BreakpointFrame
-              key={bp.id}
-              page={page}
-              breakpoint={bp}
-              isActive={activeBreakpointId === bp.id}
-              isDimmed={dimInactiveBreakpoints && activeBreakpointId !== bp.id}
-              onActivate={onBreakpointActivate}
-              templateContext={templateContext}
-              runtimeScripts={runtimeScripts}
-            />
-          ))
+        framedBreakpoints.map((bp) => (
+          <BreakpointFrame
+            key={bp.id}
+            page={page}
+            breakpoint={bp}
+            isActive={activeBreakpointId === bp.id}
+            isDimmed={dimInactiveBreakpoints && activeBreakpointId !== bp.id}
+            activationHintEnabled={activationHintEnabled}
+            onActivate={onBreakpointActivate}
+            templateContext={templateContext}
+            runtimeScripts={runtimeScripts}
+          />
+        ))
       ) : (
         <NoSiteState />
       )}
@@ -79,7 +85,7 @@ export function CanvasTransformLayer({
 function NoSiteState() {
   return (
     <div className={styles.noSite}>
-      Loading site...
+      Loading site&hellip;
     </div>
   )
 }
