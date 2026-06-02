@@ -193,6 +193,19 @@ describe('DynamicBindingControl picker', () => {
     })
   })
 
+  it('does not expose internal page or site bookkeeping fields', async () => {
+    loadTemplatePageInStore('posts')
+    renderBinding()
+    fireEvent.click(screen.getByRole('button', { name: /bind text/i }))
+    await waitFor(() => expect(screen.getByRole('menu', { name: /bind text/i })).toBeDefined())
+    await waitFor(() => expect(screen.getByText('Page title')).toBeDefined())
+
+    expect(screen.queryByText('Page id')).toBeNull()
+    expect(screen.queryByText('Site id')).toBeNull()
+    expect(screen.queryByText('Is template')).toBeNull()
+    expect(screen.queryByText('Template table slug')).toBeNull()
+  })
+
   it('shows post-type fields directly when auto-scoped to a template page', async () => {
     // Auto-scope: a template page is bound to the `posts` table, so the
     // picker leads with that table's fields.
@@ -214,20 +227,14 @@ describe('DynamicBindingControl picker', () => {
     expect(screen.getAllByText('Slug').length).toBeGreaterThanOrEqual(1)
   })
 
-  it('disables media fields when control type is text (auto-scoped)', async () => {
+  it('hides media fields when control type is text (auto-scoped)', async () => {
     loadTemplatePageInStore('posts')
     renderBinding()
     fireEvent.click(screen.getByRole('button', { name: /bind text/i }))
     await waitFor(() => expect(screen.getByRole('menu', { name: /bind text/i })).toBeDefined())
-    await waitFor(() => expect(screen.getByText('Featured media')).toBeDefined())
+    await waitFor(() => expect(screen.getByText('Title')).toBeDefined())
 
-    // The "Featured media" button should be aria-disabled for a text control
-    // (Button uses aria-disabled when disabled+tooltip combo is present)
-    const mediaBtn = screen.getAllByRole('button').find((b) =>
-      b.textContent?.includes('Featured media'),
-    )
-    expect(mediaBtn).toBeDefined()
-    expect(mediaBtn?.getAttribute('aria-disabled')).toBe('true')
+    expect(screen.queryByText('Featured media')).toBeNull()
   })
 
   it('calls onSet immediately when a field row is clicked (bind mode, auto-scoped)', async () => {

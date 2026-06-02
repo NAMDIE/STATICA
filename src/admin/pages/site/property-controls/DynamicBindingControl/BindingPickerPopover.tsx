@@ -258,9 +258,14 @@ export function BindingPickerPopover({
   // ─── Field list assembly ───────────────────────────────────────────────
   const controlKind = control.type as PropertyControlKind
 
+  function entryMatchesControl(entry: FieldEntry): boolean {
+    if (entry.kind === 'meta') return isFieldBindable(controlKind, entry.field)
+    return loopFieldMatchesControl(entry.field, controlKind)
+  }
+
   // All applicable groups, top to bottom. Computed once based on context —
-  // no source-selection step in between. Authors see every reachable
-  // binding at once and just click the one they want.
+  // no source-selection step in between. Authors see every usable binding
+  // at once and just click the one they want.
   const groups: FieldGroup[] = (() => {
     const result: FieldGroup[] = []
 
@@ -310,21 +315,16 @@ export function BindingPickerPopover({
     }
 
     return result
+      .map((group) => ({
+        ...group,
+        entries: group.entries.filter(entryMatchesControl),
+      }))
+      .filter((group) => group.entries.length > 0)
   })()
 
-  // Compatibility check across the entire list — used to show the "no
-  // compatible fields" hint when an aggressive control type (image / media)
-  // lands in a scope that has no media fields anywhere.
-  const allFieldsIncompatible =
-    groups.length > 0 &&
-    groups.every((g) =>
-      g.entries.every((entry) => {
-        if (entry.kind === 'loop' || entry.kind === 'system') {
-          return !loopFieldMatchesControl(entry.field, controlKind)
-        }
-        return !isFieldBindable(controlKind, entry.field)
-      }),
-    )
+  // Show the empty hint when the current scope has nothing usable for this
+  // control after filtering out incompatible/internal fields.
+  const hasNoUsableFields = groups.length === 0
 
   // ─── Table existence (for the footer hint) ─────────────────────────────
   // When there are tables in the system but the current scope can't reach
@@ -533,7 +533,7 @@ export function BindingPickerPopover({
         )}
 
         <div className={styles.fieldList}>
-          {allFieldsIncompatible && (
+          {hasNoUsableFields && (
             <p className={styles.incompatibleHint}>
               No fields in the available sources are compatible with this control.
             </p>

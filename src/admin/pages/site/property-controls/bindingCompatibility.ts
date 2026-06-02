@@ -2,7 +2,8 @@
  * Binding compatibility map — defines which DataFieldTypes each
  * PropertyControlKind can accept as a binding source.
  *
- * Single source of truth for the picker's field-row disabled state.
+ * Single source of truth for the picker's field eligibility and for whether
+ * a property control should show the binding affordance at all.
  * Pure module, no side effects.
  */
 
@@ -15,6 +16,8 @@ import type { DataFieldType, DataMetaField } from '@core/data/schemas'
  */
 export type PropertyControlKind = PropertyControl['type']
 
+export type DynamicBindingMode = 'token' | 'structured'
+
 /**
  * Maps every PropertyControlKind to the DataFieldTypes it can accept as a
  * binding source.
@@ -22,6 +25,9 @@ export type PropertyControlKind = PropertyControl['type']
  * Notes:
  * - `image`   also gated by mediaKind ∈ {'image', 'any'} inside `isFieldBindable`.
  * - `media`   accepts any mediaKind.
+ * - `select` has no binding mode: module selects are fixed option sets and
+ *   TypeBox validation will coerce unknown dynamic values back to defaults.
+ * - `color` has no binding mode until data has a first-class color field type.
  * - `group` has no meaningful scalar binding target.
  * - `pageTree` and `fieldSchema` are structural cell types that hold whole
  *   documents (a page-node tree and a DataField[] array). They are not
@@ -41,11 +47,11 @@ export const BINDING_COMPATIBILITY: Record<PropertyControlKind, readonly DataFie
   // svg holds raw inline-SVG markup — edited in the code editor, never wired
   // to a data field.
   svg:      [],
-  number:   ['number', 'boolean'],
-  url:      ['url', 'text', 'email'],
-  color:    ['select'],
+  number:   ['number'],
+  url:      ['url', 'email'],
+  color:    [],
   toggle:   ['boolean'],
-  select:   ['select'],
+  select:   [],
   dataTable: [],
   image:    ['media'],
   media:    ['media'],
@@ -64,10 +70,40 @@ export function isFieldBindable(controlKind: PropertyControlKind, field: DataMet
   const allowedTypes = BINDING_COMPATIBILITY[controlKind]
   if (!allowedTypes.includes(field.type)) return false
   if (field.type === 'media') {
+    if (field.allowMultiple === true) return false
     const kind = field.mediaKind ?? 'any'
     if (controlKind === 'image') return kind === 'image' || kind === 'any'
     // 'media' control accepts all media kinds
     if (controlKind === 'media') return true
   }
   return true
+}
+
+/**
+ * Returns the editor binding mode for a property control, or null when the
+ * control cannot accept dynamic data in a way that survives authoring +
+ * render-time validation.
+ */
+export function getDynamicBindingMode(control: PropertyControl): DynamicBindingMode | null {
+  switch (control.type) {
+    case 'text':
+      return control.normalize === 'identifier' ? null : 'token'
+    case 'textarea':
+    case 'richtext':
+    case 'url':
+      return 'token'
+    case 'number':
+    case 'toggle':
+    case 'image':
+    case 'media':
+      return 'structured'
+    case 'color':
+    case 'select':
+    case 'dataTable':
+    case 'svg':
+    case 'group':
+      return null
+    default:
+      return null
+  }
 }

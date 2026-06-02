@@ -700,3 +700,67 @@ describe('PropertyControlRenderer — disabled prop', () => {
     expect(html).toContain('disabled')
   })
 })
+
+describe('PropertyControlRenderer — dynamic binding affordance eligibility', () => {
+  const dynamicBinding = {
+    onSet: () => {},
+    onClear: () => {},
+  }
+
+  it('does not add a data-token affordance to fixed option selects', () => {
+    render(
+      <PropertyControlRenderer
+        propKey="loading"
+        control={{
+          type: 'select',
+          label: 'Loading',
+          options: [
+            { label: 'Lazy', value: 'lazy' },
+            { label: 'Eager', value: 'eager' },
+          ],
+        }}
+        value="lazy"
+        onChange={() => {}}
+        dynamicBinding={dynamicBinding}
+      />,
+    )
+
+    expect(screen.queryByRole('button', { name: /insert binding for loading/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /bind loading/i })).toBeNull()
+  })
+
+  it('does not add a data-token affordance to color values', () => {
+    render(
+      <PropertyControlRenderer
+        propKey="background"
+        control={{ type: 'color', label: 'Background' }}
+        value="#ffffff"
+        onChange={() => {}}
+        dynamicBinding={dynamicBinding}
+      />,
+    )
+
+    expect(screen.queryByRole('button', { name: /insert binding for background/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /bind background/i })).toBeNull()
+  })
+
+  it('uses whole-prop binding mode for image controls', async () => {
+    const restoreFetch = installMediaFetchStub(mediaAssets)
+    try {
+      render(
+        <PropertyControlRenderer
+          propKey="src"
+          control={{ type: 'image', label: 'Image Source' }}
+          value=""
+          onChange={() => {}}
+          dynamicBinding={dynamicBinding}
+        />,
+      )
+
+      expect(await screen.findByRole('button', { name: /bind image source/i })).toBeDefined()
+      expect(screen.queryByRole('button', { name: /insert binding for image source/i })).toBeNull()
+    } finally {
+      restoreFetch()
+    }
+  })
+})

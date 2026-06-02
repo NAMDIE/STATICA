@@ -38,9 +38,6 @@ const PAGE_SOURCE: SystemSource = {
     { id: 'slug', label: 'Slug' },
     { id: 'permalink', label: 'Permalink', format: 'url' },
     { id: 'parentSlug', label: 'Parent slug' },
-    { id: 'isTemplate', label: 'Is template' },
-    { id: 'templateTableSlug', label: 'Template table slug' },
-    { id: 'id', label: 'Page id' },
   ],
 }
 
@@ -51,10 +48,9 @@ const PAGE_SOURCE: SystemSource = {
 const SITE_SOURCE: SystemSource = {
   id: 'site',
   label: 'Site',
-  description: 'Site-wide fields (name, id).',
+  description: 'Site-wide author-facing fields.',
   fields: [
     { id: 'name', label: 'Site name' },
-    { id: 'id', label: 'Site id' },
   ],
 }
 

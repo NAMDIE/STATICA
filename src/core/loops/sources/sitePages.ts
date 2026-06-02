@@ -83,7 +83,6 @@ export const SitePagesSource: LoopEntitySource = {
     { id: 'title', label: 'Title' },
     { id: 'slug', label: 'Slug' },
     { id: 'permalink', label: 'Permalink', format: 'url' },
-    { id: 'id', label: 'Page ID' },
   ],
 
   async fetch(ctx): Promise<LoopFetchResult> {

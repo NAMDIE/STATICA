@@ -178,7 +178,6 @@ export const SiteMediaSource: LoopEntitySource = {
     { id: 'url', label: 'URL', format: 'url' },
     { id: 'src', label: 'Source URL', format: 'media' },
     { id: 'mimeType', label: 'MIME type' },
-    { id: 'uploadedByUserId', label: 'Uploader ID' },
     { id: 'createdAt', label: 'Upload date' },
   ],
 

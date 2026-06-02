@@ -42,12 +42,14 @@ export function loopFieldMatchesControl(
       return field.format === 'html'
     case 'text':
     case 'textarea':
-    case 'url':
-    case 'number':
-    case 'color':
-    case 'toggle':
-    case 'select':
       return field.format !== 'media' && field.format !== 'html'
+    case 'url':
+      return field.format === 'url' || field.format === 'media'
+    case 'number':
+    case 'toggle':
+    case 'color':
+    case 'select':
+      return false
     default:
       return false
   }

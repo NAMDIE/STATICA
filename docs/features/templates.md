@@ -114,6 +114,10 @@ If the source frame is missing (e.g. `currentEntry` outside a loop / template), 
 | `route`        | `ctx.route`               | URL-driven (e.g. `route.segments[1]`)                   |
 | `page`         | `ctx.page`                | The current page's metadata                             |
 
+The editor picker is stricter than the render context. `src/admin/pages/site/property-controls/bindingCompatibility.ts` decides whether a property control can bind at all: free text, textarea, richtext, and URL controls insert `{source.field}` tokens; image, media, number, and toggle controls use whole-prop `dynamicBindings`; fixed selects, color fields, SVG, data-table pickers, groups, and identifier-normalized text fields show no binding affordance. `src/admin/pages/site/property-controls/DynamicBindingControl/BindingPickerPopover.tsx` filters each source to compatible rows before rendering it, so incompatible fields are hidden rather than shown disabled.
+
+System frames still contain internal bookkeeping for runtime code, but `src/admin/pages/site/property-controls/systemSources.ts` exposes only author-facing fields in the picker: page title/slug/permalink/parent slug, site name, and route path/slug. Page ids, site ids, template flags, and template table slugs are not user-facing binding choices.
+
 ### Field path walking
 
 `walkFieldPath(frame, 'cells.author.displayName')` walks a dotted path. Returns `undefined` for missing keys.

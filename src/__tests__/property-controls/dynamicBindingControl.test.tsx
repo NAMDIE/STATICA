@@ -178,7 +178,7 @@ describe('dynamic binding controls', () => {
     expect(node?.props.text).toContain('{currentEntry.slug}')
   })
 
-  it('disables media fields for an image control and enables them for compatible fields', async () => {
+  it('shows only compatible media fields for an image control', async () => {
     // Auto-scope via a posts template page — the picker leads with the
     // table's fields directly. The unscoped popover no longer offers
     // tables, so this test requires a real currentEntry scope.
@@ -202,14 +202,10 @@ describe('dynamic binding controls', () => {
     // Auto-scoped — fields appear directly without picking a table.
     await waitFor(() => expect(screen.getByText('Featured media')).toBeDefined())
 
-    // Text fields should be aria-disabled for an image control
-    // (Button uses aria-disabled when disabled+tooltip combo is present)
-    const titleBtn = screen.getAllByRole('button').find((b) =>
-      b.textContent?.includes('Title') && !b.textContent?.includes('SEO'),
-    )
-    expect(titleBtn?.getAttribute('aria-disabled')).toBe('true')
+    // Text fields are not valid image sources, so they are not shown.
+    expect(screen.queryByText('Title')).toBeNull()
 
-    // Featured media (mediaKind: 'image') should be enabled (not aria-disabled)
+    // Featured media (mediaKind: 'image') should be visible and enabled.
     const featuredBtn = screen.getAllByRole('button').find((b) =>
       b.textContent?.includes('Featured media'),
     )

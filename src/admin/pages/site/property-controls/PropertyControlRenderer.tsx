@@ -37,6 +37,7 @@ import { UrlControl } from './UrlControl'
 import { SvgControl } from './SvgControl'
 import { DataTableControl } from './DataTableControl'
 import { DynamicBindingControl } from './DynamicBindingControl'
+import { getDynamicBindingMode } from './bindingCompatibility'
 import { cn } from '@ui/cn'
 import styles from './controls.module.css'
 
@@ -261,21 +262,13 @@ export function PropertyControlRenderer({
   // DynamicBindingControl branch below.
   const isDisabled = effectiveDisabled
 
-  // String-typed controls use the token-insertion flow (Phase 4): picking
-  // a field appends `{source.field}` to the prop's text value. Non-string
-  // controls (number, toggle) keep the legacy "replace whole prop" flow
-  // because tokens can't carry non-string values.
-  const isStringTypedControl =
-    control.type === 'text' ||
-    control.type === 'textarea' ||
-    control.type === 'richtext' ||
-    control.type === 'url' ||
-    control.type === 'color' ||
-    control.type === 'image' ||
-    control.type === 'media' ||
-    control.type === 'select'
+  // Binding mode is explicit. Token mode is only for free text-ish props
+  // that can safely contain `{source.field}` snippets. Structured mode
+  // writes a whole-prop dynamicBindings overlay for non-token values such
+  // as media URLs, numbers, and booleans.
+  const bindingMode = getDynamicBindingMode(control)
 
-  const content = dynamicBinding && !isDisabled ? (
+  const content = dynamicBinding && !isDisabled && bindingMode !== null ? (
     <DynamicBindingControl
       propKey={propKey}
       label={control.label ?? propKey}
@@ -284,7 +277,7 @@ export function PropertyControlRenderer({
       binding={dynamicBinding.binding}
       onSet={dynamicBinding.onSet}
       onClear={dynamicBinding.onClear}
-      insertMode={isStringTypedControl}
+      insertMode={bindingMode === 'token'}
       onInsertToken={(token) => {
         // Append to the current string value with a leading space when
         // the value isn't empty. Stage A — caret-position-aware

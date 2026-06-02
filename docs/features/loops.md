@@ -78,7 +78,7 @@ interface LoopEntitySource {
 interface LoopSourceField {
   id:     string            // 'title', 'slug', 'featuredMedia', ...
   label:  string
-  format: 'text' | 'number' | 'date' | 'media' | 'richText' | ...
+  format?: 'plain' | 'html' | 'url' | 'media'
 }
 
 interface LoopItem {
@@ -115,15 +115,19 @@ This covers blog posts, products, anything in the universal store.
 
 ### `site.pages`
 
-Iterates pages in the site. Filters by `kind`, status, route prefix.
+Iterates pages in the site. Filters by template inclusion/exclusion.
 
 Used by sitemaps, "All pages" indexes.
 
+The source's runtime `LoopItem.fields` map includes internal fields used by code paths that need stable identity, but its author-facing `fields` list exposes only title, slug, and permalink. The binding picker must not offer page ids or template flags as front-end content.
+
 ### `site.media`
 
-Iterates `media_assets`. Filters by type, folder, tag, missing-alt.
+Iterates `media_assets`. Filters by MIME type prefix.
 
 Used by galleries.
+
+Its author-facing `fields` list exposes filename, path/URL/source URL, MIME type, and upload date. Internal uploader ids stay in `LoopItem.fields` for code that needs them, but they are not binding-picker rows.
 
 ### Plugin-registered sources
 
