@@ -36,9 +36,18 @@ export function encodeStreamEvent(event: AiStreamEvent): Uint8Array {
 // Bridge registry
 // ---------------------------------------------------------------------------
 
+/**
+ * How long a single browser tool call may stay pending before it is reclaimed.
+ * Long enough for a slow-but-legitimate editor write to complete, short enough
+ * that a dead/closed tab doesn't hang the SDK stream forever (ISS-030).
+ */
+const BROWSER_TOOL_TIMEOUT_MS = 90_000
+
 interface PendingToolResolver {
   resolve(result: AiToolOutput): void
   reject(err: Error): void
+  /** Clear the per-call timeout + abort listener. Idempotent. */
+  cleanup(): void
 }
 
 interface BridgeEntry {
@@ -58,7 +67,11 @@ const activeBridges = new Map<string, BridgeEntry>()
  * back through the NDJSON stream. Wire it to the same enqueue function the
  * chat handler uses for other events.
  */
-export function createBridge(emit: (event: AiStreamEvent) => void): {
+export function createBridge(
+  emit: (event: AiStreamEvent) => void,
+  signal?: AbortSignal,
+  timeoutMs: number = BROWSER_TOOL_TIMEOUT_MS,
+): {
   bridgeId: string
   bridge: AiBrowserBridge
   destroy: () => void
@@ -71,7 +84,33 @@ export function createBridge(emit: (event: AiStreamEvent) => void): {
     callBrowser(toolName, input) {
       const requestId = nanoid()
       return new Promise<AiToolOutput>((resolve, reject) => {
-        entry.pending.set(requestId, { resolve, reject })
+        // Settle (and remove) the pending wait on timeout or client disconnect
+        // so a non-responding browser can never hang the SDK stream or leak the
+        // bridge entry (ISS-030).
+        const settle = (err: Error) => {
+          const live = entry.pending.get(requestId)
+          if (!live) return
+          entry.pending.delete(requestId)
+          live.cleanup()
+          reject(err)
+        }
+        const timer = setTimeout(
+          () => settle(new Error(`Browser tool "${toolName}" result timed out.`)),
+          timeoutMs,
+        )
+        const onAbort = () => settle(new Error('AI chat stream aborted before tool result arrived.'))
+        const cleanup = () => {
+          clearTimeout(timer)
+          signal?.removeEventListener('abort', onAbort)
+        }
+
+        if (signal?.aborted) {
+          clearTimeout(timer)
+          reject(new Error('AI chat stream aborted before tool result arrived.'))
+          return
+        }
+        signal?.addEventListener('abort', onAbort, { once: true })
+        entry.pending.set(requestId, { resolve, reject, cleanup })
         emit({ type: 'toolRequest', requestId, toolName, input })
       })
     },
@@ -89,6 +128,7 @@ export function createBridge(emit: (event: AiStreamEvent) => void): {
       )
     }
     for (const pending of live.pending.values()) {
+      pending.cleanup()
       pending.reject(new Error('AI chat stream ended before tool result arrived.'))
     }
     live.pending.clear()
@@ -115,6 +155,7 @@ export function resolveBridgeToolResult(
   const pending = entry.pending.get(requestId)
   if (!pending) return false
   entry.pending.delete(requestId)
+  pending.cleanup()
   pending.resolve(result)
   return true
 }
@@ -134,6 +175,7 @@ export function __listActiveBridgesForTesting(): string[] {
 export function __destroyAllBridgesForTesting(): void {
   for (const [, entry] of activeBridges) {
     for (const pending of entry.pending.values()) {
+      pending.cleanup()
       pending.reject(new Error('Test teardown.'))
     }
     entry.pending.clear()

@@ -199,7 +199,7 @@ async function handleAiChat(
       }
 
       try {
-        const { bridgeId, bridge, destroy } = createBridge(emit)
+        const { bridgeId, bridge, destroy } = createBridge(emit, req.signal)
         destroyBridge = destroy
         emit({ type: 'bridgeReady', bridgeId })
 

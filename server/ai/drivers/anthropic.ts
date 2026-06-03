@@ -227,6 +227,16 @@ function buildQueryOptions(
     ANTHROPIC_API_KEY: req.credentials.apiKey!,
   } as Record<string, string>
 
+  // Honour the request abort signal (ISS-029): a client disconnect / cancelled
+  // chat must stop the agent loop so it stops generating (and billing) tokens
+  // and the stream is torn down — matching the drivers/types.ts contract and
+  // the OpenAI driver. The SDK cancels via its own AbortController, so bridge
+  // req.signal to it.
+  const controller = new AbortController()
+  if (req.signal.aborted) controller.abort()
+  else req.signal.addEventListener('abort', () => controller.abort(), { once: true })
+  options.abortController = controller
+
   return options
 }
 
