@@ -32,7 +32,7 @@ import { parseValue, safeParseValue, Value } from '@core/utils/typeboxHelpers'
 import { Type } from '@sinclair/typebox'
 import { PageSchema } from '@core/page-tree'
 import { parseStyleRule } from '@core/page-tree'
-import { assertPluginPathWithin } from './runtime'
+import { assertPathWithin } from '../util/pathWithin'
 
 export interface PluginPackContents {
   visualComponents: VisualComponent[]
@@ -70,7 +70,7 @@ export async function loadPluginPackFile(
 ): Promise<unknown> {
   const relativeBase = assetBasePath.replace(/^\/uploads\/?/, '')
   const fullPath = join(uploadsDir, relativeBase, packPath)
-  assertPluginPathWithin(uploadsDir, fullPath)
+  assertPathWithin(uploadsDir, fullPath)
   const text = await readFile(fullPath, 'utf-8')
   try {
     return JSON.parse(text)

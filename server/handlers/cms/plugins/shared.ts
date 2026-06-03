@@ -42,7 +42,7 @@ import {
   type InstalledPluginResult,
 } from '../../../repositories/plugins'
 import { collectEnabledAdminPages } from '@core/plugins/manifest'
-import { assertPluginPathWithin } from '../../../plugins/runtime'
+import { assertPathWithin } from '../../../util/pathWithin'
 import { badRequest, jsonResponse } from '../../../http'
 import { requestAuditContext } from '../shared'
 
@@ -260,7 +260,7 @@ export async function removePluginAssets(plugin: InstalledPlugin, uploadsDir?: s
   // stored manifest (or a future schema regression) can't trigger an
   // arbitrary `rm -rf`.
   try {
-    assertPluginPathWithin(uploadsDir, target)
+    assertPathWithin(uploadsDir, target)
   } catch (err) {
     console.error('[plugins] removePluginAssets refused to delete escaping path:', err)
     return

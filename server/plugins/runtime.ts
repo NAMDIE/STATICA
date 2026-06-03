@@ -12,7 +12,7 @@
  *
  * This module is the thin orchestration layer between the rest of the
  * CMS server and the worker host. It owns:
- *   - Path-containment safety (`assertPluginPathWithin`)
+ *   - Path-containment safety (`assertPathWithin`)
  *   - The plugin settings cache (read synchronously inside hook handlers
  *     via the worker's local mirror — populated at activation)
  *   - The HTTP entrypoint for `/admin/api/cms/plugins/:id/runtime/...`
@@ -26,8 +26,9 @@
  */
 
 import { readFile } from 'node:fs/promises'
-import { isAbsolute, join, relative } from 'node:path'
+import { join } from 'node:path'
 import { nanoid } from 'nanoid'
+import { assertPathWithin } from '../util/pathWithin'
 import type { DbClient } from '../db/client'
 import {
   getInstalledPlugin,
@@ -67,24 +68,6 @@ export { clearPluginCrashCounter }
 // Re-export the host's setter so the server entry point can wire in the
 // DbClient at boot before any request arrives.
 export { setPluginWorkerDbClient }
-
-// ---------------------------------------------------------------------------
-// Path containment
-// ---------------------------------------------------------------------------
-
-/**
- * Defense-in-depth path containment. The schema-level pattern on
- * `assetBasePath` and the `SAFE_ASSET_PATH_PATTERN` on `entrypoints.*` already
- * exclude `..` segments and absolute paths, but the filesystem sinks recompose
- * paths via `path.join` — so we re-assert the resolved path stays under
- * `uploadsDir` after composition.
- */
-export function assertPluginPathWithin(uploadsDir: string, child: string): void {
-  const rel = relative(uploadsDir, child)
-  if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) {
-    throw new Error(`Plugin path "${child}" escapes uploads root`)
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Settings cache — used by the worker host to seed each loaded plugin's
@@ -128,7 +111,7 @@ function resolvePluginServerEntrypoint(
   if (!manifest.assetBasePath || !manifest.entrypoints?.server) return null
   const relativeBase = manifest.assetBasePath.replace(/^\/uploads\/?/, '')
   const entryPath = join(uploadsDir, relativeBase, manifest.entrypoints.server)
-  assertPluginPathWithin(uploadsDir, entryPath)
+  assertPathWithin(uploadsDir, entryPath)
   return { entryPath }
 }
 
@@ -211,7 +194,7 @@ export async function loadPluginModulePack(
   if (!uploadsDir || !manifest.assetBasePath || !manifest.entrypoints?.modules) return null
   const relativeBase = manifest.assetBasePath.replace(/^\/uploads\/?/, '')
   const entryPath = join(uploadsDir, relativeBase, manifest.entrypoints.modules)
-  assertPluginPathWithin(uploadsDir, entryPath)
+  assertPathWithin(uploadsDir, entryPath)
   const packSource = await readFile(entryPath, 'utf-8')
   return await createModulePackVm({ pluginId: manifest.id, packSource })
 }

@@ -29,6 +29,7 @@
  */
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { assertPathWithin } from '../../util/pathWithin'
 import type { DbClient } from '../../db/client'
 import { requireCapability, requireStepUp } from '../../auth/authz'
 import { saveDraftSite } from '../../repositories/site'
@@ -306,9 +307,13 @@ export async function handleImportRoute(
 
     for (const asset of bundle.media) {
       try {
-        // Write the file bytes
+        // Write the file bytes. The schema already forbids leading-slash and
+        // `..` segments, but re-assert containment after join() — a media
+        // storagePath is otherwise an arbitrary-file-write primitive (ISS-009).
         const bytes = Buffer.from(asset.bytesBase64, 'base64')
-        await writeFile(join(uploadsDir, asset.storagePath), bytes)
+        const target = join(uploadsDir, asset.storagePath)
+        assertPathWithin(uploadsDir, target)
+        await writeFile(target, bytes)
 
         // Upsert the media_assets row
         await importMediaAsset(db, {

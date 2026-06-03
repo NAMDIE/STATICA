@@ -27,7 +27,7 @@
  *
  * Path safety: every on-disk path derived from a URL is validated by the
  * private `resolveArtefactPath` helper, which matches the style of
- * `assertPluginPathWithin` in `server/plugins/runtime.ts`.
+ * `assertPathWithin` in `server/util/pathWithin.ts`.
  */
 
 import { dirname, isAbsolute, join, relative } from 'node:path'
@@ -133,7 +133,7 @@ function computeDiskRelPath(urlPath: string): string {
  *
  * Applies `computeDiskRelPath` for URL validation, joins with `slotDir`,
  * then performs a final containment check — defence-in-depth, matching the
- * style of `assertPluginPathWithin` in `server/plugins/runtime.ts`.
+ * style of `assertPathWithin` in `server/util/pathWithin.ts`.
  *
  * Throws on any escape attempt.
  */

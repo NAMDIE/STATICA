@@ -38,6 +38,13 @@ import { SiteShellSchema } from '@core/page-tree'
  * Variants, folder memberships, and deleted/replaced timestamps are intentionally
  * omitted — they either regenerate automatically or are not needed on a fresh import.
  */
+/**
+ * A safe relative path: no leading slash and no `..` path segment. Other
+ * characters (spaces, parens, unicode) are allowed since media filenames are
+ * arbitrary — the only goal is to forbid traversal/absolute escapes.
+ */
+const SAFE_RELATIVE_PATH_PATTERN = '^(?!/)(?!.*(?:^|/)\\.\\.(?:$|/)).+$'
+
 export const MediaAssetExportSchema = Type.Object({
   id: Type.String(),
   filename: Type.String(),
@@ -52,10 +59,16 @@ export const MediaAssetExportSchema = Type.Object({
   durationMs: Type.Union([Type.Number(), Type.Null()]),
   dominantColor: Type.Union([Type.String(), Type.Null()]),
   blurHash: Type.Union([Type.String(), Type.Null()]),
-  /** Relative path inside the uploads directory, e.g. `"abc123-photo.jpg"`. */
-  storagePath: Type.String(),
+  /**
+   * Relative path inside the uploads directory, e.g. `"abc123-photo.jpg"`.
+   * Must not start with `/` or contain a `..` segment — the import handler
+   * writes file bytes to `join(uploadsDir, storagePath)`, so traversal here is
+   * an arbitrary-file-write primitive (ISS-009). The sink re-asserts
+   * containment via `assertPathWithin`; this is the boundary guard.
+   */
+  storagePath: Type.String({ pattern: SAFE_RELATIVE_PATH_PATTERN }),
   /** Video poster image path (relative to uploads dir), or null for non-video assets. */
-  posterPath: Type.Union([Type.String(), Type.Null()]),
+  posterPath: Type.Union([Type.String({ pattern: SAFE_RELATIVE_PATH_PATTERN }), Type.Null()]),
   /** Raw file bytes encoded as Base64. */
   bytesBase64: Type.String(),
 })
