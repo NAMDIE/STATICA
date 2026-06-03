@@ -229,8 +229,8 @@ Use `--panel-shadow` directly when you need a floating-panel feel; don't recompo
 ### Typography
 
 ```css
---font-sans: "Inter Variable", "Geist Variable", sans-serif;
---font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
+--font-sans: "Inter Variable", system-ui, sans-serif;
+--font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 ```
 
 Type **sizes** are per-component and don't yet have a token scale. The patterns in actual use:

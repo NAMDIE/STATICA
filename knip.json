@@ -18,7 +18,6 @@
     "src/ui/icons/icon-browser.html"
   ],
   "ignoreDependencies": [
-    "@fontsource-variable/geist",
     "@fontsource-variable/inter",
     "dependency-cruiser",
     "jscpd",

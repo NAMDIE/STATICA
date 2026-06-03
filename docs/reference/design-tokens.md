@@ -17,8 +17,8 @@ The complete catalog of design tokens declared in `src/styles/globals.css`. Ever
 ## Fonts
 
 ```css
---font-sans: "Inter Variable", "Geist Variable", sans-serif;
---font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
+--font-sans: "Inter Variable", system-ui, sans-serif;
+--font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 ```
 
 Type sizes are per-component and don't yet have a token scale. If a recurring size emerges across 3+ primitives, promote it to a token.
