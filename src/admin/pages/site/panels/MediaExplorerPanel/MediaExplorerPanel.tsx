@@ -5,7 +5,6 @@ import {
   type ChangeEvent,
   type KeyboardEvent,
   type MouseEvent,
-  type ReactNode,
 } from 'react'
 import { useEditorStore } from '@site/store/store'
 import { checkSizeLimit } from '@core/files/upload'
@@ -18,21 +17,13 @@ import {
 } from '@core/persistence/cmsMedia'
 import { Panel, useAutoFocusPanel } from '@admin/shared/Panel'
 import { Button } from '@ui/components/Button'
-import { EmptyState } from '@ui/components/EmptyState'
 import { FileUpload } from '@ui/components/FileUpload'
 import { FilterBar, type FilterBarItem } from '@ui/components/FilterBar'
-import { Image } from '@ui/components/Image'
-import { Skeleton } from '@ui/components/Skeleton'
-import type { IconComponent } from 'pixel-art-icons/types'
 import { BulletlistSolidIcon } from 'pixel-art-icons/icons/bulletlist-solid'
 import { CheckIcon } from 'pixel-art-icons/icons/check'
 import { Copy2SolidIcon } from 'pixel-art-icons/icons/copy-2-solid'
-import { FolderGlyphIcon } from 'pixel-art-icons/icons/folder-glyph'
 import { Grid2x22SolidIcon } from 'pixel-art-icons/icons/grid-2x2-2-solid'
-import { Image2SolidIcon } from 'pixel-art-icons/icons/image-2-solid'
 import { UploadIcon } from 'pixel-art-icons/icons/upload'
-import { VideoSolidIcon } from 'pixel-art-icons/icons/video-solid'
-import { cn } from '@ui/cn'
 import {
   ExplorerItemContextMenu,
   ExplorerRenameDialog,
@@ -41,6 +32,22 @@ import {
 } from '@site/explorer-actions'
 import { MediaViewerWindow } from '@admin/pages/media/components/MediaViewerWindow/MediaViewerWindow'
 import { useStandaloneMediaEditor } from '@admin/pages/media/hooks/useStandaloneMediaEditor'
+import {
+  BUCKET_LABELS,
+  type MediaBucket,
+  type MediaFilter,
+  type MediaViewMode,
+} from './mediaExplorerModel'
+import {
+  filterCmsMediaBuckets,
+  groupCmsMediaAssets,
+  keyboardMenuPosition,
+  readStoredViewMode,
+  targetBucket,
+  writeStoredViewMode,
+} from './mediaExplorerUtils'
+import { MediaExplorerSection } from './MediaExplorerSection'
+import { MediaExplorerItemList } from './MediaExplorerItem'
 import styles from '../SiteExplorerPanel/SiteExplorerPanel.module.css'
 
 interface MediaExplorerPanelProps {
@@ -49,135 +56,10 @@ interface MediaExplorerPanelProps {
   onOpenChange?: (open: boolean) => void
 }
 
-type MediaBucket = 'images' | 'videos' | 'other'
-type MediaFilter = 'all' | MediaBucket
-type MediaViewMode = 'list' | 'grid'
-
 interface ContextMenuState {
   x: number
   y: number
   target: CmsMediaAsset
-}
-
-const BUCKET_LABELS: Record<MediaBucket, string> = {
-  images: 'Images',
-  videos: 'Videos',
-  other: 'Other',
-}
-
-const VIEW_MODE_STORAGE_KEY = 'instatic-media-explorer-view-mode'
-
-function readStoredViewMode(): MediaViewMode {
-  try {
-    const raw = globalThis.localStorage?.getItem(VIEW_MODE_STORAGE_KEY)
-    return raw === 'grid' || raw === 'list' ? raw : 'list'
-  } catch {
-    return 'list'
-  }
-}
-
-function writeStoredViewMode(mode: MediaViewMode) {
-  try {
-    globalThis.localStorage?.setItem(VIEW_MODE_STORAGE_KEY, mode)
-  } catch {
-    // best-effort UI persistence
-  }
-}
-
-const IMAGE_EXTENSIONS = new Set([
-  'apng',
-  'avif',
-  'gif',
-  'jpeg',
-  'jpg',
-  'png',
-  'svg',
-  'webp',
-])
-
-const VIDEO_EXTENSIONS = new Set([
-  'avi',
-  'm4v',
-  'mov',
-  'mp4',
-  'mpeg',
-  'ogv',
-  'webm',
-])
-
-function fileName(path: string) {
-  return path.split('/').pop() ?? path
-}
-
-function keyboardMenuPosition(element: HTMLElement) {
-  const rect = element.getBoundingClientRect()
-  return {
-    x: rect.left + Math.min(rect.width - 8, 24),
-    y: rect.top + Math.min(rect.height - 8, 24),
-  }
-}
-
-function extension(path: string) {
-  const name = fileName(path)
-  const index = name.lastIndexOf('.')
-  return index >= 0 ? name.slice(index + 1).toLowerCase() : ''
-}
-
-function mediaBucket(mimeType: string | undefined, path: string): MediaBucket {
-  if (mimeType?.startsWith('image/')) return 'images'
-  if (mimeType?.startsWith('video/')) return 'videos'
-
-  const ext = extension(path)
-  if (IMAGE_EXTENSIONS.has(ext)) return 'images'
-  if (VIDEO_EXTENSIONS.has(ext)) return 'videos'
-  return 'other'
-}
-
-function groupCmsMediaAssets(assets: CmsMediaAsset[]) {
-  const buckets: Record<MediaBucket, CmsMediaAsset[]> = {
-    images: [],
-    videos: [],
-    other: [],
-  }
-
-  for (const asset of assets) {
-    buckets[mediaBucket(asset.mimeType, asset.filename)].push(asset)
-  }
-
-  return buckets
-}
-
-function searchableText(...parts: Array<string | undefined>) {
-  return parts.filter(Boolean).join(' ').toLowerCase()
-}
-
-function matchesSearch(query: string, ...parts: Array<string | undefined>) {
-  const normalized = query.trim().toLowerCase()
-  if (!normalized) return true
-  return searchableText(...parts).includes(normalized)
-}
-
-function filterCmsMediaBuckets(
-  buckets: Record<MediaBucket, CmsMediaAsset[]>,
-  filter: MediaFilter,
-  query: string,
-) {
-  const next: Record<MediaBucket, CmsMediaAsset[]> = {
-    images: [],
-    videos: [],
-    other: [],
-  }
-
-  for (const bucket of Object.keys(next) as MediaBucket[]) {
-    if (filter !== 'all' && filter !== bucket) continue
-    next[bucket] = buckets[bucket].filter((asset) => matchesSearch(query, asset.filename, asset.publicPath, asset.mimeType))
-  }
-
-  return next
-}
-
-function targetBucket(target: CmsMediaAsset) {
-  return mediaBucket(target.mimeType, target.filename)
 }
 
 export function MediaExplorerPanel({
@@ -468,7 +350,7 @@ export function MediaExplorerPanel({
         />
 
         {shouldShowBucket('images') && (
-          <ExplorerSection
+          <MediaExplorerSection
             title="Images"
             bucket="images"
             viewMode={viewMode}
@@ -477,7 +359,7 @@ export function MediaExplorerPanel({
             emptyLabel={emptyLabel}
             uploadAction={renderUploadAction()}
           >
-            <CmsMediaRows
+            <MediaExplorerItemList
               assets={visibleCmsBuckets.images}
               bucket="images"
               viewMode={viewMode}
@@ -485,11 +367,11 @@ export function MediaExplorerPanel({
               onContextMenu={openContextMenu}
               onKeyDown={openKeyboardContextMenu}
             />
-          </ExplorerSection>
+          </MediaExplorerSection>
         )}
 
         {shouldShowBucket('videos') && (
-          <ExplorerSection
+          <MediaExplorerSection
             title="Videos"
             bucket="videos"
             viewMode={viewMode}
@@ -498,7 +380,7 @@ export function MediaExplorerPanel({
             emptyLabel={emptyLabel}
             uploadAction={renderUploadAction()}
           >
-            <CmsMediaRows
+            <MediaExplorerItemList
               assets={visibleCmsBuckets.videos}
               bucket="videos"
               viewMode={viewMode}
@@ -506,11 +388,11 @@ export function MediaExplorerPanel({
               onContextMenu={openContextMenu}
               onKeyDown={openKeyboardContextMenu}
             />
-          </ExplorerSection>
+          </MediaExplorerSection>
         )}
 
         {shouldShowBucket('other') && (
-          <ExplorerSection
+          <MediaExplorerSection
             title="Other"
             bucket="other"
             viewMode={viewMode}
@@ -519,7 +401,7 @@ export function MediaExplorerPanel({
             emptyLabel={emptyLabel}
             uploadAction={renderUploadAction()}
           >
-            <CmsMediaRows
+            <MediaExplorerItemList
               assets={visibleCmsBuckets.other}
               bucket="other"
               viewMode={viewMode}
@@ -527,7 +409,7 @@ export function MediaExplorerPanel({
               onContextMenu={openContextMenu}
               onKeyDown={openKeyboardContextMenu}
             />
-          </ExplorerSection>
+          </MediaExplorerSection>
         )}
       </Panel>
 
@@ -563,263 +445,4 @@ export function MediaExplorerPanel({
       />
     </>
   )
-}
-
-interface ExplorerSectionProps {
-  title: string
-  bucket: MediaBucket
-  viewMode: MediaViewMode
-  count: number
-  /**
-   * `true` while the initial fetch is in flight. Renders skeleton
-   * rows/tiles matching the loaded layout 1:1 (preview + label + meta)
-   * so the swap is silent. We suppress the section's "0" count and the
-   * "None yet" empty state while loading — the shimmer carries the
-   * loading signal visually.
-   */
-  loading?: boolean
-  uploadAction: ReactNode
-  emptyLabel?: string
-  children: ReactNode
-}
-
-// Per-section skeleton placeholder counts. The section is narrow (one
-// column for rows, two columns for grid), so 3–4 placeholders read as
-// "a small list is loading" without flooding the panel.
-const SKELETON_ROW_COUNT = 3
-const SKELETON_TILE_COUNT = 4
-
-function ExplorerSection({
-  title,
-  bucket,
-  viewMode,
-  count,
-  loading = false,
-  uploadAction,
-  emptyLabel = 'None yet',
-  children,
-}: ExplorerSectionProps) {
-  return (
-    <section className={styles.section} aria-labelledby={`media-section-${title.toLowerCase()}`}>
-      <div className={styles.sectionHeader}>
-        <h2 id={`media-section-${title.toLowerCase()}`} className={styles.sectionTitle}>
-          {title}
-        </h2>
-        {/* Hide the "0" count during the initial load — the shimmer carries
-            the loading signal; doubling it with a "0" count would imply
-            "this bucket is empty" before we actually know. */}
-        {!loading && <span className={styles.sectionCount}>{count}</span>}
-        {uploadAction}
-      </div>
-      <div
-        className={viewMode === 'grid' ? styles.mediaGrid : styles.rows}
-        data-testid={viewMode === 'grid' ? `media-grid-${bucket}` : undefined}
-        data-media-view={viewMode}
-        aria-busy={loading || undefined}
-      >
-        {loading ? (
-          viewMode === 'grid' ? (
-            // Grid skeleton — mirrors `.mediaTile` (preview block + body
-            // with label + meta) so the populated tile swaps in cleanly.
-            Array.from({ length: SKELETON_TILE_COUNT }, (_, i) => (
-              <div
-                key={`skeleton-tile-${i}`}
-                className={styles.mediaTile}
-                aria-hidden="true"
-              >
-                <span className={styles.mediaTilePreview}>
-                  <Skeleton width="100%" height="100%" />
-                </span>
-                <span className={styles.mediaTileBody}>
-                  <span className={styles.mediaTileLabel}>
-                    <Skeleton width={`${60 + (i % 3) * 12}%`} height={11} />
-                  </span>
-                  <span className={styles.mediaTileMeta}>
-                    <Skeleton width={56} height={9} />
-                  </span>
-                </span>
-              </div>
-            ))
-          ) : (
-            // List skeleton — mirrors `.mediaRow` (28x28 preview + label
-            // + meta) so the loaded row footprint is preserved.
-            Array.from({ length: SKELETON_ROW_COUNT }, (_, i) => (
-              <div
-                key={`skeleton-row-${i}`}
-                className={cn(styles.row, styles.mediaRow)}
-                aria-hidden="true"
-              >
-                <span className={styles.mediaRowPreview}>
-                  <Skeleton width="100%" height="100%" />
-                </span>
-                <span className={styles.rowLabel}>
-                  <Skeleton width={`${50 + (i % 3) * 16}%`} height={11} />
-                </span>
-                <span className={styles.rowMeta}>
-                  <Skeleton width={48} height={10} />
-                </span>
-              </div>
-            ))
-          )
-        ) : count === 0 ? (
-          <EmptyState
-            compact
-            title={emptyLabel}
-            className={styles.sectionEmpty}
-          />
-        ) : children}
-      </div>
-    </section>
-  )
-}
-
-// Shared shape for ExplorerRow (list view) and ExplorerTile (grid view) —
-// they accept the same props and only differ in how they render the preview.
-// `previewAsset` is the full `CmsMediaAsset` so the `<Image>` primitive can
-// build `srcset` from `asset.variants` and let the browser pick the
-// smallest-variant-that-fits — the 28×28 list thumb hits the tiny w64
-// variant instead of the multi-MB original.
-interface MediaExplorerItemProps {
-  icon: IconComponent
-  label: string
-  meta?: string
-  ariaLabel: string
-  previewKind: MediaBucket
-  previewAsset?: CmsMediaAsset
-  onClick: () => void
-  onContextMenu?: (event: MouseEvent<HTMLButtonElement>) => void
-  onKeyDown?: (event: KeyboardEvent<HTMLButtonElement>) => void
-}
-
-function ExplorerRow({
-  icon,
-  label,
-  meta,
-  ariaLabel,
-  previewKind,
-  previewAsset,
-  onClick,
-  onContextMenu,
-  onKeyDown,
-}: MediaExplorerItemProps) {
-  const RowIcon = icon
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className={cn(styles.row, styles.mediaRow)}
-      aria-label={ariaLabel}
-      onClick={onClick}
-      onContextMenu={onContextMenu}
-      onKeyDown={onKeyDown}
-    >
-      <span className={styles.mediaRowPreview} aria-hidden="true">
-        {previewKind === 'images' && previewAsset ? (
-          // 28-px preview slot — tell the browser the rendered size so it
-          // picks the smallest variant from the srcset ladder instead of
-          // downloading the full-size original.
-          <Image
-            asset={previewAsset}
-            alt=""
-            sizes="28px"
-            className={styles.mediaRowImage}
-          />
-        ) : previewKind === 'videos' && previewAsset ? (
-          <video className={styles.mediaRowVideo} src={previewAsset.publicPath} muted preload="metadata" />
-        ) : (
-          <RowIcon size={13} />
-        )}
-      </span>
-      <span className={styles.rowLabel}>{label}</span>
-      {meta && <span className={styles.rowMeta}>{meta}</span>}
-    </Button>
-  )
-}
-
-function ExplorerTile({
-  icon,
-  label,
-  meta,
-  ariaLabel,
-  previewKind,
-  previewAsset,
-  onClick,
-  onContextMenu,
-  onKeyDown,
-}: MediaExplorerItemProps) {
-  const TileIcon = icon
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className={styles.mediaTile}
-      aria-label={ariaLabel}
-      onClick={onClick}
-      onContextMenu={onContextMenu}
-      onKeyDown={onKeyDown}
-    >
-      <span className={styles.mediaTilePreview} aria-hidden="true">
-        {previewKind === 'images' && previewAsset ? (
-          // Grid tile preview — the panel is narrow (two-up grid in a
-          // ~280-px panel), so a 160-px sizes hint keeps the browser on
-          // the w320 variant on 1× screens and w640 on 2× displays.
-          <Image
-            asset={previewAsset}
-            alt=""
-            sizes="160px"
-            className={styles.mediaTileImage}
-          />
-        ) : previewKind === 'videos' && previewAsset ? (
-          <video className={styles.mediaTileVideo} src={previewAsset.publicPath} muted preload="metadata" />
-        ) : (
-          <TileIcon size={22} />
-        )}
-      </span>
-      <span className={styles.mediaTileBody}>
-        <span className={styles.mediaTileLabel}>{label}</span>
-        {meta && <span className={styles.mediaTileMeta}>{meta}</span>}
-      </span>
-    </Button>
-  )
-}
-
-function CmsMediaRows({
-  assets,
-  bucket,
-  viewMode,
-  onOpen,
-  onContextMenu,
-  onKeyDown,
-}: {
-  assets: CmsMediaAsset[]
-  bucket: MediaBucket
-  viewMode: MediaViewMode
-  onOpen: (asset: CmsMediaAsset) => void
-  onContextMenu: (asset: CmsMediaAsset, event: MouseEvent<HTMLButtonElement>) => void
-  onKeyDown: (asset: CmsMediaAsset, event: KeyboardEvent<HTMLButtonElement>) => void
-}) {
-  // The two view modes pass identical props to either ExplorerTile (grid) or
-  // ExplorerRow (list). Build the props once per asset and pick the renderer
-  // based on viewMode rather than duplicating the entire JSX block.
-  const Renderer = viewMode === 'grid' ? ExplorerTile : ExplorerRow
-  return assets.map((asset) => (
-    <Renderer
-      key={asset.id}
-      icon={
-        asset.mimeType.startsWith('video/')
-          ? VideoSolidIcon
-          : mediaBucket(asset.mimeType, asset.filename) === 'images'
-            ? Image2SolidIcon
-            : FolderGlyphIcon
-      }
-      label={asset.filename}
-      meta={asset.publicPath}
-      ariaLabel={`Open media ${asset.filename}`}
-      previewKind={bucket}
-      previewAsset={asset}
-      onClick={() => onOpen(asset)}
-      onContextMenu={(event) => onContextMenu(asset, event)}
-      onKeyDown={(event) => onKeyDown(asset, event)}
-    />
-  ))
 }
