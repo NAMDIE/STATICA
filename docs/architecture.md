@@ -15,7 +15,7 @@ Instatic is a self-hosted CMS with a built-in visual editor. One Bun process ser
 - **Plugins run sandboxed**: server entrypoints and canvas module packs execute inside a QuickJS-WASM VM with no host access. They reach the CMS through the SDK at `src/core/plugin-sdk/`.
 - **One public-route surface, three publishing layers**: every visitor request for HTML — stand-alone pages and content rows alike — flows through `server/publish/publicRouter.ts:renderPublicResolution`. **Layer A** bakes fully-static pages to `uploads/published/current/<route>.html` at publish time via a two-slot symlink swap (atomic). **Layer B** is an in-memory LRU keyed by `(urlPath, queryString)` for dynamic routes — per-entry version tracking; bumps evict lazily on every publish, and version is captured at render start so mid-flight publishes discard results rather than caching stale HTML. **Layer C** auto-detects dynamic nodes (modules flagged `dynamic: true`, request-dependent bindings or loop sources, VC refs containing dynamic content) and emits `<instatic-hole>` placeholders that lazy-fetch their content via `/_instatic/hole/<nodeId>` using a ~668 B `IntersectionObserver` runtime. Authors don't toggle — `findDynamicNodeIds` in `src/core/publisher/dynamicDetection.ts` classifies automatically. The `PublishedPageSnapshot` (JSON) on `data_row_versions.snapshot_json` remains the canonical audit record. Output is plain semantic HTML + a single hashed CSS bundle per page, no framework runtime on the page.
 - **Multi-instance HA on Postgres**: both schedulers (plugin tick + scheduled publish) use `pg_try_advisory_lock` for leader election, so running multiple containers behind a load balancer doesn't double-fire scheduled work. SQLite is single-instance by definition.
-- **Every untyped boundary uses TypeBox.** HTTP responses, request bodies, persisted JSON, plugin manifests, settings. `zod` is banned outside `server/handlers/agent/tools.ts`.
+- **Every untyped boundary uses TypeBox.** HTTP responses, request bodies, persisted JSON, plugin manifests, settings. `zod` is banned outside `server/ai/drivers/` (the TypeBox→Zod adapter for the Anthropic SDK).
 
 ---
 
@@ -74,7 +74,7 @@ src/__tests__/architecture/   Gate tests that enforce structural rules
 docs/           This documentation tree
 examples/       Plugin templates, type declarations
 vendor/         Vendored pixel-art-icons package
-scripts/        Build, dev, icon sync, benchmark scripts
+scripts/        Build, dev, icon sync, benchmark, audit report scripts
 ```
 
 ---
