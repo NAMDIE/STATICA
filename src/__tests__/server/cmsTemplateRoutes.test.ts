@@ -158,11 +158,12 @@ describe('CMS dynamic template routes', () => {
     }
   })
 
-  it('falls through to the live renderer for a template route with a query string', async () => {
+  it('falls through to the live renderer for a template route with a render-affecting (loop pagination) query', async () => {
     const uploadsDir = await mkdtemp(join(tmpdir(), 'template-qs-test-'))
 
     try {
-      // Bake an artefact — but the request has a query string so it must be bypassed
+      // Bake an artefact — but the loop-pagination query affects the render so
+      // it must be bypassed (junk queries instead serve the artefact — ISS-032)
       const { slot, slotDir } = await prepareInactiveSlot(uploadsDir)
       await writeArtefact(slotDir, '/posts/dynamic-post', '<html>baked</html>')
       await swapSlot(uploadsDir, slot)
@@ -240,7 +241,7 @@ describe('CMS dynamic template routes', () => {
       ])
 
       const res = await handleServerRequest(
-        new Request('http://localhost/posts/dynamic-post?page=2'),
+        new Request('http://localhost/posts/dynamic-post?loop_x_page=2'),
         { db, uploadsDir },
       )
 

@@ -47,10 +47,13 @@ describe('static-artefact-served-before-render', () => {
     expect(source).toMatch(/import\s*\{[^}]*readArtefact[^}]*\}\s*from\s*['"]\.\/staticArtefact['"]/)
   })
 
-  it('the disk fast-path is gated on url.search being empty', async () => {
+  it('the disk fast-path is gated on the canonical (render-affecting) query being empty', async () => {
     const source = await read('server/publish/publicRouter.ts')
-    // The guard must check url.search === ''
-    expect(source).toContain("url.search === ''")
+    // The guard gates on the canonicalised query — junk params canonicalise to
+    // '' and serve the artefact; only render-affecting (loop pagination) params
+    // fall through to the live renderer (ISS-032).
+    expect(source).toContain('canonicalRenderQuery(url.searchParams)')
+    expect(source).toContain("canonicalQuery === ''")
   })
 
   it('the disk path does not call applyPublishedHtmlPipeline at request time', async () => {

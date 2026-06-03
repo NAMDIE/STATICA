@@ -121,15 +121,16 @@ describe('server router — Layer A disk artefact fast-path', () => {
     expect(snapshotQueried).toBe(false)
   })
 
-  it('falls through to the resolver when the URL has a query string', async () => {
+  it('falls through to the resolver when the URL has a render-affecting (loop pagination) query', async () => {
     // Bake an artefact for /about
     const { slot, slotDir } = await prepareInactiveSlot(uploadsDir)
     await writeArtefact(slotDir, '/about', '<html><body>Baked about</body></html>')
     await swapSlot(uploadsDir, slot)
 
-    // Request with query string — the disk path must be skipped
+    // A loop-pagination query affects rendering, so the disk path is skipped
+    // (junk queries instead serve the baked artefact — ISS-032).
     const res = await handleServerRequest(
-      new Request('http://localhost/about?variant=dark'),
+      new Request('http://localhost/about?loop_x_page=2'),
       { db: makeFakeDb({ site: 1, owners: 1 }), uploadsDir },
     )
 

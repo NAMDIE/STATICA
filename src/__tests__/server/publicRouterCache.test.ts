@@ -210,14 +210,27 @@ describe('Layer B render cache integration', () => {
     expect(getStats().misses).toBe(2)
   })
 
-  it('same path with different query strings are distinct entries', async () => {
+  it('same path with different render-affecting (loop pagination) queries are distinct entries', async () => {
     const snap = makeSnapshot()
     const db = makeFakeDb(snap)
 
-    await renderPublicResolution(db, new URL('http://localhost/test?page=1'))
-    await renderPublicResolution(db, new URL('http://localhost/test?page=2'))
+    // Only loop-pagination params survive query canonicalisation, so they are
+    // the only thing that produces distinct cache keys (ISS-032). Junk params
+    // would instead collapse onto one key.
+    await renderPublicResolution(db, new URL('http://localhost/test?loop_x_page=1'))
+    await renderPublicResolution(db, new URL('http://localhost/test?loop_x_page=2'))
     expect(getStats().size).toBe(2)
     expect(getStats().misses).toBe(2)
+  })
+
+  it('different junk query strings collapse onto a single cache entry', async () => {
+    const snap = makeSnapshot()
+    const db = makeFakeDb(snap)
+
+    await renderPublicResolution(db, new URL('http://localhost/test?utm=a'))
+    await renderPublicResolution(db, new URL('http://localhost/test?utm=b'))
+    expect(getStats().size).toBe(1)
+    expect(getStats().misses).toBe(1)
   })
 
   it('redirect resolutions are NOT cached', async () => {

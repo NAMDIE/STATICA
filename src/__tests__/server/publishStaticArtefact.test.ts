@@ -565,14 +565,15 @@ describe('publicRouter — Layer A disk fast-path', () => {
     expect(dbQueried).toBe(false)
   })
 
-  it('falls through to the live renderer when URL has a query string', async () => {
+  it('falls through to the live renderer when URL has a render-affecting (loop pagination) query', async () => {
     // Pre-bake an artefact for /about
     const { prepareInactiveSlot, writeArtefact, swapSlot } = await import('../../../server/publish/staticArtefact')
     const { slot, slotDir } = await prepareInactiveSlot(uploadsDir)
     await writeArtefact(slotDir, '/about', '<html><body><h1>Baked about page</h1></body></html>')
     await swapSlot(uploadsDir, slot)
 
-    // Request with query string — must bypass the disk path
+    // A loop-pagination query affects the render, so it must bypass the disk
+    // path (junk queries instead serve the baked artefact — ISS-032)
     const db = createFakeDb(async (sql: string): Promise<DbResult> => {
       const s = sql.toLowerCase()
       if (s.includes('count(*) as count from site')) {
@@ -585,7 +586,7 @@ describe('publicRouter — Layer A disk fast-path', () => {
     })
 
     const res = await handleServerRequest(
-      new Request('http://localhost/about?page=2'),
+      new Request('http://localhost/about?loop_x_page=2'),
       { db, uploadsDir },
     )
 
