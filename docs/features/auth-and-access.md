@@ -283,8 +283,8 @@ findMatchingRecoveryCodeHash(code, hashes) → matchingHash | null
 ### Enrollment flow
 
 1. User visits `/admin/account` → "Enable MFA".
-2. Server: `generateTotpSecret()`, stores it temporarily, returns provisioning URI as a QR code.
-3. User scans QR with their authenticator, enters first 6-digit code.
+2. Server: `generateTotpSecret()`, stores it temporarily, returns `{ secret, otpauthUrl }`. Client renders the provisioning URI as a QR code (SVG) in the browser.
+3. User scans the QR code or enters the manual setup key in their authenticator, then enters the first 6-digit code.
 4. Server: `verifyTotpCode` → on success, persist secret on user row, mark `mfa_enabled = true`, generate 10 recovery codes.
 5. Server returns the recovery codes once (shown to the user, never returned again).
 
