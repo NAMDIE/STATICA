@@ -17,7 +17,7 @@ The published output has **no framework runtime**, **no client-side hydration of
 - Every node's props pass through `escapeProps` before `render()` (Constraint #211).
 - Server-side wrappers (`server/publish/publicRouter.ts` → `publicRenderer.ts` → `publishedHtmlPipeline.ts`) call `publishPage`, run plugin filters, and return the HTML in the visitor response.
 - Output is routed through a three-layer publishing pipeline: **Layer A** bakes fully-static pages to `uploads/published/current/<route>.html` at publish time (atomic two-slot symlink swap). **Layer B** memoises dynamic pages in an in-memory LRU keyed by `(urlPath, canonicalQuery)` with per-entry version tracking; `canonicalQuery` is the output of `canonicalRenderQuery()` (in `loopPrefetch.ts`), which keeps only `loop_<nodeId>_page` pagination params — arbitrary junk params collapse to `''` so they never mint new cache slots; `bumpPublishVersion()` evicts lazily and version capture at render start discards results from mid-flight publishes. **Layer C** emits `<instatic-hole>` placeholders for nodes auto-classified as request-dependent; a ~668 B `IntersectionObserver` runtime lazy-loads each fragment via `/_instatic/hole/<nodeId>`.
-- Auto-classification lives in `src/core/publisher/dynamicDetection.ts:findDynamicNodesWithReasons` — one walker, four rules, used by `isFullyStaticPage` (Layer A) and `renderNode`'s placeholder emission (Layer C). Authors don't toggle anything.
+- Auto-classification lives in `src/core/publisher/dynamicDetection.ts:findDynamicNodesWithReasons` — one walker, four detection rules plus a loop body promotion step (Rule 3.5), used by `isFullyStaticPage` (Layer A) and `renderNode`'s placeholder emission (Layer C). Authors don't toggle anything.
 
 ---
 
@@ -152,6 +152,25 @@ When the walker hits a `base.loop` node, it calls `renderLoop`:
 4. Concatenates the rendered variant HTML and returns it.
 
 See [docs/features/loops.md](loops.md) for sources, filters, and registration.
+
+---
+
+## Dynamic node detection
+
+`findDynamicNodesWithReasons` (`src/core/publisher/dynamicDetection.ts`) classifies every node in a page tree as static or dynamic in a single walk. The result set drives both Layer A's `isFullyStaticPage` and Layer C's `<instatic-hole>` placeholder emission. The rules:
+
+| Rule | Condition | Result |
+|------|-----------|--------|
+| 1    | Module flagged `dynamic: true` in the registry | Node is a hole |
+| 2    | Node has a `dynamicBindings` entry whose source is request-dependent (`route.query.*`) | Node is a hole |
+| 2b   | A string prop contains a `{source.field}` token whose source is request-dependent | Node is a hole |
+| 3    | `moduleId === 'base.loop'` AND the loop source declares `requestDependent: true` or `perVisitor: true` | Loop is a hole |
+| 3.5  | `moduleId === 'base.loop'` AND the loop source is static, but its body (transitively, including nested loops and referenced VC trees) contains any request-dependent node | Loop is promoted to a single hole; all body descendants are suppressed |
+| 4    | `moduleId === 'base.visual-component-ref'` whose VC definition tree contains any dynamic node | The outer VC ref node is a hole; inner VC node ids are never promoted |
+
+**Rule 3.5** prevents a broken publish artifact: if a static loop rendered its body's dynamic child as a per-node hole, the loop would emit N `<instatic-hole id="X">` elements with the same id — one per iteration — all resolving to the same context-less fragment. By promoting the loop itself to a single hole, the renderer emits one placeholder and the hole endpoint re-runs the entire loop at request time with full per-item context.
+
+VC ref subtlety (Rule 4): when a VC definition tree is dynamic, the *outer* `base.visual-component-ref` node id in the page tree goes into `dynamicPageNodeIds` — not the inner VC node ids. The hole boundary is the ref, not any inner node.
 
 ---
 
@@ -441,6 +460,7 @@ This is rare and requires architectural review — most "new behavior" fits with
   - `src/core/publisher/renderNode.ts` — the walker
   - `src/core/publisher/renderContext.ts` — `RenderContext`
   - `src/core/publisher/renderVisualComponentRef.ts` — VC inlining + context threading
+  - `src/core/publisher/dynamicDetection.ts` — `findDynamicNodesWithReasons` (all detection rules)
   - `src/core/publisher/cssCollector.ts` — `CssCollector` + sanitization
   - `src/core/publisher/escapeProps.ts` — Constraint #211 enforcement
   - `server/publish/publishedHtmlPipeline.ts` — plugin filter point
@@ -450,3 +470,4 @@ This is rare and requires architectural review — most "new behavior" fits with
   - `src/__tests__/architecture/dispatcher-html-pipeline.test.ts`
   - `src/__tests__/architecture/publish-html-filter-context.test.ts`
   - `src/__tests__/architecture/media-presentation-pipeline.test.ts`
+  - `src/__tests__/server/dynamicDetectionLoop.test.ts` — Rule 3.5 static loop body promotion
