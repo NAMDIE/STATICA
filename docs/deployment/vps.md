@@ -169,6 +169,24 @@ docker compose -f compose.prod.yml -f compose.sqlite.yml pull app
 docker compose -f compose.prod.yml -f compose.sqlite.yml up -d
 ```
 
+## Without Docker (Direct Bun Install)
+
+The CMS runs directly on the host without Docker. From a source checkout:
+
+```sh
+bun install
+bun run build
+DATABASE_URL=sqlite:./data/cms.db \
+  STATIC_DIR=./dist \
+  UPLOADS_DIR=./uploads \
+  PORT=3001 \
+  bun run server/index.ts
+```
+
+Replace `DATABASE_URL` with a Postgres connection string for Postgres mode. `STATIC_DIR` must point at the built admin SPA (`dist/` after `bun run build`).
+
+Wrap the command in a process supervisor (systemd, pm2, supervisord) for auto-restart on crash and on server boot. Put an HTTPS-capable reverse proxy (Caddy, Nginx, Cloudflare Tunnel) in front for TLS.
+
 ## Data Safety
 
 `docker compose down` stops containers and keeps named volumes.
