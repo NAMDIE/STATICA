@@ -460,11 +460,7 @@ export function MediaCanvas({ workspace }: MediaCanvasProps) {
                 >
                   <span className={styles.tile}>
                     <span className={styles.tilePreview}>
-                      <Skeleton
-                        width="100%"
-                        height="100%"
-                        style={{ display: 'block' }}
-                      />
+                      <Skeleton width="100%" height="100%" />
                     </span>
                     <span className={styles.tileBody}>
                       <span className={styles.tileLabel}>

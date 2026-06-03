@@ -90,7 +90,6 @@
     "quickjs-emscripten": "^0.32.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "react-loading-skeleton": "^3.5.0",
     "semver": "^7.7.4",
     "sharp": "^0.34.5",
     "zod": "^4.4.2",

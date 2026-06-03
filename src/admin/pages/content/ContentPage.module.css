@@ -94,8 +94,7 @@
 
 /* Bespoke skeleton shapes were retired in favour of `<SkeletonBlock>`
  * (see `src/ui/components/Skeleton/`). The content document canvas's
- * loading state now renders the universal three-bar skeleton through
- * the shared `react-loading-skeleton` theme. */
+ * loading state now renders the universal local three-bar skeleton. */
 
 .error {
     color: var(--editor-danger);

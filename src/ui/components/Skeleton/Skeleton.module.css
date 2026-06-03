@@ -1,9 +1,7 @@
-/* Skeleton primitives — layout only.
+/* Skeleton primitives.
  *
- * The shimmer paint, animation, and colour theming are owned by the
- * `react-loading-skeleton` package via the `<SkeletonTheme>` in
- * `src/admin/main.tsx`. This file only adds layout for the THREE
- * editor-specific shapes:
+ * Local spans own the shimmer paint, animation, dimensions, and layout
+ * for the THREE editor-specific shapes:
  *
  *   • `.skeletonBlock`  — single three-bar block
  *   • `.skeletonCards`  — vertical stack of skeleton cards
@@ -13,12 +11,41 @@
  * real `--editor-surface-2` cards on Plugins / Users / Posts pages.
  */
 
+/* --- low-level shimmer bar --- */
+.skeleton {
+    --skeleton-width: 100%;
+    --skeleton-height: 1em;
+    --skeleton-radius: var(--editor-radius-sm);
+
+    display: inline-block;
+    width: var(--skeleton-width);
+    max-width: 100%;
+    height: var(--skeleton-height);
+    min-width: 0;
+    overflow: hidden;
+    vertical-align: middle;
+    user-select: none;
+    border-radius: var(--skeleton-radius);
+    background-color: var(--editor-surface-3);
+    background-image: linear-gradient(
+        90deg,
+        var(--editor-surface-3) 0%,
+        var(--editor-surface-4) 50%,
+        var(--editor-surface-3) 100%
+    );
+    background-size: 200% 100%;
+    animation: instaticSkeletonShimmer 1.4s ease-in-out infinite;
+}
+
 /* --- SkeletonBlock --- */
 .skeletonBlock {
+    --skeleton-block-min-height: 0;
+
     display: flex;
     flex-direction: column;
     gap: 10px;
     width: 100%;
+    min-height: var(--skeleton-block-min-height);
 }
 
 /* --- SkeletonCards --- */
@@ -36,10 +63,6 @@
 }
 
 /* --- SkeletonRows --- */
-/* The package renders each row as a span with `display: inline-block`.
- * `display: flex` + `flex-direction: column` on the wrapper isn't
- * enough on its own because the package emits the rows inside its
- * own container span. We add row gap via the inner spans below. */
 .skeletonRows {
     display: flex;
     flex-direction: column;
@@ -47,25 +70,20 @@
     width: 100%;
 }
 
-.skeletonRows :global(span.react-loading-skeleton) {
-    display: block;
-    margin-bottom: 6px;
-}
-
-.skeletonRows :global(span.react-loading-skeleton:last-child) {
-    margin-bottom: 0;
-}
-
 /* --- SkeletonText --- */
 .textGroup {
     display: flex;
     flex-direction: column;
+    gap: 6px;
     width: 100%;
 }
 
-/* --- accessibility helper --- */
-.statusContainer {
-    /* Container span the package wraps around each Skeleton. We use it
-     * as the `role="status"` host when the caller passes an aria label. */
-    display: inline-block;
+@keyframes instaticSkeletonShimmer {
+    0% {
+        background-position: 200% 0;
+    }
+
+    100% {
+        background-position: -200% 0;
+    }
 }

@@ -1,9 +1,8 @@
 /**
  * Skeleton primitives — the editor's loading-state vocabulary.
  *
- * Built on top of `react-loading-skeleton` (https://boneyard.vercel.app)
- * — that package owns the shimmer animation, theming, and base CSS;
- * this file just publishes the small set of named shapes the editor
+ * Local CSS owns the shimmer animation, dimensions, and surface-token
+ * colours; this file publishes the small set of named shapes the editor
  * uses so every loading region in the app reads identically.
  *
  *   • `<SkeletonBlock>` — a SINGLE three-bar shape (title / sub / fill).
@@ -32,16 +31,48 @@
  * shapes above whenever possible — they keep the editor visually
  * consistent.
  *
- * Theme: `<SkeletonTheme>` lives in `src/admin/main.tsx`, wrapping the
- * whole React tree with editor surface tokens (`--editor-surface-3` /
- * `--editor-surface-4`). The native CSS animation runs at the package's
- * default 1.5 s cadence — close enough to our previous shimmer that
- * every existing visual reads the same.
+ * The shimmer uses `--editor-surface-3` / `--editor-surface-4` directly
+ * and runs at the previous 1.4 s cadence.
  */
 import type { CSSProperties, ReactNode } from 'react'
-import LibSkeleton from 'react-loading-skeleton'
 import { cn } from '@ui/cn'
 import styles from './Skeleton.module.css'
+
+type SkeletonCssProperties = CSSProperties & {
+  '--skeleton-width'?: string
+  '--skeleton-height'?: string
+  '--skeleton-radius'?: string
+}
+
+type SkeletonBlockCssProperties = CSSProperties & {
+  '--skeleton-block-min-height': string
+}
+
+function toCssLength(value: string | number | undefined): string | undefined {
+  if (value === undefined) return undefined
+  return typeof value === 'number' ? `${value}px` : value
+}
+
+function skeletonStyle({
+  width,
+  height,
+  radius,
+}: {
+  width?: string | number
+  height?: string | number
+  radius?: string | number
+}): SkeletonCssProperties | undefined {
+  const style: SkeletonCssProperties = {}
+  const cssWidth = toCssLength(width)
+  const cssHeight = toCssLength(height)
+  const cssRadius = toCssLength(radius)
+
+  if (cssWidth) style['--skeleton-width'] = cssWidth
+  if (cssHeight) style['--skeleton-height'] = cssHeight
+  if (cssRadius) style['--skeleton-radius'] = cssRadius
+
+  return Object.keys(style).length > 0 ? style : undefined
+}
 
 // ---------------------------------------------------------------------------
 // SkeletonBlock — single three-bar shape, for one card-sized region.
@@ -73,17 +104,17 @@ export interface SkeletonBlockProps {
  * card-sized regions; use `<SkeletonCards>` for stacked lists or
  * `<SkeletonRows>` for thin row lists.
  *
- * Each bar is one `react-loading-skeleton` rectangle — the package
- * handles the shimmer animation + colours via the editor's
- * `SkeletonTheme` set in `main.tsx`.
+ * Each bar is one local `<span>` with the shared shimmer paint.
  */
 export function SkeletonBlock({
   minHeight,
   className,
   ariaLabel,
 }: SkeletonBlockProps) {
-  const style: CSSProperties | undefined =
-    minHeight !== undefined ? { minHeight: `${minHeight}px` } : undefined
+  const style: SkeletonBlockCssProperties | undefined =
+    minHeight !== undefined
+      ? { '--skeleton-block-min-height': `${minHeight}px` }
+      : undefined
   return (
     <div
       className={cn(styles.skeletonBlock, className)}
@@ -91,9 +122,9 @@ export function SkeletonBlock({
       aria-label={ariaLabel}
       role={ariaLabel ? 'status' : undefined}
     >
-      <LibSkeleton width="42%" height={22} />
-      <LibSkeleton width="64%" height={12} />
-      <LibSkeleton height={36} />
+      <Skeleton width="42%" height={22} />
+      <Skeleton width="64%" height={12} />
+      <Skeleton height={36} />
     </div>
   )
 }
@@ -128,14 +159,19 @@ export function SkeletonCards({
   className,
   ariaLabel,
 }: SkeletonCardsProps) {
+  const cardIds = Array.from(
+    { length: Math.max(1, count) },
+    (_, index) => `skeleton-card-${index}`,
+  )
+
   return (
     <div
       className={cn(styles.skeletonCards, className)}
       aria-label={ariaLabel}
       role={ariaLabel ? 'status' : undefined}
     >
-      {Array.from({ length: Math.max(1, count) }, (_, i) => (
-        <div key={i} className={styles.skeletonCard}>
+      {cardIds.map((cardId) => (
+        <div key={cardId} className={styles.skeletonCard}>
           <SkeletonBlock />
         </div>
       ))}
@@ -164,8 +200,7 @@ export interface SkeletonRowsProps {
 /**
  * Stacked thin shimmer rows — for list-style sidebars (Data tables
  * list, Content collections list), table rows, and any other
- * "list of compact items" surface. The package's `count` prop renders
- * N stacked rectangles for us; we add a gap via CSS for visual rhythm.
+ * "list of compact items" surface.
  */
 export function SkeletonRows({
   count = 6,
@@ -173,13 +208,20 @@ export function SkeletonRows({
   className,
   ariaLabel,
 }: SkeletonRowsProps) {
+  const rowIds = Array.from(
+    { length: Math.max(1, count) },
+    (_, index) => `skeleton-row-${index}`,
+  )
+
   return (
     <div
       className={cn(styles.skeletonRows, className)}
       aria-label={ariaLabel}
       role={ariaLabel ? 'status' : undefined}
     >
-      <LibSkeleton count={Math.max(1, count)} height={rowHeight} />
+      {rowIds.map((rowId) => (
+        <Skeleton key={rowId} height={rowHeight} />
+      ))}
     </div>
   )
 }
@@ -194,17 +236,12 @@ export interface SkeletonProps {
   /** Height — any CSS length. Defaults to `'1em'` (matches surrounding text). */
   height?: string | number
   /**
-   * Border radius. Defaults to the package's theme default. Pass
+   * Border radius. Defaults to `--editor-radius-sm`. Pass
    * `'50%'` for a circular slot (or use `SkeletonCircle`).
    */
   radius?: string | number
   /** Optional className escape hatch (layout positioning, margin, etc.). */
   className?: string
-  /**
-   * Inline style escape hatch. Use sparingly — prefer the width / height /
-   * radius props.
-   */
-  style?: CSSProperties
   /**
    * `aria-label` for screen readers. Defaults to nothing — skeletons
    * carry no semantic content; the surrounding wrapper should announce
@@ -218,26 +255,15 @@ export function Skeleton({
   height,
   radius,
   className,
-  style,
   ariaLabel,
 }: SkeletonProps): ReactNode {
   return (
-    <LibSkeleton
-      width={width}
-      height={height}
-      borderRadius={radius}
-      className={className}
-      style={style}
-      containerClassName={ariaLabel ? styles.statusContainer : undefined}
-      // `react-loading-skeleton` doesn't accept `aria-label` directly,
-      // so we attach it via a wrapping span when present. The package
-      // wraps each Skeleton in a span by default; the `aria-label` is
-      // forwarded via `containerTestId` workaround pattern (the
-      // package's `containerProps` is undocumented but `aria-label`
-      // on the container would be ideal — falling back to a parent
-      // wrapper if needed for status announcements). For now, leave
-      // accessibility to the surrounding wrapper.
+    <span
+      className={cn(styles.skeleton, className)}
+      style={skeletonStyle({ width, height, radius })}
+      role={ariaLabel ? 'status' : undefined}
       aria-label={ariaLabel}
+      aria-hidden={ariaLabel ? undefined : true}
     />
   )
 }
@@ -253,17 +279,28 @@ export interface SkeletonTextProps {
 
 /**
  * Stacked text skeleton — N lines, last line narrower so the group
- * reads as a paragraph. Maps to `react-loading-skeleton`'s `count`
- * prop, which renders one rectangle per line automatically.
+ * reads as a paragraph.
  */
 export function SkeletonText({
   lines = 3,
   className,
   lineHeight = '0.9em',
 }: SkeletonTextProps): ReactNode {
+  const safeLines = Math.max(1, lines)
+  const lineIds = Array.from(
+    { length: safeLines },
+    (_, index) => `skeleton-line-${index}`,
+  )
+
   return (
     <div className={cn(styles.textGroup, className)}>
-      <LibSkeleton count={Math.max(1, lines)} height={lineHeight} />
+      {lineIds.map((lineId, index) => (
+        <Skeleton
+          key={lineId}
+          width={safeLines > 1 && index === safeLines - 1 ? '72%' : undefined}
+          height={lineHeight}
+        />
+      ))}
     </div>
   )
 }
@@ -281,6 +318,6 @@ export interface SkeletonCircleProps {
  */
 export function SkeletonCircle({ size, className }: SkeletonCircleProps): ReactNode {
   return (
-    <LibSkeleton circle width={size} height={size} className={className} />
+    <Skeleton width={size} height={size} radius="50%" className={className} />
   )
 }

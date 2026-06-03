@@ -161,24 +161,14 @@
     color: var(--editor-text-muted);
 }
 
-/* `react-loading-skeleton` wraps every Skeleton in an outer
- * `<span aria-live="polite">` (a11y wrapper, no class) — that wrapper
- * collapses to zero width inside the fixed 28×28 preview slot and
- * renders the skeleton invisibly. Forcing the direct-child span to
- * fill restores the shimmer. The selector only matches the skeleton
- * case because loaded rows render an `<img>` / `<video>` directly
- * inside `.mediaRowPreview`. Same fix used in MediaCanvas.module.css. */
+/* Skeleton previews render a direct child span. Loaded rows render an
+ * `<img>` / `<video>` directly inside `.mediaRowPreview`, so this only
+ * matches during loading. Same fix used in MediaCanvas.module.css. */
 .mediaRowPreview > span {
     display: block;
     width: 100%;
     height: 100%;
     line-height: 0;
-}
-
-.mediaRowPreview :global(span.react-loading-skeleton) {
-    display: block;
-    width: 100%;
-    height: 100%;
 }
 
 .mediaRowImage,
@@ -227,12 +217,6 @@
     width: 100%;
     height: 100%;
     line-height: 0;
-}
-
-.mediaTilePreview :global(span.react-loading-skeleton) {
-    display: block;
-    width: 100%;
-    height: 100%;
 }
 
 .mediaTileImage,
