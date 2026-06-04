@@ -1,241 +1,115 @@
-import { describe, expect, it } from 'bun:test'
-import {
-  inspectPageClass,
-  inspectPageNode,
-  listSiteTokens,
-  searchPageNodes,
-} from '../../../server/ai/tools/site/snapshotHelpers'
-import type { SiteSnapshot } from '../../../server/ai/tools/site'
+import { describe, expect, it, beforeAll } from 'bun:test'
+import type { SiteAgentSnapshot } from '@site/agent/siteAgentSnapshot'
+import type { AiTool, ToolContext } from '../../../server/ai/runtime/types'
+import { makePage, makeSite } from '../publisher/helpers'
 
-function makeContext(): SiteSnapshot {
-  return {
-    pageId: 'page-home',
-    pageTitle: 'Home',
-    rootNodeId: 'root',
-    pages: [
-      { id: 'page-home', title: 'Home', slug: 'index', active: true, isHomepage: true },
-      { id: 'page-about', title: 'About', slug: 'about', active: false, isHomepage: false },
-    ],
-    selectedNodeId: null,
-    selectedNodeIds: [],
-    activeBreakpointId: 'mobile',
-    breakpoints: [
-      { id: 'mobile', label: 'Mobile', width: 375, icon: 'smartphone' },
-      { id: 'desktop', label: 'Desktop', width: 1440, icon: 'monitor' },
-    ],
-    nodes: [
-      {
-        id: 'root',
-        moduleId: 'base.container',
-        parentId: null,
-        children: ['title'],
-        props: { tag: 'main' },
-        breakpointOverrides: {},
-        classIds: ['cls-hero'],
-      },
-      {
-        id: 'title',
-        moduleId: 'base.text',
-        parentId: 'root',
-        children: [],
-        props: { tag: 'h1', text: 'Design tools' },
-        breakpointOverrides: {
-          mobile: { text: 'Design tools for mobile' },
-        },
-        classIds: ['cls-title'],
-      },
-    ],
-    availableModules: [
-      {
-        id: 'base.text',
-        name: 'Text',
-        category: 'Typography',
-        canHaveChildren: false,
-        defaults: { tag: 'p', text: 'Text' },
-        props: [{ key: 'text', type: 'text', label: 'Text' }],
-        styles: [{ key: 'fontSize', type: 'text', label: 'Font size', cssProperties: ['fontSize'] }],
-      },
-    ],
-    classes: [
-      {
-        id: 'cls-hero',
-        name: 'hero-dark',
-        styles: { backgroundColor: '#111827', color: '#ffffff' },
-      },
-      {
-        id: 'cls-title',
-        name: 'hero-title',
-        styles: { fontSize: '56px', lineHeight: '1.05' },
-        breakpointStyles: {
-          mobile: { fontSize: '36px' },
-        },
-      },
-    ],
-    tokens: {
-      colors: [
-        {
-          slug: 'primary',
-          category: 'Brand',
-          cssVar: '--primary',
-          ref: 'var(--primary)',
-          value: 'hsla(238, 100%, 62%, 1)',
-          utilityClasses: ['text-primary', 'bg-primary'],
-          variants: [],
-        },
-      ],
-      typography: [
-        {
-          id: 'type-group',
-          family: 'typography',
-          name: 'Typography',
-          namingConvention: 'text',
-          steps: [
-            {
-              step: 'm',
-              cssVar: '--text-m',
-              ref: 'var(--text-m)',
-              value: 'clamp(1rem, 1vw, 1.125rem)',
-              utilityClasses: ['text-m'],
-            },
-          ],
-        },
-      ],
-      spacing: [],
-      fonts: [
-        {
-          name: 'Primary',
-          cssVar: '--font-primary',
-          ref: 'var(--font-primary)',
-          family: 'Inter',
-          stack: '"Inter", sans-serif',
-        },
-      ],
-    },
-  }
+let siteReadTools: AiTool[]
+
+beforeAll(async () => {
+  await import('../../../src/modules/base') // register base modules in this process
+  ;({ siteReadTools } = await import('../../../server/ai/tools/site/readTools'))
+})
+
+function snapshot(): SiteAgentSnapshot {
+  const page = makePage({
+    root: { moduleId: 'base.body', children: ['title'] },
+    title: { moduleId: 'base.text', props: { text: 'Design tools', tag: 'h1' } },
+  })
+  const about = makePage(
+    { aboutRoot: { moduleId: 'base.body', children: [] } },
+    'aboutRoot',
+  )
+  about.id = 'page-about'
+  about.slug = 'about'
+  about.title = 'About'
+  page.id = 'page-home'
+  page.slug = 'index'
+  page.title = 'Home'
+  const site = makeSite({ pages: [page, about] })
+  return { page, site, selectedNodeId: null, activeBreakpointId: site.breakpoints[0].id }
 }
 
-describe('instatic agent tools', () => {
-  it('builds a dynamic module, class, and page snapshot for MCP discovery tools', () => {
-    const snapshot = makeContext()
+function callTool(name: string, input: Record<string, unknown> = {}): Promise<unknown> {
+  const tool = siteReadTools.find((t) => t.name === name)
+  if (!tool?.handler) throw new Error(`tool not found or has no handler: ${name}`)
+  const ctx = { snapshot: snapshot() } as unknown as ToolContext
+  return tool.handler(input, ctx)
+}
 
-    expect(snapshot.availableModules).toHaveLength(1)
-    expect(snapshot.availableModules[0].id).toBe('base.text')
-    expect(snapshot.availableModules[0].styles[0].cssProperties).toEqual(['fontSize'])
-
-    expect(snapshot.classes).toHaveLength(2)
-    expect(snapshot.classes[0]).toEqual({
-      id: 'cls-hero',
-      name: 'hero-dark',
-      styles: { backgroundColor: '#111827', color: '#ffffff' },
-    })
-
-    expect(snapshot.activeBreakpointId).toBe('mobile')
-    expect(snapshot.breakpoints).toEqual([
-      { id: 'mobile', label: 'Mobile', width: 375, icon: 'smartphone' },
-      { id: 'desktop', label: 'Desktop', width: 1440, icon: 'monitor' },
+describe('site read tools', () => {
+  it('exposes exactly read_page + the four catalog tools', () => {
+    expect(siteReadTools.map((t) => t.name).sort()).toEqual([
+      'list_breakpoints',
+      'list_modules',
+      'list_pages',
+      'list_tokens',
+      'read_page',
     ])
-    expect(snapshot.nodes.map((node) => node.id)).toEqual(['root', 'title'])
   })
 
-  it('lists all design tokens, and narrows to one family on request', () => {
-    const snapshot = makeContext()
+  it('read_page returns annotated HTML + a <style> css bundle', async () => {
+    const result = (await callTool('read_page')) as { html: string; css: string }
+    expect(result.html).toContain('uid="title"')
+    expect(result.html).toContain('Design tools')
+  })
 
-    const all = listSiteTokens(snapshot)
-    expect(all.colors[0].cssVar).toBe('--primary')
-    expect(all.colors[0].utilityClasses).toContain('text-primary')
-    expect(all.typography[0].steps[0].cssVar).toBe('--text-m')
-    expect(all.fonts[0].ref).toBe('var(--font-primary)')
+  it('list_modules returns base.text and excludes base.body', async () => {
+    const { modules } = (await callTool('list_modules')) as {
+      modules: Array<{ id: string; category: string }>
+    }
+    const ids = modules.map((m) => m.id)
+    expect(ids).toContain('base.text')
+    expect(ids).not.toContain('base.body')
+  })
 
-    const onlyColors = listSiteTokens(snapshot, { family: 'colors' })
-    expect(onlyColors.colors).toHaveLength(1)
+  it('list_modules filters by category (case-insensitive)', async () => {
+    const { modules } = (await callTool('list_modules')) as {
+      modules: Array<{ id: string; category: string }>
+    }
+    const sampleCategory = modules[0].category
+    const { modules: filtered } = (await callTool('list_modules', {
+      category: sampleCategory.toUpperCase(),
+    })) as { modules: Array<{ category: string }> }
+    expect(filtered.length).toBeGreaterThan(0)
+    expect(filtered.every((m) => m.category.toLowerCase() === sampleCategory.toLowerCase())).toBe(
+      true,
+    )
+  })
+
+  it('list_tokens returns the four families and narrows on request', async () => {
+    const { tokens } = (await callTool('list_tokens')) as {
+      tokens: Record<string, unknown[]>
+    }
+    expect(tokens).toHaveProperty('colors')
+    expect(tokens).toHaveProperty('typography')
+    expect(tokens).toHaveProperty('spacing')
+    expect(tokens).toHaveProperty('fonts')
+
+    const { tokens: onlyColors } = (await callTool('list_tokens', { family: 'colors' })) as {
+      tokens: { colors: unknown[]; typography: unknown[]; fonts: unknown[] }
+    }
     expect(onlyColors.typography).toEqual([])
     expect(onlyColors.fonts).toEqual([])
   })
 
-  it('searches existing nodes by text, module, and assigned class name', () => {
-    const snapshot = makeContext()
-
-    const byText = searchPageNodes(snapshot, { query: 'design tools' })
-    expect(byText.nodes.map((node) => node.id)).toEqual(['title'])
-
-    const byModuleAndClass = searchPageNodes(snapshot, {
-      moduleId: 'base.text',
-      className: 'hero-title',
-    })
-    expect(byModuleAndClass.nodes.map((node) => node.id)).toEqual(['title'])
+  it('list_pages maps pages with active + isHomepage flags', async () => {
+    const { pages } = (await callTool('list_pages')) as {
+      pages: Array<{ id: string; slug: string; active: boolean; isHomepage: boolean }>
+    }
+    const home = pages.find((p) => p.id === 'page-home')!
+    const about = pages.find((p) => p.id === 'page-about')!
+    expect(home.isHomepage).toBe(true) // slug "index"
+    expect(home.active).toBe(true) // the posted active page
+    expect(about.isHomepage).toBe(false)
+    expect(about.active).toBe(false)
   })
 
-  it('inspects one node with resolved props and resolved breakpoint class styles', () => {
-    const snapshot = makeContext()
-
-    const inspected = inspectPageNode(snapshot, {
-      nodeId: 'title',
-      breakpointId: 'mobile',
-    })
-
-    // Module props are content (single value across all breakpoints), so
-    // even though the fixture seeded a `mobile.text` override, the resolved
-    // props at any breakpoint return the BASE text. Stale override data on
-    // a non-`breakpointOverridable` prop is ignored at read time, mirroring
-    // the canvas/publisher.
-    expect(inspected.node?.resolvedProps).toEqual({
-      tag: 'h1',
-      text: 'Design tools',
-    })
-    expect(inspected.node?.resolvedClassStyles).toEqual({
-      fontSize: '36px',
-      lineHeight: '1.05',
-    })
-    expect(inspected.node?.classes[0].breakpointStyles).toEqual({ fontSize: '36px' })
+  it('list_breakpoints returns the site breakpoints + the active id', async () => {
+    const result = (await callTool('list_breakpoints')) as {
+      activeBreakpointId: string
+      breakpoints: Array<{ id: string }>
+    }
+    expect(result.breakpoints.length).toBeGreaterThan(0)
+    expect(result.breakpoints.map((b) => b.id)).toContain(result.activeBreakpointId)
   })
-
-  it('returns the descendant subtree from inspect_node so the agent gets the full structure in one call', () => {
-    const snapshot = makeContext()
-
-    const inspected = inspectPageNode(snapshot, { nodeId: 'root' })
-
-    // The focal node has full detail (resolvedProps, classes).
-    expect(inspected.node?.id).toBe('root')
-
-    // Plus its descendants as a tree of light-info objects.
-    const descendants = inspected.node?.descendants ?? []
-    expect(descendants).toHaveLength(1)
-    expect(descendants[0]).toMatchObject({
-      id: 'title',
-      moduleId: 'base.text',
-      classNames: ['hero-title'],
-      childCount: 0,
-      // Picks up `text` prop as the preview.
-      textPreview: 'Design tools',
-    })
-    expect(descendants[0].children).toEqual([])
-  })
-
-  it('respects maxDepth on inspect_node (0 = focal node only, no descendants)', () => {
-    const snapshot = makeContext()
-
-    const inspected = inspectPageNode(snapshot, { nodeId: 'root', maxDepth: 0 })
-
-    expect(inspected.node?.id).toBe('root')
-    expect(inspected.node?.descendants).toEqual([])
-  })
-
-  it('inspects one class with resolved breakpoint styles and assigned nodes', () => {
-    const snapshot = makeContext()
-
-    const inspected = inspectPageClass(snapshot, {
-      classId: 'cls-title',
-      breakpointId: 'mobile',
-    })
-
-    expect(inspected.class?.resolvedStyles).toEqual({
-      fontSize: '36px',
-      lineHeight: '1.05',
-    })
-    expect(inspected.class?.assignedNodes.map((node) => node.id)).toEqual(['title'])
-  })
-
-  // render_snapshot is now an on-demand browser-bridge tool — captured lazily
-  // when Claude calls it, not pre-loaded into PageContext. The browser-side
-  // capture is exercised by agentSlice's toolRequest path.
 })

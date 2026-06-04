@@ -1,40 +1,15 @@
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
+import { describe, it, expect, beforeEach } from 'bun:test'
 import { useEditorStore } from '@site/store/store'
-import { buildPageContext, buildPageSnapshot } from '@site/agent'
-import { registry } from '@core/module-engine'
-import type { AnyModuleDefinition } from '@core/module-engine'
-import { SquareSolidIcon } from 'pixel-art-icons/icons/square-solid'
+import { buildCurrentPageContext } from '@site/agent'
 import '@modules/base'
 
-const DYNAMIC_MODULE_ID = 'custom.dynamicHero'
-
-const dynamicModule: AnyModuleDefinition = {
-  id: DYNAMIC_MODULE_ID,
-  name: 'Dynamic Hero',
-  description: 'Runtime registered hero module',
-  category: 'Marketing',
-  version: '1.0.0',
-  icon: SquareSolidIcon,
-  trusted: true,
-  canHaveChildren: true,
-  schema: {
-    eyebrow: { type: 'text', label: 'Eyebrow' },
-    tone: {
-      type: 'select',
-      label: 'Tone',
-      options: [
-        { label: 'Calm', value: 'calm' },
-        { label: 'Bold', value: 'bold' },
-      ],
-    },
-  },
-  defaults: {
-    eyebrow: 'Featured',
-    tone: 'bold',
-  },
-  component: () => null,
-  render: () => ({ html: '' }),
-}
+/**
+ * The site-editor agent adapter now posts the RAW authoritative tree
+ * (active page + site) as a `SiteAgentSnapshot`. The server derives modules,
+ * tokens, classes, and the rendered HTML from it on demand — those derivations
+ * are covered by readPage.test.ts / agentTools.test.ts. Here we only assert the
+ * browser adapter reads the live store correctly.
+ */
 
 function freshSite() {
   useEditorStore.setState({
@@ -54,177 +29,49 @@ function freshSite() {
 }
 
 beforeEach(() => {
-  registry.registerOrReplace(dynamicModule)
-})
-
-afterEach(() => {
-  registry.unregister(DYNAMIC_MODULE_ID)
-  // One of these tests calls setActiveBreakpoint('mobile'); reset to the
-  // default so the next test file doesn't inherit a non-desktop breakpoint
-  // (PropertiesPanel routes prop writes to breakpointOverrides at non-desktop).
   useEditorStore.setState({ activeBreakpointId: 'desktop' })
 })
 
-describe('buildPageContext — dynamic module registry', () => {
-  it('includes runtime-registered modules with defaults and schema metadata', () => {
+describe('buildCurrentPageContext', () => {
+  const get = () => useEditorStore.getState()
+
+  it('emits the active page (full nodes) plus the editor scalars', () => {
     const page = freshSite()
-    const context = buildPageContext(useEditorStore.getState(), page)
-
-    const moduleContext = context.availableModules.find((mod) => mod.id === DYNAMIC_MODULE_ID)
-    expect(moduleContext).toBeDefined()
-    expect(moduleContext?.name).toBe('Dynamic Hero')
-    expect(moduleContext?.canHaveChildren).toBe(true)
-    expect(moduleContext?.defaults).toEqual({ eyebrow: 'Featured', tone: 'bold' })
-    expect(moduleContext?.props.some((prop) => prop.key === 'eyebrow' && prop.type === 'text')).toBe(true)
-    expect(moduleContext?.props.some((prop) =>
-      prop.key === 'tone' &&
-      prop.options?.some((option) => option.label === 'Bold' && option.value === 'bold'),
-    )).toBe(true)
-    // No classStyleBindings system — styles array is empty for non-typography modules
-    expect(moduleContext?.styles).toEqual([])
-  })
-
-  it('adds typography style hints for text modules', () => {
-    const page = freshSite()
-    const context = buildPageContext(useEditorStore.getState(), page)
-
-    const textContext = context.availableModules.find((mod) => mod.id === 'base.text')
-    expect(textContext).toBeDefined()
-    expect(textContext?.styles.some((style) =>
-      style.key === 'fontSize' &&
-      style.cssProperties.includes('fontSize'),
-    )).toBe(true)
-    expect(textContext?.styles.some((style) =>
-      style.key === 'color' &&
-      style.cssProperties.includes('color'),
-    )).toBe(true)
-  })
-
-  it('includes existing class styles so the agent can inspect what reusable styles actually do', () => {
-    const page = freshSite()
-    const created = useEditorStore.getState().createClass('hero-dark', {
-      backgroundColor: '#111827',
-      color: '#ffffff',
-      paddingTop: '80px',
-    })
-
-    const context = buildPageContext(useEditorStore.getState(), page)
-    const classContext = context.classes.find((cls) => cls.id === created.id)
-
-    expect(classContext).toBeDefined()
-    expect(classContext?.name).toBe('hero-dark')
-    expect(classContext?.styles).toEqual({
-      backgroundColor: '#111827',
-      color: '#ffffff',
-      paddingTop: '80px',
-    })
-  })
-
-  it('includes configured breakpoints and the active breakpoint', () => {
-    const page = freshSite()
-    useEditorStore.getState().setActiveBreakpoint('mobile')
-
-    const context = buildPageContext(useEditorStore.getState(), page)
-
-    expect(context.activeBreakpointId).toBe('mobile')
-    expect(context.breakpoints.map((breakpoint) => breakpoint.id)).toEqual(['mobile', 'tablet', 'desktop'])
-    expect(context.breakpoints.find((breakpoint) => breakpoint.id === 'mobile')).toEqual({
-      id: 'mobile',
-      label: 'Mobile',
-      width: 375,
-      mediaQuery: '(max-width: 375px)',
-      icon: 'smartphone',
-    })
-  })
-
-  it('surfaces framework design tokens with their CSS vars and utility classes', () => {
-    const page = freshSite()
-    useEditorStore.getState().createFrameworkColorToken({
-      slug: 'brand',
-      lightValue: 'hsla(200, 80%, 50%, 1)',
-    })
-
-    const context = buildPageContext(useEditorStore.getState(), page)
-    const brand = context.tokens.colors.find((token) => token.slug === 'brand')
-
-    expect(brand).toBeDefined()
-    expect(brand?.cssVar).toBe('--brand')
-    expect(brand?.ref).toBe('var(--brand)')
-    expect(brand?.utilityClasses).toContain('text-brand')
-    // No fonts configured on a fresh site.
-    expect(context.tokens.fonts).toEqual([])
-  })
-
-  it('flags framework-generated classes with their token family, leaving user classes unflagged', () => {
-    const page = freshSite()
-    useEditorStore.getState().createFrameworkColorToken({
-      slug: 'brand',
-      lightValue: 'hsla(200, 80%, 50%, 1)',
-    })
-    const userClass = useEditorStore.getState().createClass('hero-dark', { color: '#fff' })
-
-    const context = buildPageContext(useEditorStore.getState(), page)
-
-    const generatedClass = context.classes.find((cls) => cls.name === 'text-brand')
-    expect(generatedClass?.generated).toBe('color')
-
-    const plainClass = context.classes.find((cls) => cls.id === userClass.id)
-    expect(plainClass?.generated).toBeUndefined()
-  })
-
-  it('includes the full page list with active + isHomepage flags', () => {
-    const page = freshSite()
-    // Add a second page so the list isn't trivial.
-    useEditorStore.getState().addPage('About', 'about')
-    // Re-activate the original home page so we can assert `active`.
-    useEditorStore.setState({ activePageId: page.id })
-
-    const context = buildPageContext(useEditorStore.getState(), page)
-
-    expect(context.pageId).toBe(page.id)
-    expect(context.pages).toHaveLength(2)
-    const home = context.pages.find((p) => p.id === page.id)
-    const about = context.pages.find((p) => p.title === 'About')
-    expect(home).toBeDefined()
-    expect(home?.active).toBe(true)
-    expect(home?.isHomepage).toBe(true) // freshSite's home gets slug 'index'
-    expect(about?.active).toBe(false)
-    expect(about?.isHomepage).toBe(false)
-  })
-})
-
-describe('buildPageContext — delegates to pure buildPageSnapshot (no drift)', () => {
-  it('produces byte-identical output to buildPageSnapshot called with the store scalars', () => {
-    const page = freshSite()
-    // Make the snapshot non-trivial: a class, a token, a second page, a non-default breakpoint.
-    useEditorStore.getState().createClass('hero-dark', { color: '#fff', paddingTop: '40px' })
-    useEditorStore.getState().createFrameworkColorToken({
-      slug: 'brand',
-      lightValue: 'hsla(200, 80%, 50%, 1)',
-    })
-    useEditorStore.getState().addPage('About', 'about')
     useEditorStore.setState({ activePageId: page.id, selectedNodeId: page.rootNodeId })
     useEditorStore.getState().setActiveBreakpoint('mobile')
 
-    const state = useEditorStore.getState()
-    const viaAdapter = buildPageContext(state, page)
-    const viaPure = buildPageSnapshot(page, state.site!, registry, {
-      selectedNodeId: state.selectedNodeId,
-      activeBreakpointId: state.activeBreakpointId,
-    })
-
-    // The adapter is exactly the pure builder fed the two editor-only scalars.
-    expect(JSON.stringify(viaAdapter)).toBe(JSON.stringify(viaPure))
-    expect(viaAdapter.selectedNodeId).toBe(page.rootNodeId)
-    expect(viaAdapter.activeBreakpointId).toBe('mobile')
+    const snap = buildCurrentPageContext(get)
+    expect(snap).toBeDefined()
+    expect(snap!.page.id).toBe(page.id)
+    expect(snap!.page.nodes[page.rootNodeId]).toBeDefined()
+    expect(snap!.selectedNodeId).toBe(page.rootNodeId)
+    expect(snap!.activeBreakpointId).toBe('mobile')
   })
 
-  it('returns the empty snapshot when there is no active page', () => {
+  it('carries the site shell (breakpoints, styleRules, settings) for server derivation', () => {
     freshSite()
-    const context = buildPageContext(useEditorStore.getState(), undefined)
-    expect(context.pageId).toBe('')
-    expect(context.nodes).toEqual([])
-    expect(context.classes).toEqual([])
-    expect(context.tokens).toEqual({ colors: [], typography: [], spacing: [], fonts: [] })
+    const snap = buildCurrentPageContext(get)
+    expect(snap).toBeDefined()
+    expect(snap!.site.breakpoints.map((b) => b.id)).toEqual(['mobile', 'tablet', 'desktop'])
+    expect(snap!.site.styleRules).toBeDefined()
+    expect(snap!.site.settings).toBeDefined()
+  })
+
+  it('empties non-active pages\' nodes to bound the payload', () => {
+    const page = freshSite()
+    useEditorStore.getState().addPage('About', 'about')
+    useEditorStore.setState({ activePageId: page.id })
+
+    const snap = buildCurrentPageContext(get)
+    expect(snap).toBeDefined()
+    const active = snap!.site.pages.find((p) => p.id === page.id)!
+    const other = snap!.site.pages.find((p) => p.id !== page.id)!
+    expect(Object.keys(active.nodes).length).toBeGreaterThan(0)
+    expect(Object.keys(other.nodes)).toEqual([])
+  })
+
+  it('returns undefined when there is no active site', () => {
+    useEditorStore.setState({ site: null })
+    expect(buildCurrentPageContext(get)).toBeUndefined()
   })
 })
