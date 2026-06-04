@@ -8,17 +8,18 @@ A plan to take the current single-provider, single-surface Claude Agent SDK inte
 
 - **Phases 1, 2, 3, 6 shipped** — runtime + drivers + credential/conversation stores; settings UI at `/admin/ai`; site editor rewired onto the new transport with model + conversation pickers + no-credential banner; cost meter + audit (price table at `server/ai/pricing.ts`, `ai.*` audit events, Audit tab with totals + by-user/by-surface/daily rollups, dashboard "AI usage" widget).
 - **Phase 4 — content workspace shipped.** AgentPanel docked in `ContentSidebar` (mirrors site editor's pattern, rail button + docked panel slot). 15 content tools (7 read + 8 write) covering collections, documents, fields, media, users. Bridge handle dispatches to live workspace state via refs. Body field exchanged as markdown via the existing `@core/markdown/markdownDocument.ts` converter. **Data workspace and Plugin SDK not yet built.**
+- **All four drivers migrated to direct HTTP.** OpenAI and OpenRouter now use `responses-shared.ts` (direct `POST /v1/responses`); Ollama uses direct `POST /v1/chat/completions`. All three share `runToolLoop` from `drivers/http/`. `typeboxToZod.ts` deleted — TypeBox schemas pass directly as JSON Schema to every provider. No provider SDKs remain; `@openai/agents`, `@openrouter/agent`, and `zod` are all banned repo-wide with no allowed callers. Gated by `ai-driver-isolation.test.ts`.
 - **Phase 5 (Plugin SDK `ai.invoke`)** is the only remaining phase.
 
 ## TL;DR
 
 - One canonical **AI runtime** (`server/ai/`) replaces the bespoke `server/handlers/agent/*` stack.
-- Four **provider drivers** behind an `AiProvider` interface: `anthropic`, `openai`, `openrouter`, `ollama`. Auth modes: `apiKey` (Anthropic, OpenAI, OpenRouter) and `baseUrl` (Ollama).
-  - Anthropic: direct `POST https://api.anthropic.com/v1/messages` (no SDK). The shared `server/ai/drivers/http/` layer owns SSE parsing and the multi-turn tool loop; `anthropicStream.ts` was deleted. Prompt caching applied via `cache_control` on the static system prefix.
-  - OpenAI: `@openai/agents`. Driver constructs a per-call `OpenAIProvider({ apiKey })` and wires it via `Runner({ modelProvider })`.
-  - OpenRouter: `@openrouter/agent`. Driver constructs a per-call `OpenRouter({ apiKey })`. Fetches a live model catalog from OpenRouter's `/api/v1/models` (400+ models). Reports native USD cost per call — no static price-table entry needed.
-  - Ollama: no SDK, plain `fetch` against any OpenAI-compatible local endpoint. `baseUrl` mode (+ optional bearer key).
-- One **tool registry** (`server/ai/tools/`) defined with TypeBox; drivers translate to their SDK's native shape (Anthropic + OpenRouter get a thin Zod wrapper via `typeboxToZod.ts`; OpenAI + Ollama get JSON Schema).
+- Four **provider drivers** behind an `AiProvider` interface: `anthropic`, `openai`, `openrouter`, `ollama`. Auth modes: `apiKey` (Anthropic, OpenAI, OpenRouter) and `baseUrl` (Ollama). All drivers talk directly to their provider's REST API — no SDKs.
+  - Anthropic: direct `POST https://api.anthropic.com/v1/messages`. Shared `server/ai/drivers/http/` layer owns SSE parsing and the multi-turn tool loop. Prompt caching applied via `cache_control` on the static system prefix.
+  - OpenAI: direct `POST https://api.openai.com/v1/responses` (Responses API). Mapping + SSE translation shared with OpenRouter via `responses-shared.ts`.
+  - OpenRouter: direct `POST https://openrouter.ai/api/v1/responses` (Responses API). Shared mapping via `responses-shared.ts`. Live model catalog from `/api/v1/models` (400+ models). Reports native USD cost per call — no static price-table entry needed.
+  - Ollama: direct `POST ${baseUrl}/v1/chat/completions` (chat/completions protocol). `baseUrl` mode (+ optional bearer key).
+- One **tool registry** (`server/ai/tools/`) defined with TypeBox. TypeBox schemas are passed directly as JSON Schema to each provider — no Zod bridge. `typeboxToZod.ts` deleted.
 - **Encrypted credential store** (`ai_provider_credentials` table) — AES-256-GCM via Bun's `crypto.subtle`, master key from env var `INSTATIC_SECRET_KEY`. Multiple rows per provider allowed (different keys for different purposes). Plaintext never crosses the wire.
 - **Persistent conversations**: tables `ai_conversations` + `ai_messages`, scoped per user + per surface. Soft-delete with a nightly job that hard-purges rows older than 30 days. Conversations survive reload and device-switching.
 - **Four AI surfaces** with scoped toolsets and **independent message histories**: Site editor (24 tools, live), Content workspace (15 tools, live), Data workspace (Phase 4 follow-up), Plugin SDK (Phase 5).
@@ -34,7 +35,7 @@ A plan to take the current single-provider, single-surface Claude Agent SDK inte
 
 Three concerns drove the design:
 
-1. **Provider-agnostic transport.** The runtime owns the agent loop, NDJSON wire, and bridge bookkeeping. Drivers know one SDK each and translate between the canonical event/tool types and their SDK's native shapes.
+1. **Provider-agnostic transport.** The runtime owns the agent loop, NDJSON wire, and bridge bookkeeping. Drivers talk directly to each provider's REST API and supply a small `ProviderAdapter` of pure mapping functions; the shared `http/` layer owns SSE parsing, the multi-turn tool loop, abort handling, and usage aggregation.
 2. **BYO-key, never ambient.** Every credential carries an explicit API key. OpenAI never offered a programmatic ambient auth path for tool-calling; Anthropic offered one but is phasing it out. The simpler "every credential carries a key" model is consistent across providers and avoids the operational drift of dev-host CLI logins.
 3. **Cross-surface ready.** Tools are defined once and selected per scope (`site`, `content`, `data`, `plugin`). New surfaces register a tool subset + system prompt + browser bridge; the runtime and credential layer are reused.
 
@@ -77,15 +78,12 @@ server/ai/
 │
 ├── drivers/
 │   ├── index.ts            Driver registry + `resolveDriver(providerId)`.
-│   ├── anthropic.ts        Uses @anthropic-ai/claude-agent-sdk (the only
-│   │                       Anthropic SDK in the repo). Driver passes the
-│   │                       user's key into the SDK's `Options.env` per call.
-│   ├── anthropicStream.ts  SDK message → AiStreamEvent translation.
-│   ├── openai.ts           Uses @openai/agents. Driver constructs a per-call
-│   │                       OpenAIProvider({ apiKey }) wired via Runner.
-│   ├── ollama.ts           Plain fetch against an OpenAI-compatible endpoint.
-│   │                       authMode = 'baseUrl' (+ optional bearer key).
-│   ├── typeboxToZod.ts     Thin adapter required by Claude Agent SDK's tool().
+│   ├── responses-shared.ts OpenAI-Responses mapping + SSE translator + adapter factory
+│   │                       shared between openai.ts and openrouter.ts.
+│   ├── anthropic.ts        Direct POST /v1/messages; AnthropicTurnTranslator for SSE.
+│   ├── openai.ts           Direct POST /v1/responses via createResponsesAdapter.
+│   ├── openrouter.ts       Direct POST /v1/responses; live /models; native cost.
+│   ├── ollama.ts           Direct POST ${baseUrl}/v1/chat/completions; ChatCompletionsTurnTranslator.
 │   └── types.ts            AiProvider, AiAuthMode, AiProviderModel, AiResolvedCredential.
 │
 ├── tools/
@@ -151,14 +149,14 @@ The Site editor's `agentSlice.ts` and `agentConfig.ts` disappear. Their state co
 | Layer                                | Knows about           | Does NOT know about        |
 |--------------------------------------|------------------------|----------------------------|
 | `server/ai/runtime/`                 | AiMessage, AiStreamEvent, tool dispatch | which provider, which tools |
-| `server/ai/drivers/<provider>.ts`    | one provider's SDK, model list, tool translation | site editor, page tree, audit |
+| `server/ai/drivers/<provider>.ts`    | one provider's REST API, message mapping, SSE translation, model list | site editor, page tree, audit |
 | `server/ai/tools/<scope>/`           | one workspace's domain (page tree / posts / data tables) | which model called them |
 | `server/ai/credentials/`             | encryption, DB, audit | provider semantics |
 | `server/ai/handlers/`                | HTTP, auth, capability gating | driver internals (calls runtime) |
 | `src/admin/ai/`                      | NDJSON stream events, transport | DB, credentials, driver SDKs |
 | `src/admin/pages/<workspace>/`       | how to compose AiAssistantDrawer with workspace-specific tools | transport details |
 
-The split is: **runtime is generic; drivers know one SDK; tools know one domain; handlers know HTTP**. No layer crosses two domains.
+The split is: **runtime is generic; drivers know one provider's REST API; tools know one domain; handlers know HTTP**. No layer crosses two domains.
 
 ---
 
@@ -459,7 +457,7 @@ Out of scope for the first cut: rotation requires re-entry of every key (the UI 
 
 ## Drivers
 
-Each driver is a single file under `server/ai/drivers/<id>.ts`. Drivers are the **only** place provider SDKs are imported. The `ai-driver-isolation.test.ts` gate enforces this.
+Each driver is a single file under `server/ai/drivers/<id>.ts`. No provider SDKs are imported anywhere — all drivers talk directly to their provider's REST API. The `ai-driver-isolation.test.ts` gate enforces the ban on all provider SDKs and `zod` repo-wide.
 
 ### `anthropic.ts`
 
@@ -474,21 +472,21 @@ Each driver is a single file under `server/ai/drivers/<id>.ts`. Drivers are the 
 ### `openai.ts`
 
 - Supported auth modes: `apiKey`.
-- SDK: `@openai/agents` (high-level Agents SDK).
-- Auth: driver constructs a per-call `OpenAIProvider({ apiKey })` and wires it via a per-call `Runner({ modelProvider })`.
-- Tool format: the Agents SDK accepts JSON Schema via `parameters` with `strict: false`. Driver converts each `AiTool.inputSchema` (TypeBox) to JSON Schema by stripping symbol metadata via `JSON.parse(JSON.stringify(schema))` and forcing `additionalProperties: true`. No Zod required.
-- Tool calling: Agents SDK runs the tool loop internally. The driver wraps each `AiTool` with a handler that either resolves server-side (read tools) or yields a `toolRequest` and awaits the browser bridge (write tools).
-- Vision: image content blocks supported.
+- No SDK. Direct `POST https://api.openai.com/v1/responses` (Responses API).
+- Message mapping and SSE translation shared with `openrouter.ts` via `responses-shared.ts` (`createResponsesAdapter`, `ResponsesTurnTranslator`, `mapResponsesHistory`).
+- Tool format: TypeBox `inputSchema` passed straight through as JSON Schema `parameters`. `strict` omitted (optional-bearing schemas violate strict mode).
+- Full conversation history replayed every turn as `input[]` — no server-side session.
+- Vision: `input_image` data-URL blocks supported via `responses-shared.ts` mapping.
+- Cost: OpenAI does not report per-call USD cost; the persister prices from `pricing.ts`.
 
-### `openrouter.ts` ✅ added
+### `openrouter.ts` ✅ fully migrated to direct HTTP
 
 - Supported auth modes: `apiKey`.
-- SDK: `@openrouter/agent`.
-- Auth: driver constructs a per-call `new OpenRouter({ apiKey })` — host process env is never mutated; concurrent chats with different keys don't race.
-- Tool format: SDK's `tool()` requires Zod; driver reuses `typeboxObjectToZodRawShape` from `typeboxToZod.ts`. One of two legitimate Zod uses in the repo.
-- Model catalog: `listModels()` fetches the live `/api/v1/models` catalog from OpenRouter (400+ models). Per-model `supported_parameters` + `architecture.input_modalities` map to our capability flags. Auth header is sent so per-key BYOK-only models appear when a credential is provided.
-- Cost: OpenRouter reports native USD cost on `usage.cost`. The driver emits it as `usage.costUsd` — the persister honours it directly via `usage.costUsd ?? calculateCostUsd(...)`, so OpenRouter models never need an entry in the static price table.
-- Cross-turn history: only the latest user message is sent as the `input` string (same limitation as the OpenAI driver). Full history replay is a follow-up.
+- No SDK. Direct `POST https://openrouter.ai/api/v1/responses` (Responses API).
+- Message mapping and SSE translation shared with `openai.ts` via `responses-shared.ts`.
+- Tool format: TypeBox `inputSchema` passed straight through as JSON Schema. No Zod.
+- Model catalog: `listModels()` fetches the live `/api/v1/models` catalog from OpenRouter (400+ models). Per-model `supported_parameters` + `architecture.input_modalities` map to capability flags. Auth header is sent so per-key BYOK-only models appear when a credential is provided.
+- Cost: OpenRouter reports native USD cost in `response.usage.cost`. The `ResponsesTurnTranslator` passes it as `costUsd`; the persister honours it directly, so OpenRouter models never need an entry in the static price table.
 
 ### `ollama.ts`
 
@@ -497,20 +495,20 @@ Each driver is a single file under `server/ai/drivers/<id>.ts`. Drivers are the 
 - Tool format: OpenAI-compatible JSON Schema.
 - Capability flags: `toolCalling: <model-dependent>`, `visionInput: <model-dependent>` — driver checks at `listModels()` time and tags each `AiProviderModel`. Older Ollama models lack tool-calling; UI greys them out in the picker when the active scope requires tools.
 
-### Why one SDK per provider
+### Why direct HTTP per provider
 
-The user-facing concept is **one provider per backend** (Anthropic, OpenAI, OpenRouter, Ollama). Each driver file imports exactly one SDK. Bypassed paths (e.g. OpenAI's `@openai/codex-sdk` which supports ChatGPT-subscription auth but only for hard-coded codex tools) don't fit the custom-tool requirement of this runtime and are intentionally not used.
+Every driver talks directly to its provider's REST API. No provider SDKs are imported anywhere. This gives full control over message mapping, SSE framing, and multi-turn loop behaviour, and eliminates SDK version drift. TypeBox schemas are passed straight through as JSON Schema — there is no Zod bridge. The shared `server/ai/drivers/http/` layer (`toolLoop.ts`, `sse.ts`, `execTool.ts`, `errors.ts`) owns all the plumbing; each driver supplies only a small `ProviderAdapter` of pure mapping functions.
 
 ### Driver isolation gate
 
-`src/__tests__/architecture/ai-driver-isolation.test.ts`:
+`src/__tests__/architecture/ai-driver-isolation.test.ts` now enforces a strictly stronger boundary — all provider SDKs and `zod` are **banned repo-wide with no allowed callers**:
 
-- `@anthropic-ai/claude-agent-sdk` may only be imported from `server/ai/drivers/anthropic.ts`.
-- `@openai/agents` may only be imported from `server/ai/drivers/openai.ts`.
-- `@openrouter/agent` may only be imported from `server/ai/drivers/openrouter.ts`.
-- `zod` may only be imported from `server/ai/drivers/anthropic.ts`, `server/ai/drivers/openrouter.ts`, or `server/ai/drivers/typeboxToZod.ts`.
-- The plain `@anthropic-ai/sdk` package stays **completely banned everywhere**.
-- The runtime, handlers, tools, and UI may import none of the above.
+- `@anthropic-ai/claude-agent-sdk` — banned everywhere (replaced by direct `/v1/messages`).
+- `@openai/agents` — banned everywhere (replaced by direct `/v1/responses`).
+- `@openrouter/agent` — banned everywhere (replaced by direct `/v1/responses`).
+- `@modelcontextprotocol/sdk` — banned everywhere.
+- `zod` — banned everywhere (TypeBox schemas pass directly as JSON Schema).
+- `@anthropic-ai/sdk` (plain SDK) — banned everywhere.
 
 ---
 
@@ -788,7 +786,7 @@ New gates added under `src/__tests__/architecture/`:
 
 | Test                                        | Enforces                                                                |
 |---------------------------------------------|-------------------------------------------------------------------------|
-| `ai-driver-isolation.test.ts`               | Provider SDKs imported only from their respective `drivers/<id>.ts`     |
+| `ai-driver-isolation.test.ts`               | All provider SDKs and `zod` banned repo-wide (no allowed callers); drivers use direct HTTP |
 | `ai-credentials-never-leak.test.ts`         | No handler returns `ciphertext`/`iv`/plaintext over HTTP — only `CredentialView` |
 | `ai-tools-typebox-only.test.ts`             | Every file under `server/ai/tools/**` defines schemas with TypeBox (no Zod) |
 | `ai-runtime-no-sdk-imports.test.ts`         | `server/ai/runtime/**` imports no provider SDK                          |
@@ -880,7 +878,7 @@ Pre-rewrite there was no AI-related persistent state to migrate (no DB rows, no 
 
 - **DB**: clean adds via migration `007_ai_runtime`. Migration `008_ai_drop_ambient_credentials` removes any stray ambient rows from early dev iterations.
 - **localStorage**: ephemeral message state replaced by DB persistence. Any leftover localStorage chat data is silently dropped on first load of the new UI.
-- **Constraint #385** (ambient-only auth) is removed from `docs/features/agent.md` and from `CLAUDE.md`. The "ban `@anthropic-ai/sdk`" rule is rewritten as "the SDK is imported only inside `server/ai/drivers/anthropic.ts` and `server/ai/drivers/anthropicStream.ts`".
+- **Constraint #385** (ambient-only auth) is removed from `docs/features/agent.md` and from `CLAUDE.md`. The ban on all provider SDKs and `zod` is now repo-wide with no allowed callers — gated by `ai-driver-isolation.test.ts`.
 
 ---
 
@@ -904,12 +902,12 @@ Pre-rewrite there was no AI-related persistent state to migrate (no DB rows, no 
 
 1. **Per-user keys.** Each admin sets their own. `ai_provider_credentials.user_id` is mandatory; spend bills to the user who initiated the call. A future "shared pool" option can be layered on top without schema breaks.
 2. **Top-level `/admin/ai` workspace.** Sibling of Plugins/Users. Three tabs: Providers, Defaults, Audit.
-3. **One driver, one auth mode per provider.** Anthropic = `apiKey` only, direct `POST https://api.anthropic.com/v1/messages` (no SDK — `@anthropic-ai/claude-agent-sdk` removed; `anthropicStream.ts` deleted; shared `server/ai/drivers/http/` layer owns SSE and the tool loop). OpenAI = `apiKey` only via `@openai/agents`. OpenRouter = `apiKey` only via `@openrouter/agent` (live model catalog; native USD cost per call). Ollama = `baseUrl` (+ optional bearer) via plain `fetch`. The plain `@anthropic-ai/sdk` stays banned repo-wide.
+3. **One driver, one auth mode per provider. All drivers use direct HTTP — no SDKs.** Anthropic = `apiKey` only, direct `POST https://api.anthropic.com/v1/messages`. OpenAI = `apiKey` only, direct `POST https://api.openai.com/v1/responses` (Responses API; mapping shared with OpenRouter via `responses-shared.ts`). OpenRouter = `apiKey` only, direct `POST https://openrouter.ai/api/v1/responses` (live model catalog; native USD cost per call). Ollama = `baseUrl` (+ optional bearer), direct `POST ${baseUrl}/v1/chat/completions`. All provider SDKs and `zod` are banned repo-wide with no allowed callers — gated by `ai-driver-isolation.test.ts`.
 4. **Multiple credentials per provider.** Each row is one `(provider, label)` pair. A user can hold "Anthropic (prod key)" + "Anthropic (personal key)" simultaneously and choose at chat time. Auth mode is implied by provider, not a separate axis.
 5. **Persistent conversations.** `ai_conversations` + `ai_messages` tables, per user + per scope. Each scope has its own independent message history; nothing crosses over.
 6. **Soft-delete retention.** Conversations stay until user-deletion. A nightly job hard-purges rows where `deleted_at` is older than 30 days. No per-site retention setting.
 7. **No-credentials UX.** Banner inside the chat panel with a "Go to AI settings" button; Send disabled until at least one credential exists.
-8. **OpenAI Agents SDK.** Use `@openai/agents` (higher-level). Driver wraps `AiTool` definitions with handlers that route through our browser bridge for write tools.
+8. **Direct HTTP for all providers.** All four drivers talk directly to their REST APIs via `runToolLoop` from `server/ai/drivers/http/toolLoop.ts`. Each driver implements `ProviderAdapter<TMessage>` with pure mapping functions; the loop owns SSE plumbing, abort handling, tool dispatch, and usage aggregation. TypeBox schemas are passed directly as JSON Schema — no Zod bridge (`typeboxToZod.ts` deleted).
 9. **Hard-coded price table.** `server/ai/pricing.ts` updated by hand. Token counts always stored; cost is best-effort. Exception: the OpenRouter driver emits native USD cost from the provider, so OpenRouter calls never fall back to the table.
 10. **Shared dropdown primitive for in-panel pickers.** `<ModelPicker>` and `<ConversationHistory>` are built on `ContextMenu` (auto-flip, click-outside, focus management) — no bespoke popovers.
 
@@ -918,7 +916,7 @@ Pre-rewrite there was no AI-related persistent state to migrate (no DB rows, no 
 ## Files that disappeared (Phases 1–3)
 
 - `server/handlers/agent/*` (entire directory) → `server/ai/handlers/{chat,toolResult,credentials,conversations,defaults,models}.ts`
-- Old `server/handlers/agent/tools.ts` → tool definitions are now under `server/ai/tools/site/` (TypeBox); Zod adapter logic isolated in `server/ai/drivers/typeboxToZod.ts`.
+- Old `server/handlers/agent/tools.ts` → tool definitions are now under `server/ai/tools/site/` (TypeBox). `server/ai/drivers/typeboxToZod.ts` — the Zod adapter — was also deleted once all drivers moved to direct HTTP (TypeBox schemas pass straight to providers as JSON Schema).
 - Old client transport (`agentConfig.ts`, hand-rolled NDJSON) → `src/admin/ai/api.ts` + the rewritten `src/admin/pages/site/agent/agentSlice.ts`.
 - Architecture tests deleted: `no-anthropic-sdk.test.ts`, `agent-sdk-integration.test.ts`, `task381-agent-panel-tab.test.ts`, `task390-agent-config.test.ts`, plus the older agent-endpoint-auth gate. Replaced by `ai-driver-isolation.test.ts`, `ai-credentials-never-leak.test.ts`, `ai-tools-typebox-only.test.ts`, `ai-handlers-capability-gated.test.ts`.
 - Docs: `docs/features/agent.md` updated to describe the runtime; Constraint #385 removed; `CLAUDE.md`'s ban on `@anthropic-ai/sdk` covers the whole repo. `server/ai/drivers/anthropicStream.ts` was later deleted in the direct-HTTP rewrite (commit 59b0ebdfb655) — its SSE translation logic now lives in `AnthropicTurnTranslator` inside `anthropic.ts`.
