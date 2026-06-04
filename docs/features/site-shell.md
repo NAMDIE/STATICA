@@ -111,6 +111,12 @@ type SiteSettings = {
 
 `settings.fonts.items` is the installed self-hosted font asset library (Google downloads and custom media-backed font files). `settings.fonts.tokens` is the editable builder-facing contract: each token owns a stable variable such as `font-primary`, an optional assigned `FontEntry` id, and a fallback stack. The publisher emits those as `:root { --font-primary: "Family", sans-serif; }`; editor controls should prefer `font-family: var(--font-primary)` over raw family names when the design should follow future font swaps.
 
+**Variable normalization** (`src/admin/pages/site/store/slices/site/fontActions.ts`): the `variable` field stores a slug without the leading `--`. User input is trimmed, lowercased, and invalid character runs replaced with `-`. Leading `--` is stripped before storage. Duplicate variables within a site are rejected. Examples: `--font Brand` → `font-brand`, `Editorial` → `font-editorial`.
+
+**Rename semantics**: when `updateFontToken` changes the `variable`, `rewriteSiteFontVariableReferences` rewrites exact `var(--old-name)` occurrences across all style rules (base + context bags), every page node's inline styles, and every Visual Component tree's inline styles. Only syntactically complete `var(--name)` references are rewritten — not bare text, comments, or partial matches.
+
+**Delete semantics**: `removeFont` blocks removal of an installed font family when any token still references it via `familyId` — the caller receives `null` and must reassign or delete those tokens first. `deleteFontToken` removes the token entry but leaves existing `var(--name)` declarations as unresolved CSS rather than silently rewriting them to raw family stacks.
+
 The `--container-width`, color, typography, font-token, and spacing values are emitted into the published CSS by `buildSiteFrameworkCss(site)` and the site font CSS bundle.
 
 Editing the colors / typography / spacing in the Site → Framework / Colors / Typography panels writes back to `settings_json` and republishes the affected pages.
