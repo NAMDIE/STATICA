@@ -71,13 +71,13 @@ describe('validateSite — round-trip with representative fixture', () => {
     expect((vc.tree.nodes['vc-root'] as { children: string[] }).children).toContain('vc-child-1')
   })
 
-  it('preserves the page template config including conditions', () => {
+  it('preserves the page template config (target + priority)', () => {
     const raw = loadFixture() as Record<string, unknown>
     const shell = validateSite(raw)
     const pages = validatePages(shell, Array.isArray(raw.pages) ? raw.pages as unknown[] : [])
     expect(pages[0].template?.enabled).toBe(true)
-    expect(pages[0].template?.conditions).toHaveLength(1)
-    expect(pages[0].template?.conditions[0].operator).toBe('equals')
+    expect(pages[0].template?.target).toEqual({ kind: 'postTypes', tableSlugs: ['posts'] })
+    expect(pages[0].template?.priority).toBe(10)
   })
 
   it('preserves non-empty breakpoints', () => {

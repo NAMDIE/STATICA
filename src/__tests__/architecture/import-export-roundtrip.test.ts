@@ -82,7 +82,7 @@ beforeAll(async () => {
       title: 'Blog Post Template',
       slug: 'blog-template',
       templateEnabled: true,
-      templateTableSlug: 'posts',
+      templateTarget: { kind: 'postTypes', tableSlugs: ['posts'] },
       templatePriority: 100,
       body: { nodes: {}, rootNodeId: 'root' },
     },
@@ -180,7 +180,7 @@ describe('import/export round-trip — data integrity', () => {
     const restored = reimported.find((r) => r.tableId === 'pages' && r.slug === 'blog-template')
     expect(restored).toBeDefined()
     expect(restored!.cells.templateEnabled).toBe(true)
-    expect(restored!.cells.templateTableSlug).toBe('posts')
+    expect(restored!.cells.templateTarget).toEqual({ kind: 'postTypes', tableSlugs: ['posts'] })
   })
 
   test('row status is preserved', () => {

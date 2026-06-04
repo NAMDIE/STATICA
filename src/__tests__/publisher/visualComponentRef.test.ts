@@ -21,7 +21,7 @@ import { ContainerModule } from '@modules/base/container'
 import { TextModule } from '@modules/base/text'
 import { VisualComponentRefModule } from '@modules/base/visualComponentRef'
 import { SlotOutletModule } from '@modules/base/slotOutlet'
-import { ContentModule } from '@modules/base/content'
+import { OutletModule } from '@modules/base/outlet'
 
 // ---------------------------------------------------------------------------
 // Shared registry including all modules used by VCs under test
@@ -32,7 +32,7 @@ const registry = makeRegistry({
   'base.text': TextModule as never,
   'base.visual-component-ref': VisualComponentRefModule as never,
   'base.slot-outlet': SlotOutletModule as never,
-  'base.content': ContentModule as never,
+  'base.outlet': OutletModule as never,
 })
 
 // ---------------------------------------------------------------------------
@@ -523,10 +523,10 @@ describe('VC inlining — unknown componentId', () => {
 // ---------------------------------------------------------------------------
 
 describe('VC inlining — richtext prop sanitization', () => {
-  // VC: <article>{html param}</article> using base.content (html is a richtext key)
+  // VC: <article>{html param}</article> using base.outlet (html is a richtext key)
   const contentNode = makeVCNode({
     id: 'vc-content-node',
-    moduleId: 'base.content',
+    moduleId: 'base.outlet',
     props: { html: '' },
     propBindings: { html: { paramId: 'param-html' } },
   })
@@ -573,7 +573,7 @@ describe('VC inlining — richtext prop sanitization', () => {
     })
     const site = makeSite({ visualComponents: [vcContent], pages: [page] })
     const { html } = publishPage(page, site, registry)
-    // The <article> wrapper from base.content must be intact (the
+    // The <article> wrapper from base.outlet must be intact (the
     // `data-instatic-content-region` attribute is the marker the content
     // editor's Live mode uses to mount its inline Tiptap instance).
     expect(html).toContain('<article data-instatic-content-region>')

@@ -204,7 +204,7 @@ describe('VC inline — richText XSS sanitization', () => {
   it('strips <script> from a richText prop override in published HTML', () => {
     const contentNode = makeVCNode({
       id: 'vc-xss-content',
-      moduleId: 'base.content',
+      moduleId: 'base.outlet',
       props: { html: '' },
       propBindings: { html: { paramId: 'param-body' } },
     })

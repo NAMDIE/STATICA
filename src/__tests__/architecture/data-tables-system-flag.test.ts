@@ -91,10 +91,8 @@ describe('data_tables system seeds — three tables present after fresh boot', (
     expect(builtInIds).toContain('seoTitle')
     expect(builtInIds).toContain('seoDescription')
     expect(builtInIds).toContain('templateEnabled')
-    expect(builtInIds).toContain('templateContext')
-    expect(builtInIds).toContain('templateTableSlug')
+    expect(builtInIds).toContain('templateTarget')
     expect(builtInIds).toContain('templatePriority')
-    expect(builtInIds).toContain('templateConditions')
   })
 
   test('components fields_json parses and contains expected builtIn field ids', () => {

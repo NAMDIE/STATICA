@@ -238,8 +238,7 @@ describe('data CMS repository', () => {
     expect(seededPageRow).not.toBeNull()
     const cells = (seededPageRow as unknown as { cells: Record<string, unknown> } | null)?.cells ?? {}
     expect(cells.templateEnabled).toBe(true)
-    expect(cells.templateContext).toBe('entry')
-    expect(cells.templateTableSlug).toBe('products')
+    expect(cells.templateTarget).toEqual({ kind: 'postTypes', tableSlugs: ['products'] })
   })
 
   it('updates table identity, route, labels, and field settings', async () => {

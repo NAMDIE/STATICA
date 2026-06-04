@@ -11,6 +11,7 @@ export {
   normalizeRouteBase,
   isTemplatePage,
   primaryTemplateTableSlug,
+  templateTargetLabel,
   resolveTemplateChain,
   type RouteResolutionContext,
 } from './templateMatching'

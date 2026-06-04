@@ -51,17 +51,8 @@
       },
       "template": {
         "enabled": true,
-        "context": "entry",
-        "tableSlug": "posts",
-        "priority": 10,
-        "conditions": [
-          {
-            "id": "cond-1",
-            "field": "status",
-            "operator": "equals",
-            "value": "published"
-          }
-        ]
+        "target": { "kind": "postTypes", "tableSlugs": ["posts"] },
+        "priority": 10
       }
     },
     {

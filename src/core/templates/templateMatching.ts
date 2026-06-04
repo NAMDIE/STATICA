@@ -30,6 +30,13 @@ export function primaryTemplateTableSlug(page: Page): string | null {
   return null
 }
 
+/** Short human-readable label for a template's target (for list/explorer UI). */
+export function templateTargetLabel(page: Page): string {
+  const target = page.template?.target
+  if (!target) return ''
+  return target.kind === 'everywhere' ? 'Everywhere' : target.tableSlugs.join(', ')
+}
+
 /**
  * Breadth levels, OUTER → INNER. Adding a level here (e.g. a path-prefix
  * "section" layout between everywhere and postTypes) is the only change

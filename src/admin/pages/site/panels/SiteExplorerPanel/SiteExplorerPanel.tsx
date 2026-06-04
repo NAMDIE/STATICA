@@ -3,6 +3,7 @@ import { useEditorStore } from '@site/store/store'
 import type { SiteFile } from '@core/files/schemas'
 import type { Page, SiteExplorerSectionId } from '@core/page-tree'
 import { createUniquePageSlug, pagePublicPath, isHomePage } from '@core/page-tree'
+import { templateTargetLabel } from '@core/templates'
 import { Panel, useAutoFocusPanel } from '@admin/shared/Panel'
 import { SkeletonBlock } from '@ui/components/Skeleton'
 import { FilePlusSolidIcon } from 'pixel-art-icons/icons/file-plus-solid'
@@ -466,11 +467,7 @@ export function SiteExplorerPanel({
       templatePages.map((page) => ({
         id: page.id,
         label: page.title,
-        meta: page.template
-          ? page.template.target.kind === 'everywhere'
-            ? 'Everywhere'
-            : page.template.target.tableSlugs.join(', ')
-          : '',
+        meta: templateTargetLabel(page),
         icon: FileTextSolidIcon,
         active: page.id === activePageId && activeDocument?.kind !== 'visualComponent',
         ariaLabel: `Open template ${page.title}`,

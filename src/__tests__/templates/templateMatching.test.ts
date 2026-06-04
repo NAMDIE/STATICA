@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'bun:test'
 import { makeSite } from '../fixtures'
-import { normalizeRouteBase, selectEntryTemplate } from '@core/templates/templateMatching'
+import { normalizeRouteBase } from '@core/templates/templateMatching'
+import { resolveTemplateChain } from '@core/templates'
+
+const postsTarget = { kind: 'postTypes' as const, tableSlugs: ['posts'] }
 
 describe('template matching', () => {
   it('normalizes collection route bases', () => {
@@ -13,41 +16,24 @@ describe('template matching', () => {
     const site = makeSite()
     const firstPage = site.pages[0]
     firstPage.id = 'low-priority-page'
-    firstPage.template = {
-      enabled: true,
-      context: 'entry',
-      tableSlug: 'posts',
-      priority: 10,
-      conditions: [],
-    }
+    firstPage.template = { enabled: true, target: postsTarget, priority: 10 }
 
     site.pages.push({
       ...structuredClone(firstPage),
       id: 'high-priority-page',
       title: 'Post Template',
       slug: 'post-template',
-      template: {
-        enabled: true,
-        context: 'entry',
-        tableSlug: 'posts',
-        priority: 100,
-        conditions: [],
-      },
+      template: { enabled: true, target: postsTarget, priority: 100 },
     })
 
-    expect(selectEntryTemplate(site, 'posts')?.id).toBe('high-priority-page')
+    const chain = resolveTemplateChain(site, { kind: 'entry', tableSlug: 'posts' })
+    expect(chain.at(-1)?.id).toBe('high-priority-page')
   })
 
   it('uses page order as the tie-breaker for equal priority templates', () => {
     const site = makeSite()
     site.pages[0].id = 'first-template'
-    site.pages[0].template = {
-      enabled: true,
-      context: 'entry',
-      tableSlug: 'posts',
-      priority: 50,
-      conditions: [],
-    }
+    site.pages[0].template = { enabled: true, target: postsTarget, priority: 50 }
 
     site.pages.push({
       ...structuredClone(site.pages[0]),
@@ -55,6 +41,7 @@ describe('template matching', () => {
       slug: 'second-template',
     })
 
-    expect(selectEntryTemplate(site, 'posts')?.id).toBe('first-template')
+    const chain = resolveTemplateChain(site, { kind: 'entry', tableSlug: 'posts' })
+    expect(chain.at(-1)?.id).toBe('first-template')
   })
 })

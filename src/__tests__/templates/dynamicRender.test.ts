@@ -3,7 +3,7 @@ import { makeModule, makePage, makeRegistry, makeSite } from '../publisher/helpe
 import { publishPage } from '@core/publisher'
 import { resolveDynamicProps } from '@core/templates/dynamicBindings'
 import type { LoopItem } from '@core/loops/types'
-import { ContentModule } from '@modules/base/content'
+import { OutletModule } from '@modules/base/outlet'
 
 const currentEntry: LoopItem = {
   id: 'version_1',
@@ -117,7 +117,7 @@ describe('dynamic template rendering', () => {
         render: (_props, children) => ({ html: `<main>${children.join('')}</main>` }),
       }),
       'base.text': textModule,
-      'base.content': ContentModule,
+      'base.outlet': OutletModule,
     })
     const site = makeSite()
     const page = makePage({
@@ -128,7 +128,7 @@ describe('dynamic template rendering', () => {
         dynamicBindings: { text: { source: 'currentEntry', field: 'title' } },
       },
       body: {
-        moduleId: 'base.content',
+        moduleId: 'base.outlet',
         props: { html: '<p>Static body</p>' },
         dynamicBindings: { html: { source: 'currentEntry', field: 'body', format: 'html' } },
       },
@@ -147,7 +147,7 @@ describe('dynamic template rendering', () => {
   })
 
   it('renders markdown when a token resolves into a richtext-typed prop', () => {
-    // Legacy template shape (still used in dev DBs): the `base.content`
+    // Legacy template shape (still used in dev DBs): the `base.outlet`
     // node carries a static `html: "{currentEntry.body}"` prop and no
     // `dynamicBindings`. Token interpolation drops the raw markdown body
     // into the richtext prop; the renderer must run it through the
