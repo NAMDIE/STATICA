@@ -128,14 +128,15 @@ Rebuild triggers: script file content changes, `packageJson` changes, `site.runt
 
 React synthetic events bubble through the React fiber tree, not the DOM tree, so click/hover/keyboard handlers in `NodeRenderer` fire normally even though the DOM is inside an iframe.
 
-Native events require explicit forwarding for two cases:
+Native events require explicit handling for three cases:
 
 - **Wheel events (design mode):** `IframeFrameSurface` listens for `wheel` inside the iframe document and re-dispatches a new `WheelEvent` on the iframe element (parent document) so `useCanvas`'s pan/zoom handler picks it up.
 - **Pointer events (design mode):** Middle-click pan, space+left-click pan, and active reorder drags (`data-instatic-canvas-dragging` on `<html>`) all need to cross the iframe boundary. `IframeFrameSurface` tracks `spaceHeld` and `panPointerId` state to identify when a pointerdown starts a pan, then forwards `pointerdown`/`pointermove`/`pointerup`/`pointercancel` to the parent document.
+- **Portal overlay dismiss (all modes):** Portal-based overlays (context menus, dropdowns) attach their dismiss-on-outside-click listeners at the document level. A `mousedown` inside an iframe fires on the iframe's own document and never bubbles to the parent's listener, leaving the overlay stuck open. `ContextMenu` calls `collectSameOriginDocuments` (`src/ui/lib/sameOriginDocuments.ts`) to gather the parent document plus every reachable same-origin iframe document, then attaches dismiss listeners to all of them. Cross-origin iframes are skipped — their events are unreachable. The check for whether an event target is a valid DOM node uses `isNode` (also in `sameOriginDocuments.ts`), a structural check on `nodeType` that works across iframe realms where `instanceof Node` would fail.
 
 Native mouse movement is also surfaced for editor chrome that must follow the cursor in the parent document, such as inactive-viewport activation hints. These events are not forwarded as new DOM events; `IframeFrameSurface` invokes callback props with the iframe-native `MouseEvent`, and callers translate the point with `clientPointToEditorDoc`.
 
-Live frames skip all forwarding — they scroll natively and have no pan/zoom.
+Live frames skip wheel/pointer forwarding — they scroll natively and have no pan/zoom. Overlay dismiss listeners still apply in live mode (menus can be open while the canvas is in live view).
 
 ---
 
@@ -166,6 +167,7 @@ Tests that render the canvas and query nodes must use the `iframeCanvasQuery.ts`
 ## Related
 
 - `docs/editor.md` — canvas architecture overview and the design/live mode toggle
+- `docs/reference/ui-primitives.md` — `ContextMenu` dismiss model (cross-realm iframe attach)
 - `docs/features/canvas-iframe-per-frame.md` — this file
 - Source-of-truth files:
   - `src/admin/pages/site/canvas/IframeFrameSurface.tsx` — iframe primitive
@@ -181,6 +183,7 @@ Tests that render the canvas and query nodes must use the `iframeCanvasQuery.ts`
   - `src/admin/pages/site/canvas/RuntimeScriptInjector.tsx` — opt-in runtime scripts
   - `src/admin/pages/site/canvas/useRuntimeScriptBuild.ts` — script bundle builder
   - `src/admin/pages/site/store/slices/canvasSlice.ts` — `canvasView`, `runScripts`
+  - `src/ui/lib/sameOriginDocuments.ts` — `collectSameOriginDocuments`, `isNode` (cross-realm overlay dismiss)
   - `src/__tests__/canvas/canvasMode.test.tsx` — design/live toggle + script build contract
 - Gate tests:
   - `src/__tests__/architecture/site-editor-shell-lazy-body.test.ts` — skeleton usage and lazy-boundary gates

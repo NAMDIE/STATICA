@@ -330,7 +330,7 @@ For inline page-level errors, prefer `role="alert"` content over a toast — toa
 
 Two positioning modes:
 
-**Point mode** — right-click at a viewport coordinate:
+**Point mode** — right-click at a viewport coordinate. Pass `animateExit` so the menu fades out before the caller unmounts it:
 
 ```tsx
 import { ContextMenu, ContextMenuItem, ContextMenuSeparator } from '@ui/components/ContextMenu'
@@ -340,6 +340,7 @@ import { ContextMenu, ContextMenuItem, ContextMenuSeparator } from '@ui/componen
     x={menu.x}
     y={menu.y}
     ariaLabel="Layer actions"
+    animateExit
     onClose={() => setMenu(null)}
   >
     <ContextMenuItem onClick={onRename}>Rename</ContextMenuItem>
@@ -350,7 +351,7 @@ import { ContextMenu, ContextMenuItem, ContextMenuSeparator } from '@ui/componen
 )}
 ```
 
-**Anchor mode** — overflow `…` button that opens a dropdown below its trigger:
+**Anchor mode** — overflow `…` button that opens a dropdown below its trigger. Skip `animateExit` for instant close (the default):
 
 ```tsx
 const triggerRef = useRef<HTMLButtonElement>(null)
@@ -368,7 +369,9 @@ const triggerRef = useRef<HTMLButtonElement>(null)
 )}
 ```
 
-Outside `mousedown` and `contextmenu` events (capture phase) dismiss the menu without cancelling the underlying event — the first outside click both closes the menu and reaches the clicked element. `anchorRef` gates dismiss handling (clicks inside the anchor element don't close the menu) and provides the rect for auto-flip positioning. `triggerRef` is dismiss-gate only — use it when the trigger is an editable input that must stay focused while the menu is open (e.g. `ClassPicker`). Items use `ContextMenuItem`, separators use `ContextMenuSeparator`, and nested menus use `ContextMenuSubmenu`.
+**Exit animation (`animateExit`).** When `true`, a Dismiss (Escape / outside-click) plays a brief `data-closing` fade-out keyframe before `onClose` unmounts the menu. Item-selection always closes instantly regardless. Reopening the menu at a new coordinate cancels any in-flight exit. Default `false` keeps the instant close that anchored dropdowns (Select, combobox) rely on. Use `animateExit` for all point-anchored right-click context menus.
+
+**Dismiss handling.** Outside `mousedown` and `contextmenu` events (capture phase) dismiss the menu without cancelling the underlying event — the first outside click both closes the menu and reaches the clicked element. Dismiss listeners attach to the parent document **and every same-origin iframe document** (`collectSameOriginDocuments` in `src/ui/lib/sameOriginDocuments.ts`), so clicking inside the canvas's per-breakpoint iframes correctly dismisses open menus. `anchorRef` gates dismiss handling (clicks inside the anchor element don't close the menu) and provides the rect for auto-flip positioning. `triggerRef` is dismiss-gate only — use it when the trigger is an editable input that must stay focused while the menu is open (e.g. `ClassPicker`). Items use `ContextMenuItem`, separators use `ContextMenuSeparator`, and nested menus use `ContextMenuSubmenu`.
 
 ---
 
@@ -528,12 +531,15 @@ The primitive must work entirely with existing design tokens. If you need a new 
 - [docs/design.md](../design.md) — design principles, surface systems, design rules
 - [docs/reference/design-tokens.md](design-tokens.md) — complete token catalog
 - [docs/architecture.md](../architecture.md) — primitive layer in the system
+- [docs/features/canvas-iframe-per-frame.md](../features/canvas-iframe-per-frame.md) — cross-realm iframe dismiss (why `ContextMenu` attaches to iframe documents)
 - Source-of-truth files:
   - `src/ui/components/` — all primitive folders
   - `src/ui/cn.ts` — class composition helper
   - `src/styles/globals.css` — all design tokens
   - `src/ui/components/Widget/Widget.module.css` — canonical tile-card implementation
   - `src/ui/components/Button/Button.module.css` — canonical button (with `!important` exception)
+  - `src/ui/lib/sameOriginDocuments.ts` — `collectSameOriginDocuments`, `isNode`
+  - `src/ui/components/ContextMenu/useDeferredClose.ts` — exit-animation deferred close hook
 - Gate tests:
   - `src/__tests__/architecture/button-primitive-usage.test.ts`
   - `src/__tests__/architecture/ui-primitives-location.test.ts`
