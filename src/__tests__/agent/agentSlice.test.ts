@@ -244,7 +244,7 @@ describe('processStreamEvent — toolCall / toolResult badges', () => {
       {
         type: 'toolCall',
         toolCallId: 'toolu_1',
-        toolName: 'inspect_page',
+        toolName: 'read_page',
         input: {},
         status: 'pending',
       },
@@ -258,14 +258,14 @@ describe('processStreamEvent — toolCall / toolResult badges', () => {
 
     const pending = getToolCallBlocks(useEditorStore.getState().agentMessages[0])
     expect(pending).toHaveLength(1)
-    expect(pending[0].actionType).toBe('inspect_page')
+    expect(pending[0].actionType).toBe('read_page')
     expect(pending[0].status).toBe('pending')
 
     await processStreamEvent(
       {
         type: 'toolResult',
         toolCallId: 'toolu_1',
-        toolName: 'inspect_page',
+        toolName: 'read_page',
         ok: true,
       },
       assistantId,
@@ -319,7 +319,7 @@ describe('processStreamEvent — chronological text/tool ordering', () => {
       {
         type: 'toolCall',
         toolCallId: 'toolu_1',
-        toolName: 'inspect_page',
+        toolName: 'read_page',
         input: {},
         status: 'pending',
       },
@@ -335,7 +335,7 @@ describe('processStreamEvent — chronological text/tool ordering', () => {
       {
         type: 'toolResult',
         toolCallId: 'toolu_1',
-        toolName: 'inspect_page',
+        toolName: 'read_page',
         ok: true,
       },
       assistantId,

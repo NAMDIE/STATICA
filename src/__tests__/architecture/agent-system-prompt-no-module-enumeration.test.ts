@@ -3,7 +3,7 @@
  *
  * The canonical Anthropic agent pattern is progressive disclosure via
  * tools, not bulk context dumping. Module ids (base.container, base.text,
- * etc.) must be discovered through `list_modules` / `inspect_node`, not
+ * etc.) must be discovered through `list_modules` / `read_page`, not
  * baked into the static prompt prefix where they would bust the cache on
  * every registry change.
  *
