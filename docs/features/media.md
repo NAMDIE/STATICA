@@ -48,6 +48,7 @@ src/admin/pages/media/
 └── utils/
     ├── filters.ts                      — type/date/folder filter predicates
     ├── folderTree.ts                   — folder utilities: tree build, descent check, child listing
+    ├── formatBytes.ts                  — binary-unit file-size formatter (B/KB/MB/GB) shared by canvas tiles, viewer, upload queue, replace dialog
     ├── mediaDragDrop.ts                — TypeBox-validated drag/drop payload helpers
     ├── smartFolders.ts                 — smart folder IDs, type guard, per-ID predicates
     └── variants.ts                     — image variant URL helpers
