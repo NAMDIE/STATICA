@@ -8,7 +8,8 @@
     position: absolute;
     top: 4px;
     left: 4px;
-    z-index: 24;
+    /* Same fixed canvas chrome layer as CanvasNotch, above selection overlays. */
+    z-index: 53;
     display: inline-flex;
     align-items: center;
     gap: 3px;
