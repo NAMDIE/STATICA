@@ -553,7 +553,7 @@ The sidebar shell expands/collapses by animating `--*-panel-width`. The panel sl
 
 ### Settings modal
 
-`src/admin/modals/Settings/SettingsModal.tsx`. Shares the visual language of the Spotlight palette and Module Inserter: a `--panel-*`-token shell, `--editor-surface-2` rail with categorical rail-tint icon chips, accent-bar section header, and an Esc keycap affordance. Backdrop click and Esc both close — there is no dedicated close button.
+`src/admin/modals/Settings/SettingsModal.tsx`. Shares the visual language of the Spotlight palette and Module Inserter: a `--panel-*`-token shell, `--editor-surface-2` rail with categorical rail-tint icon chips, accent-bar section header, card-group rows (`--editor-surface-2` fills, `--panel-radius` corners, 1px gaps showing the darker panel surface through) for section content, and an Esc keycap affordance. Backdrop click and Esc both close — there is no dedicated close button.
 
 **Sections** (rail nav, four entries):
 
