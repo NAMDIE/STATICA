@@ -36,12 +36,14 @@ import { pluginBench } from './benches/plugin'
 import { footprintBench } from './benches/footprint'
 import { healthBench } from './benches/health'
 import { browserBench } from './benches/browser'
+import { snapshotTokensBench } from './benches/snapshot-tokens'
 
 const REPO_ROOT = resolve(import.meta.dir, '../..')
 
-// `browser` is NOT in the default run because it needs a system-installed
-// Chrome and takes 30+ seconds. Run it explicitly via `bun run bench:browser`
-// or `bun run bench --only=browser`.
+// `browser` and `snapshot-tokens` are NOT in the default run. `browser` needs a
+// system-installed Chrome and 30+ seconds; `snapshot-tokens` needs ANTHROPIC_API_KEY
+// + a seeded .tmp/dev.db and makes network calls to count_tokens. Run them
+// explicitly, e.g. `bun run bench --only=snapshot-tokens`.
 const DEFAULT_BENCHES: readonly BenchModule[] = [
   bundleBench,
   publisherBench,
@@ -56,6 +58,7 @@ const DEFAULT_BENCHES: readonly BenchModule[] = [
 const ALL_BENCHES: readonly BenchModule[] = [
   ...DEFAULT_BENCHES,
   browserBench,
+  snapshotTokensBench,
 ]
 
 interface CliFlags {

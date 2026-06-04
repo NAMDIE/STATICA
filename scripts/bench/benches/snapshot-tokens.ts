@@ -1,0 +1,383 @@
+/**
+ * Agent read-surface token benchmark — JSON snapshot vs annotated HTML.
+ *
+ * The site-editor agent reads a page as structured JSON today: `inspect_page`
+ * (the full node tree) + `list_classes` (CSS classes) + `list_tokens` (design
+ * tokens), each `JSON.stringify`'d verbatim into a tool_result. This bench
+ * measures the exact token cost of that payload against the *other* direction —
+ * the same page rendered as clean HTML annotated with `data-node-id` on each
+ * tag, plus its CSS bundle — so we can decide whether an annotated-HTML read
+ * surface would be cheaper.
+ *
+ * Fairness guarantees:
+ * - JSON side is built from `buildPageSnapshot` (the SAME builder the editor's
+ *   `buildPageContext` delegates to) and assembled into the exact three tool
+ *   payloads the server emits — it cannot drift from what the agent receives.
+ * - HTML side uses `publishPage(..., { annotateNodeIds: true })` — the real
+ *   publisher, not an estimate.
+ * - Tokens are counted with Anthropic `count_tokens` (model-accurate).
+ *
+ * Fixtures are the real seeded pages in `.tmp/dev.db` (the `bun run dev`
+ * default), so the numbers reflect production payloads, not synthetic trees.
+ */
+
+import { resolve } from 'node:path'
+import { existsSync } from 'node:fs'
+import type { Page, SiteDocument } from '@core/page-tree'
+import type { DataRow } from '@core/data/schemas'
+import type { BenchModule, BenchResult, BenchRow, BenchSection, BenchContext } from '../lib/types'
+import { fmtNum } from '../lib/stats'
+import { log } from '../lib/log'
+import { createTokenCounter, type TokenCounter } from '../lib/anthropicTokens'
+
+const REPO_ROOT = resolve(import.meta.dir, '../../..')
+const DEV_DB_PATH = resolve(REPO_ROOT, '.tmp/dev.db')
+
+// Pacing between count_tokens calls so a big site doesn't trip provider rate limits.
+const COUNT_DELAY_MS = 120
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms))
+}
+
+async function loadDeps() {
+  // Register the base modules so the registry can render/snapshot real pages.
+  await import('../../../src/modules/base')
+  const { createSqliteClient } = await import('../../../server/db/sqlite')
+  const { getDraftSite } = await import('../../../server/repositories/site')
+  const { listDataRows } = await import('../../../server/repositories/data/rows')
+  const { pageFromRow } = await import('../../../src/core/data/pageFromRow')
+  const { visualComponentFromRow } = await import('../../../src/core/data/componentFromRow')
+  const { validateVisualComponents } = await import('../../../src/core/persistence/validate')
+  const { registry } = await import('../../../src/core/module-engine/registry')
+  const { publishPage } = await import('../../../src/core/publisher/render')
+  const { buildSiteCssBundle } = await import('../../../server/publish/siteCssBundle')
+  const { buildPageSnapshot } = await import('../../../src/admin/pages/site/agent/pageSnapshot')
+  return {
+    createSqliteClient,
+    getDraftSite,
+    listDataRows,
+    pageFromRow,
+    visualComponentFromRow,
+    validateVisualComponents,
+    registry,
+    publishPage,
+    buildSiteCssBundle,
+    buildPageSnapshot,
+  }
+}
+
+type Deps = Awaited<ReturnType<typeof loadDeps>>
+
+/** Assemble the full draft SiteDocument (shell + pages + VCs) from the dev DB. */
+async function loadSeededSite(deps: Deps): Promise<SiteDocument | null> {
+  const db = deps.createSqliteClient(DEV_DB_PATH)
+  const shell = await deps.getDraftSite(db)
+  if (!shell) return null
+  const [pageRows, vcRows] = await Promise.all([
+    deps.listDataRows(db, 'pages'),
+    deps.listDataRows(db, 'components'),
+  ])
+  const pages = pageRows.map(deps.pageFromRow)
+  const visualComponents = deps.validateVisualComponents(
+    vcRows.flatMap((r: DataRow) => {
+      const vc = deps.visualComponentFromRow(r)
+      return vc ? [vc] : []
+    }),
+  )
+  return { ...shell, pages, visualComponents }
+}
+
+/** Pick the editor's default active breakpoint id for a site. */
+function defaultBreakpointId(site: SiteDocument): string {
+  const ids = site.breakpoints.map((b) => b.id)
+  return ids.includes('desktop') ? 'desktop' : (ids[ids.length - 1] ?? '')
+}
+
+/** Extract the inner `<body>` HTML from a full published document. */
+function extractBody(html: string): string {
+  const m = html.match(/<body[^>]*>([\s\S]*)<\/body>/)
+  return m ? m[1] : html
+}
+
+interface PageSerializations {
+  /** JSON.stringify of the three tool payloads, byte-accurate to the wire. */
+  jsonTree: string
+  jsonClasses: string
+  jsonTokens: string
+  /** Annotated body HTML. */
+  htmlBody: string
+  /**
+   * The page's CSS, wrapped in a `<style>` block — the self-contained
+   * representation the import engine round-trips: class rules plus `@media`
+   * breakpoint blocks. Counting the `<style>` wrapper keeps the HTML side an
+   * honest, paste-into-a-document artifact rather than a bare CSS string.
+   */
+  css: string
+  /** Fidelity findings for the report. */
+  nodeCount: number
+  annotatedTags: number
+  nodesWithBreakpointOverrides: number
+  /** `@media` breakpoint blocks present in the counted CSS (fairness evidence). */
+  cssMediaBlocks: number
+}
+
+/** Build both representations for a single page. */
+function serializePage(deps: Deps, site: SiteDocument, page: Page): PageSerializations {
+  const snapshot = deps.buildPageSnapshot(page, site, deps.registry, {
+    selectedNodeId: null,
+    activeBreakpointId: defaultBreakpointId(site),
+  })
+
+  // JSON side — exactly the three tool payloads the server stringifies into
+  // tool_result blocks (see server/ai/tools/site/readTools.ts).
+  const jsonTree = JSON.stringify({
+    page: {
+      pageId: snapshot.pageId,
+      pageTitle: snapshot.pageTitle,
+      rootNodeId: snapshot.rootNodeId,
+      selectedNodeId: snapshot.selectedNodeId,
+      activeBreakpointId: snapshot.activeBreakpointId,
+      breakpoints: snapshot.breakpoints,
+      nodes: snapshot.nodes,
+    },
+  })
+  const jsonClasses = JSON.stringify({ classes: snapshot.classes })
+  const jsonTokens = JSON.stringify({ tokens: snapshot.tokens })
+
+  // HTML side — the real publisher with node-id annotation, body only.
+  const { html } = deps.publishPage(page, site, deps.registry, { annotateNodeIds: true })
+  const htmlBody = extractBody(html)
+  const bundle = deps.buildSiteCssBundle(site, deps.registry, page)
+  // framework (tokens + utilities + module CSS) + class CSS (incl. `@media`
+  // breakpoint blocks from each class's contextStyles) + user stylesheet — the
+  // CSS equivalent of the JSON `classes` + `tokens`. Reset CSS is omitted: it's
+  // page-independent browser-normalization boilerplate, not styling the agent
+  // reasons about. Wrapped in a `<style>` block so the HTML side is the same
+  // self-contained artifact the import engine consumes/emits.
+  const cssBody = [bundle.framework.content, bundle.style.content, bundle.userStyles.content]
+    .filter(Boolean)
+    .join('\n\n')
+  const css = cssBody ? `<style>\n${cssBody}\n</style>` : ''
+  const cssMediaBlocks = (cssBody.match(/@media/g) ?? []).length
+
+  const annotatedTags = (htmlBody.match(/data-node-id="/g) ?? []).length
+  const nodesWithBreakpointOverrides = snapshot.nodes.filter(
+    (n) => Object.keys(n.breakpointOverrides ?? {}).length > 0,
+  ).length
+
+  return {
+    jsonTree,
+    jsonClasses,
+    jsonTokens,
+    htmlBody,
+    css,
+    nodeCount: snapshot.nodes.length,
+    annotatedTags,
+    nodesWithBreakpointOverrides,
+    cssMediaBlocks,
+  }
+}
+
+interface PageTokenRow {
+  title: string
+  slug: string
+  nodeCount: number
+  jsonTreeTokens: number
+  jsonClassesTokens: number
+  jsonTokensTokens: number
+  htmlBodyTokens: number
+  cssTokens: number
+  annotatedTags: number
+  nodesWithBreakpointOverrides: number
+  cssMediaBlocks: number
+}
+
+async function countPage(
+  counter: TokenCounter,
+  title: string,
+  slug: string,
+  s: PageSerializations,
+): Promise<PageTokenRow> {
+  // Sequential with pacing — respects provider rate limits; the counter caches
+  // identical strings so repeats are free.
+  const jsonTreeTokens = await counter.count(s.jsonTree)
+  await sleep(COUNT_DELAY_MS)
+  const jsonClassesTokens = await counter.count(s.jsonClasses)
+  await sleep(COUNT_DELAY_MS)
+  const jsonTokensTokens = await counter.count(s.jsonTokens)
+  await sleep(COUNT_DELAY_MS)
+  const htmlBodyTokens = await counter.count(s.htmlBody)
+  await sleep(COUNT_DELAY_MS)
+  const cssTokens = await counter.count(s.css)
+  await sleep(COUNT_DELAY_MS)
+  return {
+    title,
+    slug,
+    nodeCount: s.nodeCount,
+    jsonTreeTokens,
+    jsonClassesTokens,
+    jsonTokensTokens,
+    htmlBodyTokens,
+    cssTokens,
+    annotatedTags: s.annotatedTags,
+    nodesWithBreakpointOverrides: s.nodesWithBreakpointOverrides,
+    cssMediaBlocks: s.cssMediaBlocks,
+  }
+}
+
+function ratio(html: number, json: number): string {
+  if (json === 0) return '—'
+  return `${(html / json).toFixed(2)}×`
+}
+
+function buildReport(rows: PageTokenRow[], model: string): BenchResult {
+  const totalJson = rows.reduce(
+    (a, r) => a + r.jsonTreeTokens + r.jsonClassesTokens + r.jsonTokensTokens,
+    0,
+  )
+  const totalHtml = rows.reduce((a, r) => a + r.htmlBodyTokens + r.cssTokens, 0)
+
+  const perPage: BenchRow[] = rows.map((r) => {
+    const json = r.jsonTreeTokens + r.jsonClassesTokens + r.jsonTokensTokens
+    const html = r.htmlBodyTokens + r.cssTokens
+    return {
+      label: `${r.title} (/${r.slug})`,
+      inputs: { nodes: r.nodeCount },
+      metrics: {
+        json: fmtNum(json),
+        'json (tree/cls/tok)': `${fmtNum(r.jsonTreeTokens)}/${fmtNum(r.jsonClassesTokens)}/${fmtNum(r.jsonTokensTokens)}`,
+        html: fmtNum(html),
+        'html (body/css)': `${fmtNum(r.htmlBodyTokens)}/${fmtNum(r.cssTokens)}`,
+        delta: fmtNum(html - json),
+        ratio: ratio(html, json),
+      },
+      notes:
+        r.nodesWithBreakpointOverrides > 0
+          ? `${r.annotatedTags} tag(s) annotated; CSS carries ${r.cssMediaBlocks} @media block(s); ${r.nodesWithBreakpointOverrides} node(s) also carry per-node prop overrides only the JSON tree shows.`
+          : `${r.annotatedTags} tag(s) annotated; CSS carries ${r.cssMediaBlocks} @media block(s).`,
+    }
+  })
+
+  // Highlights: biggest win/loss + aggregate fidelity caveats.
+  const byDelta = [...rows].sort(
+    (a, b) =>
+      a.htmlBodyTokens + a.cssTokens - (a.jsonTreeTokens + a.jsonClassesTokens + a.jsonTokensTokens) -
+      (b.htmlBodyTokens + b.cssTokens - (b.jsonTreeTokens + b.jsonClassesTokens + b.jsonTokensTokens)),
+  )
+  const totalOverrides = rows.reduce((a, r) => a + r.nodesWithBreakpointOverrides, 0)
+  const totalNodes = rows.reduce((a, r) => a + r.nodeCount, 0)
+  const totalAnnotated = rows.reduce((a, r) => a + r.annotatedTags, 0)
+  const totalMediaBlocks = rows.reduce((a, r) => a + r.cssMediaBlocks, 0)
+
+  const highlights: string[] = [
+    `Aggregate: HTML is ${ratio(totalHtml, totalJson)} the JSON token cost (${fmtNum(totalHtml)} vs ${fmtNum(totalJson)} across ${rows.length} page(s)).`,
+  ]
+  if (byDelta.length > 0) {
+    const best = byDelta[0]
+    const worst = byDelta[byDelta.length - 1]
+    const bj = best.jsonTreeTokens + best.jsonClassesTokens + best.jsonTokensTokens
+    const wj = worst.jsonTreeTokens + worst.jsonClassesTokens + worst.jsonTokensTokens
+    highlights.push(
+      `Biggest HTML win: ${best.title} (${ratio(best.htmlBodyTokens + best.cssTokens, bj)}).`,
+      `Smallest HTML win / biggest loss: ${worst.title} (${ratio(worst.htmlBodyTokens + worst.cssTokens, wj)}).`,
+    )
+  }
+  highlights.push(
+    `Fairness — HTML CSS is counted inside a <style> block with class rules AND ${totalMediaBlocks} @media breakpoint block(s) (per-page count, the import-engine representation); both sides therefore carry breakpoint styling.`,
+    `Fidelity caveats — ${totalAnnotated}/${totalNodes} page nodes annotated in HTML (rest are base.body / hidden / dynamic / wrapper-less); ${totalOverrides} node(s) carry per-breakpoint prop overrides that live in the JSON tree but not in the published CSS (published responsive styling flows through class @media blocks, which are counted).`,
+  )
+
+  const section: BenchSection = {
+    title: 'Per-page token cost — JSON snapshot vs annotated HTML',
+    intro:
+      'JSON = inspect_page + list_classes + list_tokens (exact tool_result bytes). HTML = annotated body + a <style> block of framework/class/user CSS including @media breakpoint rules (the import-engine representation). Lower HTML ratio means the HTML read surface is cheaper.',
+    highlights,
+    rows: perPage,
+  }
+
+  return {
+    name: 'snapshot-tokens',
+    title: 'Agent read-surface tokens (JSON vs HTML)',
+    headline: {
+      'JSON tokens (total)': fmtNum(totalJson),
+      'HTML tokens (total)': fmtNum(totalHtml),
+      'HTML/JSON ratio': ratio(totalHtml, totalJson),
+      model,
+    },
+    sections: [section],
+  }
+}
+
+function skippedResult(title: string, reason: string, instructions: string[]): BenchResult {
+  log.warn(reason)
+  return {
+    name: 'snapshot-tokens',
+    title: 'Agent read-surface tokens (JSON vs HTML)',
+    headline: { status: 'skipped' },
+    sections: [
+      {
+        title,
+        intro: reason,
+        rows: [],
+        highlights: instructions,
+      },
+    ],
+  }
+}
+
+export const snapshotTokensBench: BenchModule = {
+  name: 'snapshot-tokens',
+  title: 'Agent read-surface tokens (JSON vs HTML)',
+  description:
+    'Compares the token cost of the JSON page snapshot the agent reads today against the same page rendered as annotated HTML + CSS, using Anthropic count_tokens on real seeded pages.',
+
+  async run(_ctx: BenchContext): Promise<BenchResult> {
+    const counter = createTokenCounter()
+    if (!counter.available) {
+      return skippedResult(
+        'Skipped — no ANTHROPIC_API_KEY',
+        'count_tokens needs an Anthropic API key; the benchmark measures exact, model-accurate token counts.',
+        [
+          'Set ANTHROPIC_API_KEY in your environment, then re-run `bun run bench --only=snapshot-tokens`.',
+        ],
+      )
+    }
+
+    if (!existsSync(DEV_DB_PATH)) {
+      return skippedResult(
+        'Skipped — no seeded dev database',
+        `Expected a SQLite dev DB at ${DEV_DB_PATH}.`,
+        ['Run `bun run dev` once to seed a dev database, then re-run this bench.'],
+      )
+    }
+
+    log.step('Loading base modules + seeded site from .tmp/dev.db')
+    const deps = await loadDeps()
+    const site = await loadSeededSite(deps)
+    if (!site || site.pages.length === 0) {
+      return skippedResult(
+        'Skipped — empty dev database',
+        'The dev DB has no draft site or no pages.',
+        ['Open the editor (`bun run dev`) and create at least one page, then re-run this bench.'],
+      )
+    }
+
+    log.ok(`Loaded ${site.pages.length} page(s) + ${site.visualComponents.length} visual component(s)`)
+    const model = counter.model
+
+    const rows: PageTokenRow[] = []
+    for (const page of site.pages) {
+      log.step(`Serializing + counting "${page.title}"`)
+      const serial = serializePage(deps, site, page)
+      const row = await countPage(counter, page.title, page.slug, serial)
+      rows.push(row)
+      const json = row.jsonTreeTokens + row.jsonClassesTokens + row.jsonTokensTokens
+      const html = row.htmlBodyTokens + row.cssTokens
+      log.detail(`json ${fmtNum(json)} tok · html ${fmtNum(html)} tok · ${ratio(html, json)}`)
+    }
+
+    log.ok(`Counted ${rows.length} page(s) against ${model}`)
+    return buildReport(rows, model)
+  },
+}
