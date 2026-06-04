@@ -68,7 +68,7 @@ src/admin/pages/media/
     <BulkEditWindow>        ← 2+ selected
 ```
 
-`MediaPage` orchestrates window visibility in local state and reads `useMediaWorkspace()` for everything else. Window **position** lives in `panelLayoutStorage` (`useDraggablePanel(id)`); window **visibility** is local React state with auto-open rules.
+`MediaPage` orchestrates window visibility and reads `useMediaWorkspace()` for everything else. Window **position** lives in `panelLayoutStorage` (`useDraggablePanel(id)`). Window **visibility** is either derived from selection or held in local state — see "Floating windows" below.
 
 ### `useMediaWorkspace` — the orchestrator
 
@@ -123,13 +123,15 @@ The count badge shown next to each smart folder in the sidebar is computed clien
 
 ### Floating windows
 
-Each floating window:
+Each floating window has a unique `FloatingPanelId` (`'mediaViewer' | 'mediaUploadQueue' | 'mediaBulkEdit'`), uses `useDraggablePanel(id)` for position, and gets its position persisted via `panelLayoutStorage.ts`. Visibility differs by window:
 
-- Has a unique `FloatingPanelId`: `'mediaViewer' | 'mediaUploadQueue' | 'mediaBulkEdit'`.
-- Uses `useDraggablePanel(id)` to read / write position.
-- Uses local `useState` in `MediaPage` for `open: boolean`.
-- Auto-opens by rule (upload start, 2+ selected, primary selection).
-- Persists position via `panelLayoutStorage.ts`.
+| Window          | How visibility is determined                                                                    |
+|-----------------|-------------------------------------------------------------------------------------------------|
+| `MediaViewerWindow` | Derived during render: `selectedAssetId !== null && selectedAssetIds.size <= 1`. Closing clears the selection. No `useState`. |
+| `BulkEditWindow`    | Derived during render: `selectedAssetIds.size >= 2`. Mutually exclusive with the viewer. No `useState`. |
+| `UploadQueueWindow` | `uploadQueueOpen` in local `useState`. Auto-opens via `useEffect` when uploads start; stays open after completion until the user dismisses it. Toolbar button toggles it. |
+
+The viewer and bulk-edit are derived rather than stored because "closed" is identical to "no selection" — every close path calls `workspace.clearSelection()`. Deriving avoids an extra render commit and the one-frame open lag that appeared with the old `setState`-in-effect approach.
 
 The shared `FloatingWindow` shell at `components/FloatingWindow/` provides the chrome: drag handle, close button, position bounding.
 
