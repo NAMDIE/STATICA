@@ -19,6 +19,7 @@ import { nanoid } from 'nanoid'
 import type { EditorStoreSliceCreator } from '@site/store/types'
 import type { VisualComponent, VCParam, VCNode } from '@core/visualComponents'
 import type { BaseNode, PageNode, StyleRule } from '@core/page-tree'
+import { removeNodeSubtrees } from '@core/page-tree'
 import {
   validateComponentName,
   validateParamName,
@@ -127,32 +128,9 @@ function cascadeRemoveVCRefs(
     }
   }
 
-  for (const refNodeId of refNodeIds) {
-    // DFS-collect the entire subtree rooted at the ref node (ref + slot-instances + user content)
-    const subtreeIds: string[] = []
-    const stack: string[] = [refNodeId]
-    while (stack.length > 0) {
-      const id = stack.pop()!
-      const node = nodes[id]
-      if (!node) continue
-      subtreeIds.push(id)
-      stack.push(...node.children)
-    }
-
-    // Splice refNodeId out of its parent's children[] (exactly one parent)
-    for (const node of Object.values(nodes)) {
-      const idx = node.children.indexOf(refNodeId)
-      if (idx !== -1) {
-        node.children.splice(idx, 1)
-        break
-      }
-    }
-
-    // Delete the ref + entire subtree from the flat node map
-    for (const id of subtreeIds) {
-      delete nodes[id]
-    }
-  }
+  // Cascade-remove each ref node and its entire subtree (slot-instances, user
+  // content, etc.) — same tree surgery the loader uses for dangling refs.
+  removeNodeSubtrees(nodes, refNodeIds)
 }
 
 /**

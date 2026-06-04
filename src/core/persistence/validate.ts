@@ -29,7 +29,7 @@
  *     6. Richtext prop sanitization in page node trees
  */
 
-import { assertValidNodeTree, parseSiteDocument, parsePage, type SiteShell } from '@core/page-tree'
+import { assertValidNodeTree, parseSiteDocument, parsePage, removeNodeSubtrees, type SiteShell } from '@core/page-tree'
 import type { SiteDocument, Page } from '@core/page-tree'
 import type { VisualComponent } from '@core/visualComponents'
 import { isSafePath, normalizePath } from '@core/files/pathValidation'
@@ -319,32 +319,7 @@ function stripOneNodeMap(nodes: Record<string, BaseNode>, knownVcIds: ReadonlySe
     if (!knownVcIds.has(componentId)) danglingRefIds.push(nodeId)
   }
 
-  for (const refNodeId of danglingRefIds) {
-    // DFS-collect entire subtree
-    const subtreeIds: string[] = []
-    const stack: string[] = [refNodeId]
-    while (stack.length > 0) {
-      const id = stack.pop()!
-      const node = nodes[id]
-      if (!node) continue
-      subtreeIds.push(id)
-      stack.push(...node.children)
-    }
-
-    // Remove ref from its parent's children[]
-    for (const node of Object.values(nodes)) {
-      const idx = node.children.indexOf(refNodeId)
-      if (idx !== -1) {
-        node.children.splice(idx, 1)
-        break
-      }
-    }
-
-    // Delete subtree nodes from the flat map
-    for (const id of subtreeIds) {
-      delete nodes[id]
-    }
-  }
+  removeNodeSubtrees(nodes, danglingRefIds)
 }
 
 /**

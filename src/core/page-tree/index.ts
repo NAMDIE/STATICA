@@ -123,6 +123,7 @@ export {
   duplicateNode,
   buildSubtreeNodeIdMap,
   pasteSubtree,
+  removeNodeSubtrees,
   wrapNode,
   wrapNodes,
   addPage,
