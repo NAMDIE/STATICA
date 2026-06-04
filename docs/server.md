@@ -446,7 +446,7 @@ Three static handlers, in order:
 |------------------------|-----------------------------------------------------------------------|
 | `tryServeStaticAsset`  | `/assets/*` from `dist/` (Vite-built admin SPA assets)                |
 | `tryServeUpload`       | `/uploads/*` from `uploadsDir` with `hardenUploadResponse` (nosniff, attachment for non-inert MIMEs, CORS for plugin bundles) |
-| `tryServeAdminApp`     | `/admin/*` falls back to `dist/index.html` for the SPA                |
+| `tryServeAdminApp`     | `/admin/*` — serves the admin shell from `dist/index.html` with path-specific injections (see below) |
 
 `server/static.ts` owns all three. Key behaviors:
 
@@ -454,6 +454,9 @@ Three static handlers, in order:
 - **Conditional GET** via `If-None-Match` / `If-Modified-Since` is honored.
 - **MIME-type allowlist** (`INERT_UPLOAD_MIMES`) — non-allowlisted uploads get `Content-Disposition: attachment` so they can't be top-level navigated and rendered as HTML on the admin origin.
 - **Plugin bundles** (`/uploads/plugins/*`) get `Access-Control-Allow-Origin: *` because the editor preview iframe loads them from an opaque origin (`sandbox="allow-scripts"` without `allow-same-origin`).
+- **Admin shell path-specific serving** (`serveAdminApp`): the two visitor paths inject different content into the shell HTML to minimize perceived load time:
+  - **Unauthenticated** (no session cookie): injects a styled login skeleton into `<div id="root">` and a `BOOT_API_KICKOFF` inline script that fires `setupStatus`, `/me`, and `publicSite` fetches at HTML-parse time. FCP shifts from ~400 ms (React mount) to ~DCL (~50 ms), and `useAdminBoot` finds pre-resolved promises instead of waiting for `useEffect`.
+  - **Authenticated**: keeps the existing spinner shell, but injects `BOOT_API_KICKOFF`, an `__instaticAuthed = 1` flag (lets `main.tsx` skip the post-Suspense concurrent re-render delay), and `<link rel="modulepreload">` hints for the authenticated shell chunk (`AuthenticatedAdmin-*.js`). Only the shell chunk is preloaded here; workspace-page pre-warming is handled in `AuthenticatedAdmin` via `requestIdleCallback` after first paint.
 
 ---
 

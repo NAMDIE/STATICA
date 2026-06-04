@@ -172,6 +172,8 @@ Tests that render the canvas and query nodes must use the `iframeCanvasQuery.ts`
   - `src/admin/pages/site/canvas/CanvasLiveSurface.tsx` — live mode surface
   - `src/admin/pages/site/canvas/BreakpointFrame.tsx` — design mode per-viewport frame
   - `src/admin/pages/site/canvas/CanvasTransformLayer.tsx` — design mode pan/zoom container
+  - `src/admin/pages/site/canvas/useProgressiveCanvasFrameLoading.ts` — idle-time frame reveal scheduler
+  - `src/admin/shared/CanvasFrameSkeleton/CanvasFrameSkeleton.tsx` — shared frame skeleton for progressive loading and startup states
   - `src/admin/pages/site/canvas/useIframeCursorBridge.ts` — surfaces iframe cursor movement to parent-doc callbacks
   - `src/admin/pages/site/canvas/EditorChromeInjector.tsx` — unlayered chrome CSS
   - `src/admin/pages/site/canvas/ClassStyleInjector.tsx` — class registry CSS
@@ -180,3 +182,5 @@ Tests that render the canvas and query nodes must use the `iframeCanvasQuery.ts`
   - `src/admin/pages/site/canvas/useRuntimeScriptBuild.ts` — script bundle builder
   - `src/admin/pages/site/store/slices/canvasSlice.ts` — `canvasView`, `runScripts`
   - `src/__tests__/canvas/canvasMode.test.tsx` — design/live toggle + script build contract
+- Gate tests:
+  - `src/__tests__/architecture/site-editor-shell-lazy-body.test.ts` — skeleton usage and lazy-boundary gates

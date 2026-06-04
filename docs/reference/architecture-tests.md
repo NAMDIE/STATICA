@@ -225,6 +225,7 @@ See [docs/features/site-transfer.md](../features/site-transfer.md).
 | `bundle-size-budgets.test.ts`                 | Per-chunk byte budgets after `bun run build`. Enforces that key chunks (AdminPageLayout, AdminWorkspaceCanvasLayout, SitePage, ContentPage, CodeMirrorEditor, …) stay within their measured caps. |
 | `module-size-budgets.test.ts`                 | Per-module line-count cap. No new source module over 700 lines; a grandfathered ledger of existing god-files is frozen and ratchets down only. Source-side sibling of `bundle-size-budgets`. |
 | `codemirror-lazy-only.test.ts`                | CodeMirror is loaded only via `lazy()` — it's heavy and shouldn't be in the entry bundle. |
+| `site-editor-shell-lazy-body.test.ts`         | Enforces that `SitePage` renders the real shell via `AdminCanvasLayout` (no bespoke startup skeleton), that the heavy editor body (DnD, canvas, panels, first-party modules) stays behind a post-paint lazy boundary, that `ImportHtmlModal` stays behind its open-state lazy boundary, and that `CanvasFrameSkeletonFrame` from `@admin/shared/CanvasFrameSkeleton` is used for startup and no-site states. |
 | `singleInstallManagedHosting.test.ts`         | Single-install assumptions hold across the codebase (no multi-tenant leakage).   |
 
 ## Anatomy of an architecture test
