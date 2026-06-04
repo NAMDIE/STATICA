@@ -9,7 +9,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-instatic}
       # Placeholder default lets the file load without an .env (e.g. SQLite mode,
       # which disables this service). Postgres deployments MUST override this in
-      # .env — see docs/deployment/vps-compose.md.
+      # .env — see docs/deployment/vps.md.
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-CHANGEME_set_POSTGRES_PASSWORD_in_env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
