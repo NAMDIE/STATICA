@@ -10,7 +10,7 @@ The agent runs on a provider-agnostic AI runtime (`server/ai/`) that can drive a
 
 - **Structure via HTML.** `insertHtml` and `replaceNodeHtml` accept semantic HTML strings; the browser executor calls `importHtml` (the same pipeline as the paste-HTML UI) to convert them into first-class, editable `PageNode`s.
 - **Styling via CSS.** The agent emits CSS the same way a human pastes it: a `<style>` block and/or `class=` attributes inside the `insertHtml`/`replaceNodeHtml` payload. The importer (`cssToStyleRules`) classifies every selector — a bare `.foo {}` rule becomes a reusable Selectors-panel class bound to `class="foo"`; any other selector (`.hero a`, `a:hover`, `nav > li`) becomes an ambient rule; `style=` attributes land on the node's inline styles. There is no structured `classes` parameter — the agent never hand-builds classes node-by-node at insert time. `createClass` / `updateClassStyles` / `assignClass` exist for editing styles on **existing** nodes after insertion.
-- **25 tools total.** 8 server-side read tools (resolved from the snapshot) + 17 browser-bridged write tools.
+- **26 tools total.** 9 server-side read tools (resolved from the snapshot) + 17 browser-bridged write tools.
 - **Two-endpoint bridge.** `POST /admin/api/ai/chat/site` opens an NDJSON stream. When the model calls a write tool, the server emits `toolRequest`; the browser executor applies it to the editor store and POSTs the `AiToolOutput` result to `POST /admin/api/ai/tool-result`.
 - **Provider-agnostic.** The runtime selects a driver (Anthropic, OpenAI, OpenRouter, Ollama) from the conversation's configured credential.
 - **Tools defined with TypeBox** (`server/ai/tools/`). Gated by `ai-tools-typebox-only.test.ts`.
@@ -152,9 +152,10 @@ Before each `sendAgentMessage` call, `buildCurrentPageContext(get)` (in `pageCon
 - Every node on the active page: id, moduleId, label, parentId, children, props, classIds, breakpointOverrides
 - All pages in the site (id, title, slug, active, isHomepage)
 - Configured breakpoints (id, label, width)
-- CSS class registry (id, name, styles, breakpointStyles)
+- CSS class registry (id, name, styles, breakpointStyles, `generated` family flag for framework utility classes)
 - Available modules from the registry (id, name, category, props schema, defaults)
 - Currently selected node id
+- Design tokens: color tokens (slug, CSS var, light/dark value, utility classes, shades/tints), typography scale groups (steps with CSS vars and utility classes), spacing scale groups, font tokens (CSS var, resolved family + fallback stack) — built by `describeFrameworkTokens` + `describeFontTokens` from `@core/framework` / `@core/fonts`
 
 This snapshot travels with every prompt so server-side read tools resolve entirely from it — no browser round-trips needed for reads.
 
@@ -204,7 +205,7 @@ Requires `ai.tools.write`. Calls `resolveBridgeToolResult(bridgeId, requestId, r
 
 ## Tools
 
-### Read tools — 8, server-side
+### Read tools — 9, server-side
 
 Resolved from the snapshot. No browser round-trip. Results are returned directly to the model.
 
@@ -218,6 +219,7 @@ Resolved from the snapshot. No browser round-trip. Results are returned directly
 | `inspect_node`    | One node's full detail + light subtree to `maxDepth`; `breakpointId` default active |
 | `inspect_class`   | One class: id, name, base styles, breakpoint styles, assigned node ids  |
 | `list_pages`      | All pages in the site (id, title, slug, active, isHomepage)             |
+| `list_tokens`     | Design tokens: colors (with shades/tints), typography/spacing scale steps, font tokens — each with CSS variable + utility classes; optional `family` filter (`colors`\|`typography`\|`spacing`\|`fonts`) |
 
 ### Write tools — 17, browser-bridged
 

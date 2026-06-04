@@ -32,6 +32,7 @@ src/core/siteImport/
 ├── htmlPagePlan.ts      — per-HTML-file plan: parse body via importHtml, derive title + slug, resolve <link>s
 ├── cssToStyleRules.ts   — single-file CSS → StyleRule[] + AssetRef[] + warnings
 ├── colorTokens.ts       — extract root custom-property color tokens from :root/html/body rules
+├── fontTokens.ts        — extract root --font-* custom properties as ImportFontToken[] from :root/html/body rules
 ├── scopeClasses.ts      — scope colliding class names across per-page stylesheets
 ├── mimeTypes.ts         — extension → MIME fallback for FileMap entries that carry no MIME type (e.g. ZIP)
 ├── assetPlan.ts         — normalise URL props in node fragments + CSS url(); resolve @font-face; collect assets
@@ -89,6 +90,9 @@ User drops files / folder / .zip / CMS bundle JSON
     │                                                                │
     │   extractRootColorTokens(rules)                                │
     │   → rules (minus :root color props) + ImportColorToken[]       │
+    │                                                                │
+    │   extractRootFontTokens(rules)                                 │
+    │   → rules (minus :root --font-* props) + ImportFontToken[]     │
     └────────────────────────────────────────────────────────────────┘
             │
     scopeCollidingClasses(pagePlans, cssFileResults)
@@ -284,9 +288,12 @@ On success the same step switches to its **complete** state — a success mark, 
 - [docs/reference/page-tree.md](../reference/page-tree.md) — `NodeTree<PageNode>`, `ImportFragment` shape
 - [docs/reference/typebox-patterns.md](../reference/typebox-patterns.md) — boundary validation
 - Source-of-truth files:
-  - `src/core/siteImport/types.ts` — `ImportPlan`, `ImportResult`, `ImportWarning`, error classes
+  - `src/core/siteImport/types.ts` — `ImportPlan`, `ImportResult`, `ImportWarning`, `ImportFontToken`, `ImportColorToken`, error classes
   - `src/core/siteImport/applyImport.ts` — `buildImportPlan`, `commitImportPlan`
   - `src/core/siteImport/adapter.ts` — `SiteImportAdapter`, `SiteImportTransaction` interfaces
+  - `src/core/siteImport/colorTokens.ts` — `extractRootColorTokens`
+  - `src/core/siteImport/fontTokens.ts` — `extractRootFontTokens`
+  - `src/core/siteImport/conflicts.ts` — `detectConflicts`, `applyConflictResolutions`
   - `src/admin/modals/SiteImport/SiteImportModal.tsx` — wizard shell
   - `src/admin/modals/SiteImport/steps/AnalyzeStep.tsx` — category navigator + detail panes
 - Gate tests:

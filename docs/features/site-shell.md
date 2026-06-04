@@ -95,29 +95,36 @@ Viewport contexts can be added / removed / reordered through Settings → Viewpo
 
 ### `SiteSettings`
 
-`src/core/page-tree/siteSettings.ts`. The site-level design tokens emitted into published CSS:
+`src/core/page-tree/siteSettings.ts`. Per-site configuration, including the design token system:
 
 ```ts
 type SiteSettings = {
-  colorTokens:        Record<string, string>     // 'primary' → '#ff7700', 'surface' → '#fff', etc.
-  typographyTokens:   { fontFamily: ..., baseSize: ..., scale: ..., headingScale: ... }
-  fonts:              { items: FontEntry[], tokens: FontToken[] }
-  spacingScale:       number[]                   // [0, 4, 8, 16, 24, 32, ...]
-  framework:          FrameworkConfig            // generated utility classes (spacing utilities)
-  containerWidth:     number                     // max-width for the publisher's `--container-width`
-  // ... more
+  metaTitle?:       string
+  metaDescription?: string
+  faviconUrl?:      string
+  fontImportUrl?:   string
+  language?:        string
+  framework?:       FrameworkSettings       // colors, typography, spacing, preferences — absent when disabled
+  fonts?:           SiteFontsSettings       // installed font library + editable font tokens
+  shortcuts:        Record<string, string>  // keyboard shortcut overrides
 }
 ```
 
-`settings.fonts.items` is the installed self-hosted font asset library (Google downloads and custom media-backed font files). `settings.fonts.tokens` is the editable builder-facing contract: each token owns a stable variable such as `font-primary`, an optional assigned `FontEntry` id, and a fallback stack. The publisher emits those as `:root { --font-primary: "Family", sans-serif; }`; editor controls should prefer `font-family: var(--font-primary)` over raw family names when the design should follow future font swaps.
+`framework` holds the structured design token system (`src/core/framework/`). When present it carries:
+- `colors.tokens` — `FrameworkColorToken[]`, each with a slug (becomes a CSS var like `--primary`), light/dark values, utility generation flags (text/background/border/fill), shade/tint variant counts.
+- `typography` — `FrameworkTypographySettings` with fluid scale groups, each emitting `font-size` vars + optional utility classes.
+- `spacing` — `FrameworkSpacingSettings` with fluid spacing scale groups, each emitting spacing vars + optional utility classes.
+- `preferences` — root font size, fluid clamp anchors, tree-shake flag.
+
+The Colors / Framework Scale / Typography panels write to these sub-trees. All values are emitted into the published `framework.css` by `buildSiteFrameworkCss(site)` via `generateFrameworkRootCss` and `generateFrameworkUtilityClasses`.
+
+`fonts` is the installed font library and font-token contract (`src/core/fonts/`). `fonts.items` is the installed self-hosted font asset library (Google downloads and custom media-backed font files). `fonts.tokens` is the editable builder-facing contract: each token owns a stable CSS variable such as `font-primary`, an optional assigned `FontEntry` id, and a fallback stack. The publisher emits those as `:root { --font-primary: "Family", sans-serif; }`; editor controls should prefer `font-family: var(--font-primary)` over raw family names when the design should follow future font swaps.
 
 **Variable normalization** (`src/admin/pages/site/store/slices/site/fontActions.ts`): the `variable` field stores a slug without the leading `--`. User input is trimmed, lowercased, and invalid character runs replaced with `-`. Leading `--` is stripped before storage. Duplicate variables within a site are rejected. Examples: `--font Brand` → `font-brand`, `Editorial` → `font-editorial`.
 
 **Rename semantics**: when `updateFontToken` changes the `variable`, `rewriteSiteFontVariableReferences` rewrites exact `var(--old-name)` occurrences across all style rules (base + context bags), every page node's inline styles, and every Visual Component tree's inline styles. Only syntactically complete `var(--name)` references are rewritten — not bare text, comments, or partial matches.
 
 **Delete semantics**: `removeFont` blocks removal of an installed font family when any token still references it via `familyId` — the caller receives `null` and must reassign or delete those tokens first. `deleteFontToken` removes the token entry but leaves existing `var(--name)` declarations as unresolved CSS rather than silently rewriting them to raw family stacks.
-
-The `--container-width`, color, typography, font-token, and spacing values are emitted into the published CSS by `buildSiteFrameworkCss(site)` and the site font CSS bundle.
 
 Editing the colors / typography / spacing in the Site → Framework / Colors / Typography panels writes back to `settings_json` and republishes the affected pages.
 
@@ -357,7 +364,8 @@ The split prevents an "all-or-nothing" save: editing the page roster doesn't ris
 import { useEditorStore } from '@site/store/store'
 
 const settings = useEditorStore((s) => s.site.settings)
-const colors   = settings.colorTokens
+const colorTokens   = settings.framework?.colors.tokens ?? []
+const fontTokens    = settings.fonts?.tokens ?? []
 ```
 
 ### Add a new viewport context
@@ -378,7 +386,7 @@ The panel rail's per-viewport canvas iframe shows up automatically when `preview
 
 ### Add a color token
 
-Settings → Colors panel adds an entry to `settings.colorTokens`. Saving updates the framework CSS (`buildSiteFrameworkCss(site)`) and republishes affected pages.
+The Site → Colors panel calls `createFrameworkColorToken(input)` on the editor store's `siteSlice`. The action writes to `settings.framework.colors.tokens`, then calls `reconcileFrameworkClasses` to sync generated utility classes. Saving updates `framework.css` via `buildSiteFrameworkCss(site)` and republishes affected pages.
 
 ### Add a site file
 
@@ -430,9 +438,13 @@ A plugin canvas module can then `import * as THREE from 'three'` and it resolves
 - [docs/reference/design-tokens.md](../reference/design-tokens.md) — editor token catalog
 - Source-of-truth files:
   - `src/core/page-tree/siteDocument.ts` — `SiteShellSchema`, `SiteDocument`, `parseSiteDocument`
-  - `src/core/page-tree/siteSettings.ts` — `SiteSettingsSchema`, `DEFAULT_SITE_SETTINGS`
+  - `src/core/page-tree/siteSettings.ts` — `SiteSettingsSchema`, `DEFAULT_SITE_SETTINGS`, `parseSiteSettings`
   - `src/core/page-tree/breakpoint.ts` — `BreakpointSchema`, `DEFAULT_BREAKPOINTS`
   - `src/core/page-tree/styleRule.ts` — `StyleRuleSchema`
+  - `src/core/framework/schemas.ts` — `FrameworkSettingsSchema`, `FrameworkColorToken`, `FrameworkColorSettings`
+  - `src/core/framework/generate.ts` — `generateFrameworkRootCss`, `generateFrameworkUtilityClasses`
+  - `src/core/fonts/schemas.ts` — `SiteFontsSettingsSchema`, `FontEntry`, `FontToken`
+  - `src/core/fonts/css.ts` — `generateFontsCss`
   - `src/core/files/schemas.ts` — `SiteFileSchema`, `SiteFileType`, `SiteFileBlobSchema`
   - `src/core/site-dependencies/manifest.ts` — `SitePackageJsonSchema`
   - `src/core/site-runtime/schemas.ts` — `SiteRuntimeConfigSchema`

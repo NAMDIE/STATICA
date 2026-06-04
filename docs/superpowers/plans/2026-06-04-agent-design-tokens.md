@@ -200,9 +200,9 @@ Font *installation* (Google/custom upload via `addFont`) stays in the UI for v1 
 
 ## Implementation order (task-by-task)
 
-1. [ ] `describeFrameworkTokens` + `describeFontTokens` (+ barrels) and their unit tests.
-2. [ ] Snapshot/PageContext token types + `ClassInfo.generated`; build them in `buildPageContext`; boundary schema; pageContext test.
-3. [ ] `list_tokens` read tool + helper + test.
+1. [x] `describeFrameworkTokens` + `describeFontTokens` (+ barrels) and their unit tests.
+2. [x] Snapshot/PageContext token types + `ClassInfo.generated`; build them in `buildPageContext`; boundary schema; pageContext test.
+3. [x] `list_tokens` read tool + helper + test.
 4. [ ] System-prompt guidance + suffix digest; update prompt-marker architecture test.
 5. [ ] Token write tools (schemas + executor handlers) + executor tests; update agent-tool-surface test.
 6. [ ] Docs (`agent.md`, `design.md`, `architecture-tests.md`).
