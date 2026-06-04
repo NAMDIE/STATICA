@@ -1,3 +1,4 @@
+import { Kbd } from '@ui/components/Kbd'
 import styles from './ModuleInserterDialog.module.css'
 
 export function ModuleInserterShortcuts() {
@@ -7,22 +8,22 @@ export function ModuleInserterShortcuts() {
       aria-label="Module inserter keyboard shortcuts"
     >
       <div className={styles.shortcutHint}>
-        <span className={styles.keycap}>↑</span>
-        <span className={styles.keycap}>↓</span>
-        <span className={styles.keycap}>←</span>
-        <span className={styles.keycap}>→</span>
+        <Kbd>↑</Kbd>
+        <Kbd>↓</Kbd>
+        <Kbd>←</Kbd>
+        <Kbd>→</Kbd>
         <span>navigate</span>
       </div>
       <div className={styles.shortcutHint}>
-        <span className={styles.keycap}>←</span>
+        <Kbd>←</Kbd>
         <span>categories</span>
-        <span className={styles.keycap}>↵</span>
+        <Kbd>↵</Kbd>
         <span>add</span>
       </div>
       <div className={styles.shortcutHint}>
-        <span className={styles.keycap}>/</span>
+        <Kbd>/</Kbd>
         <span>search</span>
-        <span className={styles.keycap}>drag</span>
+        <Kbd>drag</Kbd>
         <span>to canvas</span>
       </div>
     </div>

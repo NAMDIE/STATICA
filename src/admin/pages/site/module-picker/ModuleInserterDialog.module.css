@@ -242,21 +242,6 @@
     font-size: 12px;
 }
 
-.keycap {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 17px;
-    height: 17px;
-    padding: 0 4px;
-    border: 1px solid var(--editor-border);
-    border-radius: var(--editor-radius-sm);
-    background: var(--editor-surface-2);
-    color: var(--editor-text-secondary);
-    font-family: var(--font-mono);
-    font-size: 11px;
-}
-
 .main {
     position: relative;
     z-index: 1;
@@ -309,14 +294,8 @@
     color: var(--editor-text-subtle);
 }
 
-.closeButton.closeButton {
-    min-height: 38px;
-    height: 38px;
-    padding: 0 13px;
-    border: 1px solid var(--editor-border);
-    border-radius: var(--input-radius);
-    background: color-mix(in srgb, var(--editor-surface-2) 64%, transparent);
-    color: var(--editor-text-muted);
+.escHint {
+    justify-self: end;
 }
 
 .sectionHeader {

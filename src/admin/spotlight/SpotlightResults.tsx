@@ -29,6 +29,7 @@ import {
   rowId,
 } from './spotlightSearch'
 import { getScope } from './commandRegistry'
+import { groupAccent } from './groupAccent'
 import type { Command, CommandGroup } from './types'
 import type { ScoredCommand } from './matcher'
 import type { ArgModeState } from './state'
@@ -380,58 +381,66 @@ export function SpotlightResults({
 
       {/* Static built-in commands, grouped by CommandGroup */}
       {groups.map(({ group, label, items }) => (
-        <div key={group} role="group" aria-label={label}>
+        <div key={group} role="group" aria-label={label} data-accent={groupAccent(group)}>
           <div className={styles.groupHeader} aria-hidden="true">
-            {label}
+            <span className={styles.groupBar} />
+            <span className={styles.groupTitle}>{label}</span>
+            <span className={styles.groupCount}>{items.length} items</span>
           </div>
-          {items.map((scoredCmd) => {
-            const cmd = scoredCmd.command
-            // Look up by id rather than reference — robust to fresh command
-            // objects produced by dynamic factories like getPluginsCommands().
-            const flatIdx = mergedFlatList.findIndex((c) => c.id === cmd.id)
-            const isHighlighted = flatIdx === highlightedIndex
-            const isConfirming = pendingConfirm === cmd.id
+          <div className={styles.groupItems}>
+            {items.map((scoredCmd) => {
+              const cmd = scoredCmd.command
+              // Look up by id rather than reference — robust to fresh command
+              // objects produced by dynamic factories like getPluginsCommands().
+              const flatIdx = mergedFlatList.findIndex((c) => c.id === cmd.id)
+              const isHighlighted = flatIdx === highlightedIndex
+              const isConfirming = pendingConfirm === cmd.id
 
-            return (
-              <SpotlightRow
-                key={cmd.id}
-                id={rowId(cmd.id)}
-                command={cmd}
-                isHighlighted={isHighlighted}
-                isConfirming={isConfirming}
-                matchRanges={scoredCmd.matchRanges}
-                onHighlight={() => onHighlightChange(flatIdx)}
-                onSelect={() => onRun(cmd)}
-              />
-            )
-          })}
+              return (
+                <SpotlightRow
+                  key={cmd.id}
+                  id={rowId(cmd.id)}
+                  command={cmd}
+                  isHighlighted={isHighlighted}
+                  isConfirming={isConfirming}
+                  matchRanges={scoredCmd.matchRanges}
+                  onHighlight={() => onHighlightChange(flatIdx)}
+                  onSelect={() => onRun(cmd)}
+                />
+              )
+            })}
+          </div>
         </div>
       ))}
 
       {/* Async provider result groups — rendered in provider-definition order */}
       {asyncGroups.map(({ providerId, provider, commands }) => (
-        <div key={providerId} role="group" aria-label={provider.label}>
+        <div key={providerId} role="group" aria-label={provider.label} data-accent={groupAccent('results')}>
           <div className={styles.groupHeader} aria-hidden="true">
-            {provider.label}
+            <span className={styles.groupBar} />
+            <span className={styles.groupTitle}>{provider.label}</span>
+            <span className={styles.groupCount}>{commands.length} items</span>
           </div>
-          {commands.map((cmd) => {
-            const flatIdx = mergedFlatList.findIndex((c) => c.id === cmd.id)
-            const isHighlighted = flatIdx === highlightedIndex
-            const isConfirming = pendingConfirm === cmd.id
+          <div className={styles.groupItems}>
+            {commands.map((cmd) => {
+              const flatIdx = mergedFlatList.findIndex((c) => c.id === cmd.id)
+              const isHighlighted = flatIdx === highlightedIndex
+              const isConfirming = pendingConfirm === cmd.id
 
-            return (
-              <SpotlightRow
-                key={cmd.id}
-                id={rowId(cmd.id)}
-                command={cmd}
-                isHighlighted={isHighlighted}
-                isConfirming={isConfirming}
-                matchRanges={[]}
-                onHighlight={() => onHighlightChange(flatIdx)}
-                onSelect={() => onRun(cmd)}
-              />
-            )
-          })}
+              return (
+                <SpotlightRow
+                  key={cmd.id}
+                  id={rowId(cmd.id)}
+                  command={cmd}
+                  isHighlighted={isHighlighted}
+                  isConfirming={isConfirming}
+                  matchRanges={[]}
+                  onHighlight={() => onHighlightChange(flatIdx)}
+                  onSelect={() => onRun(cmd)}
+                />
+              )
+            })}
+          </div>
         </div>
       ))}
 

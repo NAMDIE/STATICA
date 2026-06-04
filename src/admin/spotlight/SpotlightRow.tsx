@@ -60,10 +60,10 @@ import { ListBoxSolidIcon } from 'pixel-art-icons/icons/list-box-solid'
 import { ProportionsSolidIcon } from 'pixel-art-icons/icons/proportions-solid'
 import { PowerIcon } from 'pixel-art-icons/icons/power'
 import { DockSolidIcon } from 'pixel-art-icons/icons/dock-solid'
+import { ShortcutKeys } from '@ui/components/Kbd'
 import styles from './Spotlight.module.css'
 import type { Command } from './types'
 import { getKeybindingForCommand, isPlatformMac } from './keybindings'
-import type { CommandShortcut } from './types'
 
 // ─── Icon registry ────────────────────────────────────────────────────────────
 // Maps iconName strings to pixel-art-icons components.
@@ -158,22 +158,8 @@ function HighlightedLabel({
   return <>{parts}</>
 }
 
-// ─── Shortcut hint ────────────────────────────────────────────────────────────
-
 // isPlatformMac is from the keybindings registry (single platform-detection source)
 const isMac = isPlatformMac()
-
-function ShortcutHint({ shortcut }: { shortcut: CommandShortcut }): ReactNode {
-  const label = isMac ? shortcut.mac : shortcut.win
-  const parts = label.split(/(?=[⌘⌥⌃⇧])|(?<=[\w])(?=[A-Z+])|[+]/).filter(Boolean)
-  return (
-    <span className={styles.rowShortcut} aria-hidden="true">
-      {parts.map((part, i) => (
-        <kbd key={i} className={styles.kbd}>{part}</kbd>
-      ))}
-    </span>
-  )
-}
 
 // ─── SpotlightRow ─────────────────────────────────────────────────────────────
 
@@ -249,8 +235,8 @@ export function SpotlightRow({
           </>
         )}
       </span>
-      {!isConfirming && keybinding && (
-        <ShortcutHint shortcut={keybinding.shortcut} />
+      {!isConfirming && shortcutLabel && (
+        <ShortcutKeys label={shortcutLabel} className={styles.rowShortcut} />
       )}
     </div>
   )

@@ -24,7 +24,8 @@ export function SpotlightSkeleton({ label }: SpotlightSkeletonProps): ReactNode 
   return (
     <div role="group" aria-label={label} aria-busy="true">
       <div className={styles.groupHeader} aria-hidden="true">
-        {label}
+        <span className={styles.groupBar} />
+        <span className={styles.groupTitle}>{label}</span>
       </div>
       {Array.from({ length: ROW_COUNT }, (_, i) => (
         <div key={i} className={styles.row} aria-hidden="true">

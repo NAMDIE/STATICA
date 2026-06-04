@@ -35,9 +35,9 @@ import { SpotlightFooter } from './SpotlightFooter'
 import {
   computeHighlightedRowId,
   getCommandAtIndex,
-  getMergedCommandList,
 } from './spotlightSearch'
 import { SearchSolidIcon } from 'pixel-art-icons/icons/search-solid'
+import { Kbd } from '@ui/components/Kbd'
 import styles from './Spotlight.module.css'
 import type { Command, ScopeFrame } from './types'
 
@@ -321,11 +321,6 @@ export function Spotlight({ isClosing = false }: SpotlightProps): ReactNode {
     return 'Type a command or search…'
   })()
 
-  // Count results for aria — includes both static + async provider results.
-  const resultCount = argMode
-    ? 0
-    : getMergedCommandList(query, commandContext, activeScopeId, asyncResults).length
-
   // ─── Guard — render nothing when fully closed (not during close animation) ─
 
   if (!ctx || (!isOpen && !isClosing)) return null
@@ -367,7 +362,7 @@ export function Spotlight({ isClosing = false }: SpotlightProps): ReactNode {
         {/* ── Input row ─────────────────────────────────────────────────── */}
         <div className={styles.inputRow}>
           <span className={styles.searchIcon} aria-hidden="true">
-            <SearchSolidIcon size={16} />
+            <SearchSolidIcon size={18} />
           </span>
           <input
             ref={inputRef}
@@ -388,11 +383,7 @@ export function Spotlight({ isClosing = false }: SpotlightProps): ReactNode {
             autoCorrect="off"
             spellCheck={false}
           />
-          {resultCount > 0 && (
-            <span className={styles.resultCount} aria-live="polite" aria-atomic="true">
-              {resultCount}
-            </span>
-          )}
+          <Kbd className={styles.escHint}>Esc</Kbd>
         </div>
 
         {/* ── Results ───────────────────────────────────────────────────── */}

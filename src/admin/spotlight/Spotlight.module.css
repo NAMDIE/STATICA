@@ -95,12 +95,12 @@
 
 /* ─── Input row ───────────────────────────────────────────────────────────── */
 
+/* Search row — mirrors the module inserter .searchRow / .searchField. */
 .inputRow {
     display: flex;
     align-items: center;
-    gap: 10px;
-    height: 56px;
-    padding: 0 16px;
+    gap: 12px;
+    padding: 22px 20px 16px;
     flex-shrink: 0;
 }
 
@@ -111,43 +111,54 @@
 
 .input {
     flex: 1;
+    min-width: 0;
     background: transparent;
     border: none;
     outline: none;
     font-family: var(--font-sans);
-    font-size: 16px;
-    color: var(--editor-text);
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--editor-text-bright);
     line-height: 1;
 }
 
 .input::placeholder {
-    color: var(--editor-text-muted);
+    color: var(--editor-text-subtle);
 }
 
-.resultCount {
+.escHint {
     flex-shrink: 0;
-    font-size: 11px;
-    color: var(--editor-text-subtle);
-    background: var(--spotlight-group-header-fg);
-    opacity: 0.4;
-    min-width: 18px;
-    height: 18px;
-    border-radius: 9px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0 4px;
 }
 
 /* ─── Results list ────────────────────────────────────────────────────────── */
 
 .results {
+    --spotlightAccent: var(--rail-tint-lilac);
+
     flex: 1;
     overflow-y: auto;
     overscroll-behavior: contain;
-    padding: 4px 0;
+    padding: 8px;
     min-height: 0;
     overflow-x: hidden;
+}
+
+/* Categorical group accents — mirrors the module inserter rail tints. */
+.results [data-accent="mint"] { --spotlightAccent: var(--rail-tint-mint); }
+.results [data-accent="lilac"] { --spotlightAccent: var(--rail-tint-lilac); }
+.results [data-accent="sky"] { --spotlightAccent: var(--rail-tint-sky); }
+.results [data-accent="peach"] { --spotlightAccent: var(--rail-tint-peach); }
+.results [data-accent="rose"] { --spotlightAccent: var(--rail-tint-rose); }
+.results [data-accent="lime"] { --spotlightAccent: var(--rail-tint-lime); }
+.results [data-accent="gold"] { --spotlightAccent: var(--rail-tint-gold); }
+.results [data-accent="cyan"] { --spotlightAccent: var(--rail-tint-cyan); }
+.results [data-accent="violet"] { --spotlightAccent: var(--rail-tint-violet); }
+.results [data-accent="coral"] { --spotlightAccent: var(--rail-tint-coral); }
+
+/* Cards within a group are separated by a hairline gap (panel bg shows through). */
+.groupItems {
+    display: grid;
+    gap: 1px;
 }
 
 /* Scope push: new list slides in from the right */
@@ -184,17 +195,39 @@
 
 /* ─── Group header ────────────────────────────────────────────────────────── */
 
+/* Mirrors the module inserter section header (.sectionHeader). */
 .groupHeader {
-    height: 28px;
     display: flex;
     align-items: center;
-    padding: 0 16px;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--spotlight-group-header-fg);
+    gap: 9px;
+    min-height: 32px;
+    padding: 4px 8px 6px;
     user-select: none;
+}
+
+/* First group sits flush with the top padding. */
+.results > [role="group"]:not(:first-child) .groupHeader,
+.results > .groupItems:not(:first-child) {
+    margin-top: 6px;
+}
+
+.groupBar {
+    width: 4px;
+    height: 18px;
+    border-radius: var(--editor-radius-sm);
+    background: var(--spotlightAccent);
+    flex-shrink: 0;
+}
+
+.groupTitle {
+    color: var(--editor-text-bright);
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.groupCount {
+    color: var(--editor-text-muted);
+    font-size: 12px;
 }
 
 /* ─── Scope breadcrumb ────────────────────────────────────────────────────── */
@@ -204,7 +237,7 @@
     align-items: center;
     gap: 4px;
     height: 28px;
-    padding: 0 16px;
+    padding: 0 10px 6px;
     font-size: 12px;
     color: var(--editor-text-secondary);
     font-weight: 500;
@@ -227,18 +260,26 @@
 .row {
     display: flex;
     align-items: center;
-    gap: 10px;
-    height: 44px;
-    margin: 0 6px;
-    padding: 0 10px;
-    border-radius: var(--editor-radius);
+    gap: 11px;
+    min-height: 48px;
+    padding: 0 12px;
+    border-radius: var(--panel-radius);
+    background: var(--editor-surface-3);
     cursor: pointer;
-    transition: background 60ms ease-out;
+    transition: background 160ms ease;
     user-select: none;
 }
 
+.row:hover {
+    background: var(--editor-surface-4);
+}
+
 .rowHighlighted {
-    background: var(--spotlight-row-selected-bg);
+    background: var(--editor-surface-4);
+}
+
+.row:active {
+    background: var(--editor-surface-5);
 }
 
 .rowDestructive .rowLabel {
@@ -246,6 +287,11 @@
 }
 
 .rowDestructive .rowIcon {
+    color: var(--spotlight-destructive-fg);
+    background: color-mix(in srgb, var(--spotlight-destructive-fg) 14%, transparent);
+}
+
+.rowDestructive .rowIcon svg {
     color: var(--spotlight-destructive-fg);
 }
 
@@ -256,6 +302,7 @@
 
 .rowConfirming .rowIcon {
     color: var(--spotlight-destructive-fg);
+    background: color-mix(in srgb, var(--spotlight-destructive-fg) 14%, transparent);
 }
 
 .confirmText {
@@ -264,14 +311,36 @@
     font-size: 13px;
 }
 
+/* Accent-tinted icon chip — mirrors the module inserter section icons. */
 .rowIcon {
     flex-shrink: 0;
-    color: var(--editor-text-secondary);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 16px;
-    height: 16px;
+    display: inline-grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--editor-radius);
+    color: var(--spotlightAccent);
+    background: color-mix(in srgb, var(--spotlightAccent) 13%, transparent);
+}
+
+.rowIcon svg {
+    color: var(--spotlightAccent);
+}
+
+.rowHighlighted .rowIcon {
+    background: color-mix(in srgb, var(--spotlightAccent) 22%, transparent);
+}
+
+/* Destructive rows keep their red tint on hover/highlight — never the accent. */
+.rowHighlighted.rowDestructive .rowIcon,
+.row.rowDestructive:hover .rowIcon {
+    color: var(--spotlight-destructive-fg);
+    background: color-mix(in srgb, var(--spotlight-destructive-fg) 22%, transparent);
+}
+
+/* Empty icon slot (e.g. arg-mode select options) stays an unfilled spacer. */
+.rowIcon:empty {
+    background: transparent;
 }
 
 .rowContent {
@@ -284,6 +353,7 @@
 
 .rowLabel {
     font-size: 14px;
+    font-weight: 600;
     color: var(--editor-text);
     white-space: nowrap;
     overflow: hidden;
@@ -305,22 +375,6 @@
     display: flex;
     align-items: center;
     gap: 2px;
-}
-
-.kbd {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 20px;
-    height: 18px;
-    padding: 0 4px;
-    background: var(--editor-surface-3);
-    border: 1px solid var(--editor-border);
-    border-radius: var(--editor-radius-sm);
-    font-family: var(--font-sans);
-    font-size: 11px;
-    color: var(--editor-text-secondary);
-    line-height: 1;
 }
 
 /* Match highlight — <mark> inside row labels */
@@ -393,7 +447,7 @@
     align-items: center;
     gap: 6px;
     height: 36px;
-    padding: 0 16px;
+    padding: 0 10px;
     font-size: 12px;
     flex-shrink: 0;
 }
@@ -419,7 +473,7 @@
     align-items: center;
     gap: 8px;
     height: 36px;
-    padding: 0 16px;
+    padding: 0 12px;
     opacity: 0.5;
 }
 
@@ -428,11 +482,10 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    height: 44px;
-    margin: 0 6px;
-    padding: 0 10px;
-    border-radius: var(--editor-radius);
-    background: var(--spotlight-row-selected-bg);
+    min-height: 48px;
+    padding: 0 12px;
+    border-radius: var(--panel-radius);
+    background: var(--editor-surface-4);
 }
 
 .argRowGlyph {
@@ -469,7 +522,9 @@
 
 /* Select type options container */
 .argSelectOptions {
-    padding: 4px 0;
+    display: grid;
+    gap: 1px;
+    padding: 6px 0 0;
 }
 
 /* ─── Live region (visually hidden, for screen reader announcements) ──────── */

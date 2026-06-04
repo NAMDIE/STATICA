@@ -5,6 +5,7 @@
  */
 
 import type { ReactNode } from 'react'
+import { Kbd } from '@ui/components/Kbd'
 import styles from './Spotlight.module.css'
 
 interface SpotlightFooterProps {
@@ -46,7 +47,7 @@ export function SpotlightFooter({ isArgMode, hasScopeStack }: SpotlightFooterPro
       {hints.map((hint, i) => (
         <span key={hint.keys} className={styles.footerHint}>
           {i > 0 && <span className={styles.footerSeparator}>·</span>}
-          <kbd className={styles.kbd}>{hint.keys}</kbd>
+          <Kbd>{hint.keys}</Kbd>
           <span>{hint.label}</span>
         </span>
       ))}

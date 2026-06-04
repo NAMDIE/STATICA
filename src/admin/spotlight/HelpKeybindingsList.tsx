@@ -12,6 +12,7 @@
  */
 
 import { type ReactNode } from 'react'
+import { ShortcutKeys } from '@ui/components/Kbd'
 import { KEYBINDINGS, isPlatformMac } from './keybindings'
 import type { KeybindingDefinition } from './keybindings'
 import { getAllCommands } from './commandRegistry'
@@ -28,23 +29,6 @@ const SCOPE_LABELS: Record<Scope, string> = {
   editor:  'Editor',
   canvas:  'Canvas',
   panels:  'Panels',
-}
-
-// ─── Shortcut badge ───────────────────────────────────────────────────────────
-// Splits a shortcut label on modifier symbols and "+" separators for display.
-
-function ShortcutBadge({ label }: { label: string }): ReactNode {
-  // Split on modifier symbols, or between alphanumeric and uppercase transitions.
-  const parts = label
-    .split(/(?=[⌘⌥⌃⇧])|(?<=[\w])(?=[A-Z+])|[+]/)
-    .filter(Boolean)
-  return (
-    <span className={styles.shortcutHint} aria-hidden="true">
-      {parts.map((part, i) => (
-        <kbd key={i} className={styles.kbd}>{part}</kbd>
-      ))}
-    </span>
-  )
 }
 
 // ─── HelpKeybindingsList ──────────────────────────────────────────────────────
@@ -91,7 +75,7 @@ export function HelpKeybindingsList(): ReactNode {
               return (
                 <div key={kb.commandId} className={styles.row}>
                   <span className={styles.rowTitle}>{title}</span>
-                  <ShortcutBadge label={shortcutLabel} />
+                  <ShortcutKeys label={shortcutLabel} className={styles.shortcutHint} />
                 </div>
               )
             })}

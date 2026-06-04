@@ -19,13 +19,13 @@ import {
 } from '@site/canvas/canvasDnd'
 import { Button } from '@ui/components/Button'
 import { EmptyState } from '@ui/components/EmptyState'
+import { Kbd } from '@ui/components/Kbd'
 import { SearchBar } from '@ui/components/SearchBar'
 import { SegmentedControl } from '@ui/components/SegmentedControl'
 import { cn } from '@ui/cn'
 import { AppGridPlusGlyphIcon } from 'pixel-art-icons/icons/app-grid-plus-glyph'
 import { BoxStackSolidIcon } from 'pixel-art-icons/icons/box-stack-solid'
 import { CalendarSolidIcon } from 'pixel-art-icons/icons/calendar-solid'
-import { CloseIcon } from 'pixel-art-icons/icons/close'
 import { GlobeSolidIcon } from 'pixel-art-icons/icons/globe-solid'
 import { Grid2x22SolidIcon } from 'pixel-art-icons/icons/grid-2x2-2-solid'
 import { LayoutSolidIcon } from 'pixel-art-icons/icons/layout-solid'
@@ -511,17 +511,7 @@ export function ModuleInserterDialog({
               aria-label="Search modules"
               className={styles.searchField}
             />
-            <Button
-              variant="secondary"
-              size="sm"
-              className={styles.closeButton}
-              onClick={onClose}
-              aria-label="Close module inserter"
-              tooltip="Close"
-            >
-              <CloseIcon size={12} aria-hidden="true" />
-              Esc
-            </Button>
+            <Kbd className={styles.escHint}>Esc</Kbd>
           </div>
 
           <div className={styles.sectionHeader} data-accent={selectedSection.accent}>
