@@ -29,6 +29,12 @@ export interface ConversationRecord {
   /** Anthropic prompt-cache visibility — see migration 009_ai_cache_tokens. */
   readonly cacheReadTokensTotal: number
   readonly cacheCreationTokensTotal: number
+  /**
+   * Provider-normalised total input the model processed on the LATEST turn —
+   * a "how full is the context now" snapshot (overwritten per turn, not a
+   * running total). Feeds the composer context meter on reload.
+   */
+  readonly contextTokens: number
   readonly createdAt: string
   readonly updatedAt: string
   readonly deletedAt: string | null
@@ -68,6 +74,8 @@ export interface ConversationView {
   readonly costUsdTotal: number
   readonly cacheReadTokensTotal: number
   readonly cacheCreationTokensTotal: number
+  /** Current-context snapshot — see ConversationRecord.contextTokens. */
+  readonly contextTokens: number
   readonly createdAt: string
   readonly updatedAt: string
 }

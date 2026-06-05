@@ -56,6 +56,7 @@ interface ConversationRow {
   cost_usd_total: number | string
   cache_read_tokens_total: number | string
   cache_creation_tokens_total: number | string
+  context_tokens: number | string
   created_at: Date | string
   updated_at: Date | string
   deleted_at: Date | string | null
@@ -96,6 +97,7 @@ function conversationRowToRecord(row: ConversationRow): ConversationRecord {
     costUsdTotal: toNumber(row.cost_usd_total),
     cacheReadTokensTotal: toNumber(row.cache_read_tokens_total),
     cacheCreationTokensTotal: toNumber(row.cache_creation_tokens_total),
+    contextTokens: toNumber(row.context_tokens),
     createdAt: isoDateOrNull(row.created_at)!,
     updatedAt: isoDateOrNull(row.updated_at)!,
     deletedAt: isoDateOrNull(row.deleted_at),
@@ -153,6 +155,7 @@ export function toConversationView(record: ConversationRecord): ConversationView
     costUsdTotal: record.costUsdTotal,
     cacheReadTokensTotal: record.cacheReadTokensTotal,
     cacheCreationTokensTotal: record.cacheCreationTokensTotal,
+    contextTokens: record.contextTokens,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   }
@@ -196,7 +199,8 @@ export async function listConversationsForUserScope(
   const { rows } = await db<ConversationRow>`
     select id, user_id, scope, title, credential_id, model_id,
            prompt_tokens_total, completion_tokens_total,
-           cost_usd_total, cache_read_tokens_total, cache_creation_tokens_total, created_at, updated_at, deleted_at
+           cost_usd_total, cache_read_tokens_total, cache_creation_tokens_total,
+           context_tokens, created_at, updated_at, deleted_at
     from ai_conversations
     where user_id = ${userId}
       and scope = ${scope}
@@ -218,7 +222,8 @@ export async function readConversationForUser(
   const { rows } = await db<ConversationRow>`
     select id, user_id, scope, title, credential_id, model_id,
            prompt_tokens_total, completion_tokens_total,
-           cost_usd_total, cache_read_tokens_total, cache_creation_tokens_total, created_at, updated_at, deleted_at
+           cost_usd_total, cache_read_tokens_total, cache_creation_tokens_total,
+           context_tokens, created_at, updated_at, deleted_at
     from ai_conversations
     where id = ${conversationId}
       and user_id = ${userId}
@@ -274,7 +279,8 @@ export async function createConversationForUser(
     )
     returning id, user_id, scope, title, credential_id, model_id,
               prompt_tokens_total, completion_tokens_total,
-              cost_usd_total, cache_read_tokens_total, cache_creation_tokens_total, created_at, updated_at, deleted_at
+              cost_usd_total, cache_read_tokens_total, cache_creation_tokens_total,
+           context_tokens, created_at, updated_at, deleted_at
   `
   return conversationRowToRecord(rows[0]!)
 }
@@ -306,7 +312,8 @@ export async function updateConversationForUser(
     where id = ${conversationId} and user_id = ${userId}
     returning id, user_id, scope, title, credential_id, model_id,
               prompt_tokens_total, completion_tokens_total,
-              cost_usd_total, cache_read_tokens_total, cache_creation_tokens_total, created_at, updated_at, deleted_at
+              cost_usd_total, cache_read_tokens_total, cache_creation_tokens_total,
+           context_tokens, created_at, updated_at, deleted_at
   `
   return rows[0] ? conversationRowToRecord(rows[0]) : null
 }

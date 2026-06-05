@@ -15,6 +15,8 @@ import {
   readCredentialForUser,
   resolveCredentialForDriver,
 } from '../credentials/store'
+import { getModelCatalogue, pricingKey } from '../pricing'
+import type { AiProviderModel } from '../drivers/types'
 import type { AiProviderId } from '../runtime/types'
 
 const VALID_PROVIDERS: AiProviderId[] = ['anthropic', 'openai', 'ollama', 'openrouter']
@@ -53,8 +55,9 @@ async function handleModels(
 
   // Optional credential — when the picker has one selected, decrypt it
   // so the driver can hit the real model-list endpoint. Without one, we
-  // pass a placeholder credential and the driver returns its static
-  // fallback list.
+  // pass a placeholder credential; the key-based providers (Anthropic,
+  // OpenAI) then return an empty list — there is no static fallback, so the
+  // picker stays empty until a credential is chosen.
   const credentialId = url.searchParams.get('credentialId')
   let resolved
   if (credentialId) {
@@ -79,5 +82,33 @@ async function handleModels(
   }
 
   const models = await driver.listModels(resolved)
-  return jsonResponse({ models })
+  // Anthropic + OpenAI list models without prices or context windows (their
+  // APIs omit both). Enrich from the live OpenRouter catalogue — the same
+  // source the cost path uses. OpenRouter self-populates from its own fetch
+  // and Ollama is free/self-hosted, so neither is enriched here.
+  const enriched =
+    providerId === 'anthropic' || providerId === 'openai'
+      ? await enrichFromCatalogue(db, models)
+      : models
+  return jsonResponse({ models: enriched })
+}
+
+async function enrichFromCatalogue(
+  db: DbClient,
+  models: AiProviderModel[],
+): Promise<AiProviderModel[]> {
+  const catalogue = await getModelCatalogue(db)
+  if (catalogue.size === 0) return models
+  return models.map((model) => {
+    const entry = catalogue.get(pricingKey(model.id))
+    if (!entry) return model
+    return {
+      ...model,
+      pricing: {
+        inputPerMTok: entry.prices.inputPerMTok,
+        outputPerMTok: entry.prices.outputPerMTok,
+      },
+      ...(entry.contextWindow !== null ? { contextWindow: entry.contextWindow } : {}),
+    }
+  })
 }

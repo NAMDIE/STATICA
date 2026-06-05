@@ -21,10 +21,12 @@ import type {
   AiMessage,
   AiProviderId,
   AiStreamEvent,
+  AiToolOutput,
 } from '../runtime/types'
 import type {
   AiProvider,
   AiProviderModel,
+  AiResolvedCredential,
   AiStreamRequest,
 } from './types'
 import { runToolLoop, type ProviderAdapter, type TurnResult, type TurnToolCall, type TurnToolResult, type TurnTranslator, type TurnUsage } from './http/toolLoop'
@@ -32,7 +34,9 @@ import type { SseFrame } from './http/sse'
 
 const SUPPORTED_AUTH_MODES: AiAuthMode[] = ['apiKey']
 
-const ANTHROPIC_ENDPOINT = 'https://api.anthropic.com/v1/messages'
+const ANTHROPIC_BASE_URL = 'https://api.anthropic.com/v1'
+const ANTHROPIC_ENDPOINT = `${ANTHROPIC_BASE_URL}/messages`
+const ANTHROPIC_MODELS_ENDPOINT = `${ANTHROPIC_BASE_URL}/models`
 const ANTHROPIC_VERSION = '2023-06-01'
 const SYSTEM_PROMPT_DYNAMIC_BOUNDARY = '__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__'
 
@@ -42,59 +46,26 @@ const SYSTEM_PROMPT_DYNAMIC_BOUNDARY = '__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__'
 // work continues across loop iterations, not within one response.
 const MAX_OUTPUT_TOKENS = 8192
 
-// Static model list — current as of May 2026. Updating this in lockstep with
-// provider releases is a known maintenance cost; the alternative (hitting
-// `client.models.list` on every model-picker open) is too slow. Same
-// maintenance pattern as `server/ai/pricing.ts`.
-//
-// Sources:
-//   - https://platform.claude.com/docs/en/about-claude/models/overview
-//   - https://github.com/anthropics/skills/blob/main/skills/claude-api/shared/models.md
-const MODELS: AiProviderModel[] = [
-  {
-    id: 'claude-opus-4-7',
-    label: 'Claude Opus 4.7',
-    tier: 'smartest',
-    capabilities: { toolCalling: true, visionInput: true, promptCache: true, streaming: true },
-  },
-  {
-    id: 'claude-opus-4-6',
-    label: 'Claude Opus 4.6',
-    tier: 'smart',
-    capabilities: { toolCalling: true, visionInput: true, promptCache: true, streaming: true },
-  },
-  {
-    id: 'claude-sonnet-4-6',
-    label: 'Claude Sonnet 4.6',
-    tier: 'balanced',
-    capabilities: { toolCalling: true, visionInput: true, promptCache: true, streaming: true },
-  },
-  {
-    id: 'claude-haiku-4-5',
-    label: 'Claude Haiku 4.5',
-    tier: 'fast',
-    capabilities: { toolCalling: true, visionInput: true, promptCache: true, streaming: true },
-  },
-]
-
 export const anthropicDriver: AiProvider = {
   id: 'anthropic' as AiProviderId,
   label: 'Anthropic',
   supportedAuthModes: SUPPORTED_AUTH_MODES,
 
-  capabilities(modelId: string) {
-    const model = MODELS.find((m) => m.id === modelId)
-    return model?.capabilities ?? {
+  capabilities(_modelId: string) {
+    // Every current Claude model tool-calls, accepts images, and supports
+    // prompt caching. The picker shows the per-model flags from listModels();
+    // this sync accessor only needs a safe default for the tool loop's vision
+    // check, so it doesn't depend on the live catalogue.
+    return {
       toolCalling: true,
-      visionInput: false,
+      visionInput: true,
       promptCache: true,
       streaming: true,
     }
   },
 
-  async listModels(_creds) {
-    // Static list for v1 — see the comment on MODELS above.
-    return MODELS
+  async listModels(creds) {
+    return fetchAnthropicModels(creds)
   },
 
   async *stream(req: AiStreamRequest): AsyncIterable<AiStreamEvent> {
@@ -111,6 +82,88 @@ export const anthropicDriver: AiProvider = {
     }
     yield* runToolLoop(anthropicAdapter, req)
   },
+}
+
+// ---------------------------------------------------------------------------
+// Live model catalogue — GET /v1/models
+// ---------------------------------------------------------------------------
+
+const AnthropicCapabilityFlagSchema = Type.Object(
+  { supported: Type.Optional(Type.Boolean()) },
+  { additionalProperties: true },
+)
+
+const AnthropicModelInfoSchema = Type.Object(
+  {
+    id: Type.String(),
+    display_name: Type.Optional(Type.String()),
+    capabilities: Type.Optional(
+      Type.Object(
+        { image_input: Type.Optional(AnthropicCapabilityFlagSchema) },
+        { additionalProperties: true },
+      ),
+    ),
+  },
+  { additionalProperties: true },
+)
+
+const AnthropicModelsResponseSchema = Type.Object(
+  { data: Type.Array(AnthropicModelInfoSchema) },
+  { additionalProperties: true },
+)
+
+/**
+ * Fetch the live model catalogue from `GET /v1/models` (newest-first) so
+ * freshly-released models surface without any code change. This is the only
+ * source — there is no static fallback:
+ *   - no API key ⇒ no catalogue, return an empty list (the picker shows nothing
+ *     until a credential is selected); and
+ *   - a failed request or unparseable body throws, so the caller surfaces the
+ *     error rather than masking it with a stale hardcoded list.
+ */
+async function fetchAnthropicModels(creds: AiResolvedCredential): Promise<AiProviderModel[]> {
+  if (creds.authMode !== 'apiKey' || !creds.apiKey) return []
+
+  const res = await fetch(`${ANTHROPIC_MODELS_ENDPOINT}?limit=1000`, {
+    headers: {
+      'x-api-key': creds.apiKey,
+      'anthropic-version': ANTHROPIC_VERSION,
+    },
+  })
+  if (!res.ok) {
+    throw new Error(`[ai/anthropic] models request failed: ${res.status} ${res.statusText}`)
+  }
+  // Validate the external API body at the boundary (no `as` cast).
+  const parsed = parseValue(AnthropicModelsResponseSchema, await res.json())
+
+  // The API lists models newest-first but carries no "tier" field, so derive
+  // one from the family. The first (newest) Opus is the "smartest"; later
+  // Opus entries are "smart". This mirrors the picker's existing badges.
+  let opusSeen = false
+  return parsed.data.map((model) => {
+    const family = deriveTier(model.id, opusSeen)
+    if (family.isOpus) opusSeen = true
+    return {
+      id: model.id,
+      label: model.display_name ?? model.id,
+      tier: family.tier,
+      capabilities: {
+        toolCalling: true,
+        // Default to true when the flag is absent — every current Claude
+        // model accepts image input; only honour an explicit `false`.
+        visionInput: model.capabilities?.image_input?.supported ?? true,
+        promptCache: true,
+        streaming: true,
+      },
+    } satisfies AiProviderModel
+  })
+}
+
+function deriveTier(modelId: string, opusAlreadySeen: boolean): { tier: string | undefined; isOpus: boolean } {
+  if (modelId.includes('opus')) return { tier: opusAlreadySeen ? 'smart' : 'smartest', isOpus: true }
+  if (modelId.includes('sonnet')) return { tier: 'balanced', isOpus: false }
+  if (modelId.includes('haiku')) return { tier: 'fast', isOpus: false }
+  return { tier: undefined, isOpus: false }
 }
 
 // ---------------------------------------------------------------------------
@@ -135,7 +188,10 @@ interface AnthropicToolUseBlock {
 interface AnthropicToolResultBlock {
   type: 'tool_result'
   tool_use_id: string
-  content: string
+  // Anthropic tool_result content accepts either a plain string or an array of
+  // text/image blocks — the latter lets a tool return a screenshot as a NATIVE
+  // image (≈1.5K tokens) instead of base64-as-JSON-text (hundreds of KB → 1M+).
+  content: string | (AnthropicTextBlock | AnthropicImageBlock)[]
   is_error?: boolean
 }
 type AnthropicContentBlock =
@@ -311,9 +367,20 @@ function buildToolResultMessage(results: TurnToolResult[]): AnthropicMessage {
   }
 }
 
-function toolOutputToContent(output: { ok: boolean; data?: unknown; error?: string }): string {
-  if (output.ok) return JSON.stringify(output.data ?? { ok: true })
-  return output.error ?? 'Tool call failed.'
+function toolOutputToContent(
+  output: AiToolOutput,
+): string | (AnthropicTextBlock | AnthropicImageBlock)[] {
+  if (!output.ok) return output.error ?? 'Tool call failed.'
+  const text = JSON.stringify(output.data ?? { ok: true })
+  if (!output.images || output.images.length === 0) return text
+  // Mixed content: the JSON payload as text + each attached image as a native
+  // image block. Anthropic bills the image at its rendered token cost, not the
+  // base64 length, so this is the whole point of the multimodal channel.
+  const blocks: (AnthropicTextBlock | AnthropicImageBlock)[] = [{ type: 'text', text }]
+  for (const img of output.images) {
+    blocks.push({ type: 'image', source: { type: 'base64', media_type: img.mimeType, data: img.data } })
+  }
+  return blocks
 }
 
 // ---------------------------------------------------------------------------

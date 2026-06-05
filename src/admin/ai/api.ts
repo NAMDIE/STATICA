@@ -77,6 +77,13 @@ const ModelSchema = Type.Object({
     streaming: Type.Boolean(),
   }),
   tier: Type.Optional(Type.String()),
+  /** Per-million-token list prices, shown inline in the picker. */
+  pricing: Type.Optional(Type.Object({
+    inputPerMTok: Type.Number(),
+    outputPerMTok: Type.Number(),
+  })),
+  /** Max context window (total tokens) — feeds the composer context meter. */
+  contextWindow: Type.Optional(Type.Number()),
 })
 export type AiModel = Static<typeof ModelSchema>
 
@@ -104,6 +111,8 @@ export const ConversationViewSchema = Type.Object({
   costUsdTotal: Type.Number(),
   cacheReadTokensTotal: Type.Number(),
   cacheCreationTokensTotal: Type.Number(),
+  /** Current-context snapshot for the composer meter (latest turn). */
+  contextTokens: Type.Number(),
   createdAt: Type.String(),
   updatedAt: Type.String(),
 })

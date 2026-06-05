@@ -98,8 +98,7 @@ export function SelectMenu({
       aria-labelledby={ariaLabelledBy}
       role="listbox"
       onClose={onClose}
-    >
-      {searchable && (
+      header={searchable ? (
         <MenuSearchHeader
           inputRef={searchInputRef}
           value={query}
@@ -109,8 +108,8 @@ export function SelectMenu({
           controls={menuId}
           activeOptionId={activeOptionId}
         />
-      )}
-
+      ) : undefined}
+    >
       {options.length === 0 ? (
         <div className={styles.emptyOption} role="presentation">
           No matches

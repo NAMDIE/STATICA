@@ -69,33 +69,62 @@
 }
 
 /* ── Menu rows ─────────────────────────────────────────────────────────── */
+/* Non-interactive group header row. Aligned to the item text inset; rendered
+   as a plain element so it isn't dimmed by the disabled-Button opacity. */
+.groupHeaderRow {
+    padding: 6px 9px 3px;
+}
+
 .groupHeader {
     font-size: 10px;
     font-weight: 600;
-    color: var(--editor-text-muted);
+    color: var(--editor-text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.04em;
 }
 
 .groupProvider {
-    color: var(--editor-text-subtle);
+    color: var(--editor-text-muted);
     font-weight: 400;
     text-transform: none;
     letter-spacing: 0;
 }
 
+/* Label takes the available width; the meta cluster keeps its natural size.
+   Ellipsis is only a last-resort safety — the wider menu fits full names. */
 .modelLabel {
+    flex: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.modelTier {
-    color: var(--editor-text-subtle);
-    font-size: 9px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+/* Right-aligned meta cluster: price + context window. Pushed to the trailing
+   edge so model labels stay left-aligned and scannable. */
+.modelMeta {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 10px;
     margin-inline-start: auto;
+    padding-inline-start: 12px;
+    flex-shrink: 0;
+}
+
+/* Readable secondary text (not the dim muted/subtle tones) — these carry real
+   information, so they need clear contrast against the menu surface. */
+.modelPrice {
+    color: var(--editor-text-secondary);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.modelContext {
+    color: var(--editor-text-secondary);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
 .emptyOption {

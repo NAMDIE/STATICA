@@ -26,7 +26,7 @@ import { useRef, useEffect, memo } from 'react'
 import { useAgentStore } from '@admin/ai/useAgentStore'
 import { useAsyncResource } from '@admin/lib/useAsyncResource'
 import { useAdminNavigate } from '@admin/lib/useAdminNavigate'
-import { listCredentials } from '@admin/ai/api'
+import { listCredentials, listModels } from '@admin/ai/api'
 import { renderMarkdownToHtml, type AgentMessage, type AgentToolCall } from '@site/agent'
 import { TrashSolidIcon } from 'pixel-art-icons/icons/trash-solid'
 import { SquareSolidIcon } from 'pixel-art-icons/icons/square-solid'
@@ -46,6 +46,7 @@ import { useDraggablePanel } from '@site/hooks/useDraggablePanel'
 import { cn } from '@ui/cn'
 import { ModelPicker } from './ModelPicker'
 import { ConversationHistory } from './ConversationHistory'
+import { ContextMeter } from './ContextMeter'
 import styles from './AgentPanel.module.css'
 
 const PANEL_WIDTH = 320
@@ -84,6 +85,25 @@ export function AgentPanel({ variant = 'floating' }: { variant?: PanelVariant })
   const noCredentials = credentialsLoaded && credentials.length === 0
   const noProviderError = agentError?.startsWith('No AI provider configured') ?? false
   const showCredentialSetup = noCredentials || noProviderError
+
+  // Resolve the active model's context window from the catalogue (via the
+  // models endpoint) so the composer meter can show "0 / window" before the
+  // first turn. Re-runs whenever the selected credential/model changes; null
+  // until a model is picked, or when the provider has no published window
+  // (Ollama / uncatalogued) — the meter then stays hidden.
+  const activeCredentialId = useAgentStore((s) => s.agentActiveCredentialId)
+  const activeModelId = useAgentStore((s) => s.agentActiveModelId)
+  const activeProviderId =
+    credentials.find((c) => c.id === activeCredentialId)?.providerId ?? null
+  const contextWindowResource = useAsyncResource(
+    async () => {
+      if (!activeProviderId || !activeCredentialId || !activeModelId) return null
+      const models = await listModels(activeProviderId, activeCredentialId)
+      return models.find((m) => m.id === activeModelId)?.contextWindow ?? null
+    },
+    [activeProviderId, activeCredentialId, activeModelId],
+    { swallowErrors: true },
+  )
 
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const threadRef = useRef<HTMLDivElement>(null)
@@ -252,6 +272,9 @@ export function AgentPanel({ variant = 'floating' }: { variant?: PanelVariant })
 
       {/* ── Input bar ───────────────────────────────────────────────────────── */}
       <div className={styles.inputBar}>
+        {/* Live context-window meter — renders once the active model's window
+            is known (pre-turn shows 0 / window). */}
+        <ContextMeter windowTokens={contextWindowResource.data} />
         <form onSubmit={handleSubmit} className={styles.inputForm}>
           {/* Textarea is hidden while streaming — the controls row collapses
               to just the model picker + Stop button. */}

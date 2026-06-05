@@ -97,6 +97,15 @@ export interface AgentSlice {
   agentActiveModelId: string | null
   /** Conversation summaries for the history popover. */
   agentConversations: ConversationView[]
+  /**
+   * "Context used" for the composer meter — the provider-normalised total
+   * input the model processed on the latest turn. Hydrated from the persisted
+   * conversation snapshot on load, updated live from each turn's `usage` event,
+   * and null for a fresh conversation with no turns yet (the meter then shows
+   * 0 against the window). The window half is resolved separately by the view
+   * layer from the model catalogue.
+   */
+  agentContextTokens: number | null
 
   // ── Actions ────────────────────────────────────────────────────────────────
   openAgent(): void
@@ -246,6 +255,7 @@ export function createAgentSlice(
     agentActiveCredentialId: null,
     agentActiveModelId: null,
     agentConversations: [],
+    agentContextTokens: null,
 
     // ── UI actions ───────────────────────────────────────────────────────────
     openAgent() {
@@ -275,6 +285,7 @@ export function createAgentSlice(
         agentConversationId: null,
         agentActiveCredentialId: null,
         agentActiveModelId: null,
+        agentContextTokens: null,
       })
     },
 
@@ -287,6 +298,7 @@ export function createAgentSlice(
         agentConversationId: null,
         agentActiveCredentialId: null,
         agentActiveModelId: null,
+        agentContextTokens: null,
       })
     },
 
@@ -308,6 +320,9 @@ export function createAgentSlice(
           agentActiveModelId: conv.modelId,
           agentMessages: rehydrateMessages(conv.messages),
           agentError: null,
+          // Restore the meter from the persisted snapshot (0 → null so the
+          // meter reads as "empty" against the window until the next turn).
+          agentContextTokens: conv.contextTokens > 0 ? conv.contextTokens : null,
         })
       } catch (err) {
         console.error('[AgentSlice] Failed to load conversation:', err)
@@ -327,6 +342,7 @@ export function createAgentSlice(
             state.agentMessages = []
             state.agentActiveCredentialId = null
             state.agentActiveModelId = null
+            state.agentContextTokens = null
           }
         })
       } catch (err) {
@@ -337,7 +353,9 @@ export function createAgentSlice(
     async setAgentProvider(credentialId: string, modelId: string) {
       const currentId = get().agentConversationId
       // Always reflect the picker selection locally so the dropdown's
-      // displayed value updates immediately.
+      // displayed value updates immediately. The context "used" count is left
+      // as-is — the history size is unchanged by a model switch and the next
+      // turn re-measures it; the window half (view layer) tracks the new model.
       set({ agentActiveCredentialId: credentialId, agentActiveModelId: modelId })
       if (!currentId) return  // staged for the next conversation-create call
       try {

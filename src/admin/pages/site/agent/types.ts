@@ -28,6 +28,8 @@ export type AgentToolScope = 'site' | 'content' | 'data' | 'plugin'
 
 export interface AgentRenderSnapshotPayload {
   breakpointId: string
+  /** Set when the capture was scoped to a single node subtree (the `nodeId` arg). */
+  nodeId?: string
   label: string
   width: number
   capturedAt: number
@@ -114,6 +116,10 @@ interface UsageEvent {
   promptTokens: number
   completionTokens: number
   costUsd?: number
+  /** Context meter (handler-injected): provider-normalised total input the
+   *  model processed this turn. The window half is resolved from the model
+   *  catalogue client-side, so it isn't on the wire. */
+  contextTokens?: number
 }
 
 export type ServerStreamEvent =
@@ -221,6 +227,8 @@ export interface AgentLayoutWarningContext {
 
 export interface AgentLayoutReportContext {
   breakpointId: string
+  /** Set when the report was scoped to a single node subtree; coordinates are relative to that node's box. */
+  nodeId?: string
   viewport: {
     width: number
     height: number

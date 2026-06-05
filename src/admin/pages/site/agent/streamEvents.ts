@@ -76,6 +76,9 @@ export const ServerStreamEventSchema = Type.Union([
     promptTokens: Type.Number(),
     completionTokens: Type.Number(),
     costUsd: Type.Optional(Type.Number()),
+    // Context meter (handler-injected): provider-normalised total input the
+    // model processed this turn. Window comes from the catalogue client-side.
+    contextTokens: Type.Optional(Type.Number()),
   }),
   Type.Object({ type: Type.Literal('done') }),
   Type.Object({ type: Type.Literal('error'), message: Type.String() }),
@@ -190,8 +193,16 @@ export async function processStreamEvent(
     }
 
     case 'usage': {
-      // Token + cost totals — persisted server-side automatically. Nothing
-      // to do in the UI for now (Phase 6 surfaces these in the audit page).
+      // Token + cost totals are persisted server-side automatically. Surface
+      // the live "context used" count (handler-injected) so the composer meter
+      // updates after each turn. The window half is supplied by the view layer
+      // from the model catalogue.
+      if (event.contextTokens !== undefined) {
+        const used = event.contextTokens
+        set((state) => {
+          state.agentContextTokens = used
+        })
+      }
       break
     }
 

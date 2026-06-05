@@ -100,11 +100,30 @@ const OpenRouterModelSchema = Type.Object({
     }),
   ),
   supported_parameters: Type.Optional(Type.Array(Type.String())),
+  context_length: Type.Optional(Type.Number()),
+  pricing: Type.Optional(
+    Type.Object(
+      {
+        prompt: Type.Optional(Type.String()),
+        completion: Type.Optional(Type.String()),
+      },
+      { additionalProperties: true },
+    ),
+  ),
 })
 
 const OpenRouterModelsResponseSchema = Type.Object({
   data: Type.Array(OpenRouterModelSchema),
 })
+
+/** OpenRouter quotes prices per token as a decimal string; the picker shows
+ *  per-million-token. Returns null for an absent/blank/non-finite value. */
+function perMTok(value: string | undefined): number | null {
+  if (value === undefined || value.trim() === '') return null
+  const perToken = Number(value)
+  if (!Number.isFinite(perToken)) return null
+  return perToken * 1_000_000
+}
 
 async function fetchOpenRouterModels(creds: AiResolvedCredential): Promise<AiProviderModel[]> {
   const headers: Record<string, string> = {}
@@ -123,6 +142,11 @@ async function fetchOpenRouterModels(creds: AiResolvedCredential): Promise<AiPro
   return parsed.data.map((model) => {
     const params = model.supported_parameters ?? null
     const modalities = model.architecture?.input_modalities ?? null
+    // OpenRouter publishes prices + context windows inline, so the picker is
+    // enriched straight from this fetch (Anthropic/OpenAI are enriched by the
+    // models handler from the shared catalogue instead — their APIs omit both).
+    const inputPerMTok = perMTok(model.pricing?.prompt)
+    const outputPerMTok = perMTok(model.pricing?.completion)
     return {
       id: model.id,
       label: model.name ?? model.id,
@@ -135,6 +159,12 @@ async function fetchOpenRouterModels(creds: AiResolvedCredential): Promise<AiPro
         promptCache: false,
         streaming: true,
       },
+      ...(inputPerMTok !== null && outputPerMTok !== null
+        ? { pricing: { inputPerMTok, outputPerMTok } }
+        : {}),
+      ...(model.context_length && Number.isFinite(model.context_length)
+        ? { contextWindow: model.context_length }
+        : {}),
     }
   })
 }

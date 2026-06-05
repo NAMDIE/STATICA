@@ -23,6 +23,11 @@ import {
   updateCredentialForUser,
 } from '../credentials/store'
 import { resolveDriver } from '../drivers'
+import type { CredentialRecord } from '../credentials/types'
+import { listDefaults, setDefaultForScope } from '../defaults/store'
+import type { ToolScope } from '../runtime/types'
+
+const ALL_SCOPES: ToolScope[] = ['site', 'content', 'data', 'plugin']
 
 const ProviderId = Type.Union([
   Type.Literal('anthropic'),
@@ -114,6 +119,10 @@ async function handleCreate(req: Request, db: DbClient): Promise<Response> {
         displayLabel: record.displayLabel,
       },
     })
+    // Convenience: point any scope that has no default yet at this fresh
+    // credential. Never overwrites an existing choice; failures here must not
+    // fail credential creation.
+    await seedEmptyDefaults(db, record, userOrResponse.id)
     return jsonResponse({ credential: await toCredentialView(record) }, { status: 201 })
   } catch (err) {
     if (err instanceof CredentialError) {
@@ -121,6 +130,54 @@ async function handleCreate(req: Request, db: DbClient): Promise<Response> {
     }
     console.error('[ai/credentials] create failed:', err)
     return jsonResponse({ error: 'Failed to create credential.' }, { status: 500 })
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Auto-default seeding
+// ---------------------------------------------------------------------------
+
+/**
+ * After a credential is created, assign it as the default for every scope that
+ * has no default yet. This is a "fill the blanks" convenience — a scope that
+ * already points at some credential is left untouched.
+ *
+ * The default model is the credential's top live model (the `smartest`-tier
+ * entry, else the first). Best-effort: if the model list can't be resolved
+ * (offline, bad key) we simply skip seeding rather than fail the create.
+ */
+async function seedEmptyDefaults(
+  db: DbClient,
+  record: CredentialRecord,
+  userId: string,
+): Promise<void> {
+  const existing = await listDefaults(db)
+  const filled = new Set(existing.map((d) => d.scope))
+  const emptyScopes = ALL_SCOPES.filter((scope) => !filled.has(scope))
+  if (emptyScopes.length === 0) return
+
+  let topModelId: string | null
+  try {
+    const resolved = await resolveCredentialForDriver(record)
+    const driver = resolveDriver(record.providerId)
+    const models = await driver.listModels(resolved)
+    const top = models.find((m) => m.tier === 'smartest') ?? models[0]
+    topModelId = top?.id ?? null
+  } catch (err) {
+    console.warn('[ai/credentials] auto-default skipped — model lookup failed:', err)
+    return
+  }
+  if (!topModelId) return
+
+  for (const scope of emptyScopes) {
+    await setDefaultForScope(db, scope, record.id, topModelId, userId)
+    await createAuditEvent(db, {
+      actorUserId: userId,
+      action: 'ai.default.updated',
+      targetType: 'ai_default',
+      targetId: scope,
+      metadata: { scope, credentialId: record.id, modelId: topModelId, auto: true },
+    })
   }
 }
 

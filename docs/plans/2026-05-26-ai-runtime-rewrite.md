@@ -6,7 +6,7 @@ A plan to take the current single-provider, single-surface Claude Agent SDK inte
 
 ## Status (as of last update)
 
-- **Phases 1, 2, 3, 6 shipped** — runtime + drivers + credential/conversation stores; settings UI at `/admin/ai`; site editor rewired onto the new transport with model + conversation pickers + no-credential banner; cost meter + audit (price table at `server/ai/pricing.ts`, `ai.*` audit events, Audit tab with totals + by-user/by-surface/daily rollups, dashboard "AI usage" widget).
+- **Phases 1, 2, 3, 6 shipped** — runtime + drivers + credential/conversation stores; settings UI at `/admin/ai`; site editor rewired onto the new transport with model + conversation pickers + no-credential banner; cost meter + audit (live pricing oracle at `server/ai/pricing/`, `ai.*` audit events, Audit tab with totals + by-user/by-surface/daily rollups, dashboard "AI usage" widget).
 - **Phase 4 — content workspace shipped.** AgentPanel docked in `ContentSidebar` (mirrors site editor's pattern, rail button + docked panel slot). 15 content tools (7 read + 8 write) covering collections, documents, fields, media, users. Bridge handle dispatches to live workspace state via refs. Body field exchanged as markdown via the existing `@core/markdown/markdownDocument.ts` converter. **Data workspace and Plugin SDK not yet built.**
 - **All four drivers migrated to direct HTTP.** OpenAI and OpenRouter now use `responses-shared.ts` (direct `POST /v1/responses`); Ollama uses direct `POST /v1/chat/completions`. All three share `runToolLoop` from `drivers/http/`. `typeboxToZod.ts` deleted — TypeBox schemas pass directly as JSON Schema to every provider. No provider SDKs remain; `@openai/agents`, `@openrouter/agent`, and `zod` are all banned repo-wide with no allowed callers. Gated by `ai-driver-isolation.test.ts`.
 - **Phase 5 (Plugin SDK `ai.invoke`)** is the only remaining phase.
@@ -26,7 +26,7 @@ A plan to take the current single-provider, single-surface Claude Agent SDK inte
 - **Model picker** in every chat: `(credentialId, modelId)` persisted per-surface. Defaults sourced from site-wide config with per-user override.
 - **New capabilities**: `ai.chat` (open chats, invoke tools, see models), `ai.tools.write` (browser write tools), `ai.providers.manage` (set keys + site defaults), `ai.audit.read` (see all-user usage log).
 - **No-credential UX**: banner inside the chat panel with a "Open AI settings" deep-link to `/admin/ai`; Send button disabled until at least one credential exists.
-- **Cost tracking:** Anthropic/OpenAI/Ollama use a hard-coded price table (`server/ai/pricing.ts`). OpenRouter provides native per-call USD cost and is intentionally absent from the table. Token counts always stored; cost rolls up daily.
+- **Cost tracking:** Anthropic/OpenAI are priced from a live OpenRouter catalogue (`server/ai/pricing/`, cached in `ai_model_pricing`). OpenRouter provides native per-call USD cost; Ollama is free. Token counts always stored; cost rolls up daily.
 - **Six-phase rollout**. Phases 1-3 are live; 4-6 are the next deliverables.
 
 ---
@@ -474,7 +474,7 @@ Each driver is a single file under `server/ai/drivers/<id>.ts`. No provider SDKs
 - Tool format: TypeBox `inputSchema` passed straight through as JSON Schema `parameters`. `strict` omitted (optional-bearing schemas violate strict mode).
 - Full conversation history replayed every turn as `input[]` — no server-side session.
 - Vision: `input_image` data-URL blocks supported via `responses-shared.ts` mapping.
-- Cost: OpenAI does not report per-call USD cost; the persister prices from `pricing.ts`.
+- Cost: OpenAI does not report per-call USD cost; the persister prices from the live OpenRouter catalogue (`server/ai/pricing/`).
 
 ### `openrouter.ts` ✅ fully migrated to direct HTTP
 
@@ -729,32 +729,29 @@ If credentials exist but the current `(scope)` default points at a credential wh
 
 Once a credential is configured, the banner disappears for that surface immediately (no reload).
 
-## Pricing and cost tracking
+## Pricing, context windows, and cost tracking
 
-A hard-coded table at `server/ai/pricing.ts`:
+Cost **and context windows** are sourced from the **live OpenRouter catalogue** — there is no hand-maintained table for either. The catalogue module lives at `server/ai/pricing/`:
 
-```ts
-export interface ModelPricing {
-  providerId: AiProviderId
-  modelId: string
-  inputPer1MUsd: number
-  outputPer1MUsd: number
-  cacheReadPer1MUsd?: number   // Anthropic cache read pricing
-  cacheWritePer1MUsd?: number  // Anthropic cache write pricing
-}
+- `openrouterCatalogue.ts` — fetches OpenRouter's public `/api/v1/models` (no key needed), the only catalogue that publishes per-token list prices **and `context_length`** for Anthropic + OpenAI models. TypeBox-validated at the boundary, normalised to a `pricingKey → ModelCatalogueEntry` map, where each entry carries `prices` (per-million-token input/output/cache-read/cache-write) and `contextWindow` (max total tokens, null when unpublished). `pricingKey()` collapses a provider's native id (dated, dashed) and the OpenRouter slug (prefixed, dotted) to one key — e.g. `claude-opus-4-8-20260514` and `anthropic/claude-opus-4.8` both → `claude-opus-4-8`.
+- `store.ts` — durable DB cache in `ai_model_pricing` (now including a `context_window` column; cold-start fallback if OpenRouter is unreachable at boot).
+- `index.ts` — `resolveCostUsd(db, providerId, modelId, usage)`, `getModelCatalogue(db)` (used by the models endpoint to enrich the picker), and `resolveContextWindow(db, providerId, modelId)` (used by the chat handler for the composer meter). All serve from an in-memory cache (6h TTL), load the DB cache on cold start and refresh in the background, blocking on a first live fetch only when nothing is cached anywhere. `computeCostUsd` is cache-aware and honours each provider's token accounting (Anthropic `input_tokens` excludes the cache buckets; OpenAI `input_tokens` includes cached tokens as a subset).
 
-export const MODEL_PRICING: ModelPricing[] = [
-  { providerId: 'anthropic', modelId: 'claude-sonnet-4-7', inputPer1MUsd: 3.00, outputPer1MUsd: 15.00, cacheReadPer1MUsd: 0.30, cacheWritePer1MUsd: 3.75 },
-  // ... ~10-15 entries
-]
+Cost source per provider:
+- **OpenRouter** — native per-call USD cost from the response (`usage.cost`); the persister uses it verbatim, the oracle is never consulted. Its driver also reads per-model `pricing` + `context_length` straight from its own catalogue fetch, so the picker shows prices + windows for every OpenRouter model (not just Anthropic/OpenAI).
+- **Anthropic / OpenAI** — token counts only from the API; priced from the live catalogue, and the models endpoint enriches each listed model with the catalogue's price + context window.
+- **Ollama** — self-hosted, free (`0`); no published prices or window.
 
-export function calculateCost(usage: AiUsage, providerId: AiProviderId, modelId: string): number { /* ... */ }
-```
-
-- Updated by hand when providers change pricing. Wrong prices are an annoyance, not a correctness bug — the source of truth is the provider invoice.
-- Unknown `(providerId, modelId)` returns `0` cost. Token counts are still stored on the message + conversation row.
-- The driver emits `{ type: 'usage', promptTokens, completionTokens }`; the handler computes cost via `calculateCost()` and persists on the message row.
+- Unknown `(providerId, modelId)` (a model OpenRouter doesn't list) returns `0` cost and logs a warning. Token counts are still stored on the message + conversation row.
+- A failed catalogue refresh is logged and keeps the previous data — never fatal.
 - Daily rollup view computed at query time from `ai_messages` — no separate rollup table in v1.
+
+### Model picker display + composer context meter
+
+- The shared `<ModelPicker>` renders each model's input/output price (`$3 / $15` per 1M tokens) and context window (`200K`) inline per row, from the enriched `AiModel.pricing` + `AiModel.contextWindow` fields.
+- The composer's `<ContextMeter>` shows a "context used / window" bar — display only (no compaction yet). Its two halves come from two sources:
+  - **Window** — `AgentPanel` resolves the active model's `contextWindow` from the models endpoint (the same catalogue-enriched `AiModel`), so the meter appears as soon as a model is selected, *before* the first turn. Unknown for Ollama / uncatalogued models → the meter hides.
+  - **Used** — `agentContextTokens` in the store: the provider-normalised total input the model processed on the latest turn (`normalizeContextTokens` in `server/ai/contextTokens.ts` — Anthropic adds the cache buckets; others use `prompt` directly). The chat handler injects it on the wire `usage` event for the live update, and the persister writes the same value to `ai_conversations.context_tokens` (a per-turn snapshot, overwritten not summed) so `loadAgentConversation` restores the meter on reload.
 
 ## Audit and cost tracking
 
@@ -774,7 +771,7 @@ A new `audit_events` event type family `ai.*`:
 
 The Audit page `/admin/ai/audit` reads these and renders three views: by user, by surface, by plugin. Costs aggregate by day.
 
-Token-cost calculation: hard-coded per-model price table (`server/ai/pricing.ts`) updated by hand. Wrong prices are an annoyance, not a correctness bug — the source of truth is the provider invoice.
+Token-cost calculation: live OpenRouter list prices (`server/ai/pricing/`, cached in `ai_model_pricing`), applied to the exact token counts each driver reports. No hand-maintained table. Wrong/missing prices are an annoyance, not a correctness bug — the source of truth is the provider invoice.
 
 ---
 
@@ -861,7 +858,7 @@ Deliverable: a plugin can call the host AI model.
 
 ### Phase 6 — Cost meter + audit visibility ✅ shipped
 
-- `server/ai/pricing.ts` — hard-coded `(providerId, modelId)` → per-million-token rates. Anthropic + OpenAI tiers covered; Ollama omitted (self-hosted, no per-call cost). The persister falls back to `calculateCostUsd()` whenever the driver omits `costUsd` (OpenAI today; Ollama once it ships).
+- `server/ai/pricing/` — live OpenRouter catalogue → per-million-token rates, cached in `ai_model_pricing`. Anthropic + OpenAI priced from it; Ollama is free. The persister calls `resolveCostUsd()` whenever the driver omits `costUsd` (Anthropic, OpenAI).
 - `ai.*` audit events: `ai.credential.{created,updated,deleted,tested}`, `ai.default.updated`, `ai.chat.{started,completed,failed}`. Per-chat metadata carries scope + provider + model + token + cost deltas.
 - `server/ai/audit/store.ts` — read-only repository over `ai_messages` + `ai_conversations` returning four rollups: `getUsageTotals`, `getUsageByUser`, `getUsageByScope`, `getUsageByDay`.
 - `GET /admin/api/ai/audit?since=ISO` — capability-gated by `ai.audit.read`; returns `{ since, totals, byUser, byScope, byDay }`.
@@ -906,7 +903,7 @@ Pre-rewrite there was no AI-related persistent state to migrate (no DB rows, no 
 6. **Soft-delete retention.** Conversations stay until user-deletion. A nightly job hard-purges rows where `deleted_at` is older than 30 days. No per-site retention setting.
 7. **No-credentials UX.** Banner inside the chat panel with a "Go to AI settings" button; Send disabled until at least one credential exists.
 8. **Direct HTTP for all providers.** All four drivers talk directly to their REST APIs via `runToolLoop` from `server/ai/drivers/http/toolLoop.ts`. Each driver implements `ProviderAdapter<TMessage>` with pure mapping functions; the loop owns SSE plumbing, abort handling, tool dispatch, and usage aggregation. TypeBox schemas are passed directly as JSON Schema — no Zod bridge (`typeboxToZod.ts` deleted).
-9. **Hard-coded price table.** `server/ai/pricing.ts` updated by hand. Token counts always stored; cost is best-effort. Exception: the OpenRouter driver emits native USD cost from the provider, so OpenRouter calls never fall back to the table.
+9. **Live pricing oracle.** `server/ai/pricing/` mirrors OpenRouter's catalogue (cached in `ai_model_pricing`) — no hand-maintained table. Token counts always stored; cost is best-effort (unknown models cost 0). Exception: the OpenRouter driver emits native USD cost from the provider, so OpenRouter calls never consult the oracle.
 10. **Shared dropdown primitive for in-panel pickers.** `<ModelPicker>` and `<ConversationHistory>` are built on `ContextMenu` (auto-flip, click-outside, focus management) — no bespoke popovers.
 
 ---

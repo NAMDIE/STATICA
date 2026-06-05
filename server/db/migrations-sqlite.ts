@@ -875,4 +875,57 @@ export const sqliteMigrations: Migration[] = [
         on ai_provider_credentials (user_id, provider_id, display_label);
     `,
   },
+  {
+    id: '013_ai_model_pricing',
+    sql: `
+      -- ─── Live model-pricing cache — SQLite mirror of PG 013 ──────────────
+      --
+      -- Per-million-token prices for (provider, model) pairs, mirrored from
+      -- OpenRouter's public catalogue (the only source that publishes list
+      -- prices for Anthropic + OpenAI models). There is no hand-maintained
+      -- price table any more: the runtime refreshes this cache from OpenRouter
+      -- and prices each turn from it. Rows are keyed by a normalised
+      -- pricing_key (see server/ai/pricing/openrouterCatalogue.ts) so a native
+      -- provider model id (dated/dotted) resolves to the OpenRouter slug.
+      --
+      -- The context_window column is added by migration 015 (kept separate so
+      -- it applies on databases that already ran this one).
+      -- refreshed_at is for inspection only; freshness is governed by the
+      -- in-memory TTL in server/ai/pricing/index.ts.
+      create table if not exists ai_model_pricing (
+        pricing_key text primary key,
+        input_per_mtok real not null,
+        output_per_mtok real not null,
+        cache_read_per_mtok real,
+        cache_write_per_mtok real,
+        refreshed_at text not null default current_timestamp
+      );
+    `,
+  },
+  {
+    id: '014_ai_conversation_context_tokens',
+    sql: `
+      -- ─── Current-context snapshot — SQLite mirror of PG 014 ──────────────
+      --
+      -- The provider-normalised total input tokens the model processed on the
+      -- LATEST turn (see server/ai/contextTokens.ts). Overwritten each turn —
+      -- it is a snapshot of "how full the context is now", NOT a running total.
+      -- Lets the composer's context meter survive a conversation reload.
+      alter table ai_conversations
+        add column context_tokens integer not null default 0;
+    `,
+  },
+  {
+    id: '015_ai_pricing_context_window',
+    sql: `
+      -- ─── Model context window — SQLite mirror of PG 015 ──────────────────
+      --
+      -- Added separately from the 013 table create so it lands on databases
+      -- that already ran 013. The model's max total tokens, mirrored from
+      -- OpenRouter's catalogue (null when unpublished). Feeds the model
+      -- picker's inline context badge and the composer context meter.
+      alter table ai_model_pricing
+        add column context_window integer;
+    `,
+  },
 ]

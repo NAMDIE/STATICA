@@ -24,6 +24,13 @@ interface ContextMenuProps extends Omit<HTMLAttributes<HTMLDivElement>, 'childre
   ariaLabel: string
   onClose: () => void
   children: ReactNode
+  /**
+   * Optional fixed header rendered above the scrollable content (e.g. a
+   * search field). Unlike content passed as `children`, the header does NOT
+   * scroll — only the items below it do. Use for searchable dropdowns so the
+   * filter box stays put while the list scrolls under it.
+   */
+  header?: ReactNode
   minWidth?: number
   width?: number
   /**
@@ -124,6 +131,7 @@ export function ContextMenu({
   ariaLabel,
   onClose,
   children,
+  header,
   minWidth = 176,
   width = minWidth,
   maxHeight,
@@ -265,13 +273,28 @@ export function ContextMenu({
       // `data-closing` swaps in the exit keyframes during the deferred close.
       data-open={!measuring && !closing ? '' : undefined}
       data-closing={closing ? '' : undefined}
-      data-scrollable={maxHeight != null ? '' : undefined}
+      // With a fixed header, the menu itself is a non-scrolling flex column and
+      // the inner content region scrolls; without one, the menu is the scroller.
+      data-has-header={header != null ? '' : undefined}
+      data-scrollable={header == null && maxHeight != null ? '' : undefined}
       style={style}
       {...domProps}
       onKeyDown={handleKeyDown}
       onClick={(event) => { event.stopPropagation(); domProps.onClick?.(event) }}
     >
-      {children}
+      {header != null ? (
+        <>
+          <div className={styles.menuHeader}>{header}</div>
+          <div
+            className={styles.menuScroll}
+            data-scrollable={maxHeight != null ? '' : undefined}
+          >
+            {children}
+          </div>
+        </>
+      ) : (
+        children
+      )}
     </div>
   )
 }

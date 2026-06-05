@@ -8,12 +8,9 @@
     overflow: hidden;
     padding: 4px;
     border: 0;
-    border-radius: 10px;
-    background: var(--editor-surface-4);
-    box-shadow:
-        0 12px 28px rgba(0, 0, 0, 0.5),
-        inset 0 1px 0 rgba(255, 255, 255, 0.15);
-    backdrop-filter: blur(14px);
+    border-radius: 16px;
+    background: var(--editor-surface-2);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
     /* Anchor the subtle scale to the menu's top edge — the menu drops down
        from the click point / trigger, so growing from the top reads natural. */
     transform-origin: top center;
@@ -73,19 +70,33 @@
     overscroll-behavior: contain;
 }
 
-/* Sticky search header for searchable dropdowns (Select, ModelPicker).
-   Negative margins let it span edge-to-edge over the menu's 4px padding;
-   `top: -4px` keeps it flush against the menu's top as the options scroll
-   beneath it. The menu background covers scrolled rows so they don't bleed
-   through. */
+/* Fixed-header layout: the menu is a non-scrolling flex column capped at the
+   same viewport-clamped max height; the header stays put and only the content
+   region below scrolls. Used by searchable dropdowns so the filter box doesn't
+   scroll away with the list. */
+.menu[data-has-header] {
+    display: flex;
+    flex-direction: column;
+    max-height: min(var(--context-menu-max-height), calc(100vh - 16px));
+    overflow: hidden;
+}
+
+.menuHeader {
+    flex: 0 0 auto;
+}
+
+.menuScroll[data-scrollable] {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+/* Search header for searchable dropdowns (Select, ModelPicker). Lives in the
+   menu's fixed header slot, so it does not scroll — just a small gap below it
+   separates the field from the list. */
 .searchHeader {
-    position: sticky;
-    top: -4px;
-    z-index: 1;
-    margin: -4px -4px 4px;
-    padding: 4px;
-    background: var(--editor-surface-4);
-    border-bottom: 1px solid var(--editor-surface-5);
+    padding-bottom: 4px;
 }
 
 .item {
@@ -109,7 +120,7 @@
 .separator {
     width: auto;
     margin: 4px 6px;
-    background: var(--editor-surface-5);
+    background: var(--editor-surface-3);
 }
 
 /* ── ContextMenuSubmenu ──────────────────────────────────────────────────── */

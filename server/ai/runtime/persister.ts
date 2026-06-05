@@ -9,7 +9,8 @@
 
 import type { DbClient } from '../../db/client'
 import { appendMessage } from '../conversations/store'
-import { calculateCostUsd } from '../pricing'
+import { resolveCostUsd } from '../pricing'
+import { normalizeContextTokens } from '../contextTokens'
 import type { AiContentBlock, AiProviderId } from './types'
 
 export interface ConversationsPersister {
@@ -103,15 +104,29 @@ export function createConversationsPersister(
       // simply skip — the totals are still correct, only the per-message
       // attribution is lost in that edge case.
       if (!lastAssistantMessageId) return
-      // Driver-supplied cost wins (Anthropic SDK reports `total_cost_usd`
-      // directly). When absent (OpenAI, Ollama) we compute from the price
-      // table — token counts are always trusted as reported by the driver.
-      const costUsd = usage.costUsd ?? calculateCostUsd(
+      // Driver-supplied cost wins (OpenRouter reports a native per-call USD
+      // cost). When absent (Anthropic, OpenAI) we price from the live
+      // OpenRouter catalogue, cache-aware; Ollama is free. Token counts are
+      // always trusted as reported by the driver.
+      const costUsd = usage.costUsd ?? await resolveCostUsd(
+        db,
         ctx.providerId,
         ctx.modelId,
-        usage.promptTokens,
-        usage.completionTokens,
+        {
+          promptTokens: usage.promptTokens,
+          completionTokens: usage.completionTokens,
+          cacheReadTokens: usage.cacheReadTokens ?? 0,
+          cacheCreationTokens: usage.cacheCreationTokens ?? 0,
+        },
       )
+      // Provider-normalised "context used now" snapshot for the conversation
+      // row (overwritten per turn, not summed) so the composer's meter can be
+      // restored on reload.
+      const contextTokens = normalizeContextTokens(ctx.providerId, {
+        promptTokens: usage.promptTokens,
+        cacheReadTokens: usage.cacheReadTokens ?? 0,
+        cacheCreationTokens: usage.cacheCreationTokens ?? 0,
+      })
       // Lightweight UPDATE — bypasses the repository because there's no
       // public-facing API for "patch the latest message". Single-table
       // write, no FK touch.
@@ -123,6 +138,7 @@ export function createConversationsPersister(
         costUsd,
         usage.cacheReadTokens ?? 0,
         usage.cacheCreationTokens ?? 0,
+        contextTokens,
       )
     },
   }
@@ -136,6 +152,7 @@ async function updateMessageUsage(
   costUsd: number,
   cacheReadTokens: number,
   cacheCreationTokens: number,
+  contextTokens: number,
 ): Promise<void> {
   // Move the increment off the message row (which started at zero in
   // appendMessage) AND propagate the delta onto the parent conversation
@@ -167,6 +184,7 @@ async function updateMessageUsage(
           cost_usd_total = cost_usd_total + ${costUsd},
           cache_read_tokens_total = cache_read_tokens_total + ${cacheReadTokens},
           cache_creation_tokens_total = cache_creation_tokens_total + ${cacheCreationTokens},
+          context_tokens = ${contextTokens},
           updated_at = current_timestamp
       where id = ${conversationId}
     `

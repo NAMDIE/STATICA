@@ -50,6 +50,7 @@ import {
   encodeStreamEvent,
   runChat,
 } from '../runtime'
+import { normalizeContextTokens } from '../contextTokens'
 import type {
   AiContentBlock,
   AiMessage,
@@ -191,8 +192,17 @@ async function handleAiChat(
       const emit = (event: AiStreamEvent): void => {
         if (streamClosed) return
         if (event.type === 'error') streamError = event.message
+        // Inject the live "context used" count: the provider-normalised total
+        // input the model processed this turn. Drivers report raw token
+        // buckets; the handler knows the provider, so it normalises here for
+        // the composer meter. (The window is resolved client-side from the
+        // model catalogue, so it isn't carried on the wire.)
+        const wireEvent: AiStreamEvent =
+          event.type === 'usage'
+            ? { ...event, contextTokens: normalizeContextTokens(credential.providerId, event) }
+            : event
         try {
-          controller.enqueue(encodeStreamEvent(event))
+          controller.enqueue(encodeStreamEvent(wireEvent))
         } catch {
           streamClosed = true
         }
@@ -210,6 +220,7 @@ async function handleAiChat(
           messages,
           tools,
           modelId: conversation.modelId,
+          modelCapabilities: driver.capabilities(conversation.modelId),
           credentials: resolvedCredential,
           signal: req.signal,
           bridge,

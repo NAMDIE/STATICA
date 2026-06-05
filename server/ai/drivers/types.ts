@@ -67,6 +67,21 @@ export interface AiProviderModel {
    * "long-context"). Drivers may omit; UI falls back to model id.
    */
   readonly tier?: string
+  /**
+   * Per-million-token list prices shown inline in the picker. Sourced from the
+   * live OpenRouter catalogue: OpenRouter populates this from its own fetch;
+   * Anthropic/OpenAI are enriched by the models handler (their APIs omit it).
+   * Omitted when no price is known (e.g. Ollama, or an uncatalogued model).
+   */
+  readonly pricing?: {
+    readonly inputPerMTok: number
+    readonly outputPerMTok: number
+  }
+  /**
+   * Max context window (total input+output tokens) for the model, from the same
+   * catalogue. Omitted when unknown (Ollama, or an uncatalogued model).
+   */
+  readonly contextWindow?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -89,6 +104,13 @@ export interface AiStreamRequest {
   readonly messages: AiMessage[]
   readonly tools: AiTool[]
   readonly modelId: string
+  /**
+   * Capabilities of `modelId`, resolved once by the chat handler via
+   * `driver.capabilities(modelId)`. The shared tool loop reads `visionInput`
+   * to decide whether the browser should capture a `render_snapshot`
+   * screenshot at all — non-vision models get the layout report only.
+   */
+  readonly modelCapabilities: AiProviderCapabilities
   readonly credentials: AiResolvedCredential
   readonly signal: AbortSignal
   readonly bridge: AiBrowserBridge
