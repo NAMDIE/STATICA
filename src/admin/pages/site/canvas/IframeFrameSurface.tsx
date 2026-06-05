@@ -458,6 +458,49 @@ export const IframeFrameSurface = forwardRef<IframeFrameSurfaceHandle, IframeFra
       const iframe = iframeRef.current
       if (!iframe) return
       let spaceHeld = false
+      // Clicking a node to select it focuses this iframe, so every subsequent
+      // keystroke is delivered to the iframe document instead of the parent.
+      // The editor's global / editor / panel shortcuts are NATIVE listeners on
+      // the parent `window` (spotlight ⌘K, save ⌘S) and parent `document`
+      // (panel toggles, undo/redo) — none of which see events that fire inside
+      // an iframe. We bridge them by re-dispatching a clone on the parent
+      // `document`: it reaches every `document`-level listener at the target
+      // and every `window`-level listener during capture/bubble.
+      //
+      // We deliberately dispatch on `document`, NOT on the iframe element. The
+      // canvas's own shortcut handler (delete / duplicate / clipboard / Escape)
+      // is a React `onKeyDown` on the canvas root, and React already delivers
+      // iframe-originated key events to it through the React fiber tree (see
+      // docs/features/canvas-iframe-per-frame.md). Dispatching the clone on the
+      // iframe element would bubble it through React's root container too and
+      // fire those handlers a SECOND time (duplicate twice, delete twice).
+      // `document` is above React's root container in the DOM, so the clone is
+      // seen only by the native window/document listeners — never re-entering
+      // React. The clone also lands in the parent document, so this
+      // iframe-document listener never sees it again (no loop).
+      const parentDocument = iframe.ownerDocument
+      const forwardKeyboard = (e: KeyboardEvent) => {
+        const forwarded = new KeyboardEvent('keydown', {
+          bubbles: true,
+          cancelable: true,
+          key: e.key,
+          code: e.code,
+          location: e.location,
+          repeat: e.repeat,
+          ctrlKey: e.ctrlKey,
+          shiftKey: e.shiftKey,
+          altKey: e.altKey,
+          metaKey: e.metaKey,
+        })
+        parentDocument.dispatchEvent(forwarded)
+        // If a parent handler claimed the shortcut (e.g. ⌘K, ⌘S), suppress the
+        // iframe's own default for the original key so the browser doesn't also
+        // act on it (e.g. native ⌘S save dialog).
+        if (forwarded.defaultPrevented) {
+          e.preventDefault()
+          e.stopPropagation()
+        }
+      }
       const onKeyDown = (e: KeyboardEvent) => {
         if (e.code === 'Space' && !e.repeat) spaceHeld = true
         // Block Tab navigation inside the canvas iframe. The author is
@@ -469,7 +512,9 @@ export const IframeFrameSurface = forwardRef<IframeFrameSurfaceHandle, IframeFra
         if (e.key === 'Tab') {
           e.preventDefault()
           e.stopPropagation()
+          return
         }
+        forwardKeyboard(e)
       }
       const onKeyUp = (e: KeyboardEvent) => {
         if (e.code === 'Space') spaceHeld = false

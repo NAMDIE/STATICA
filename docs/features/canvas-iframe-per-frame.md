@@ -47,10 +47,10 @@ IframeFrameSurface
 
 `interaction` prop controls two distinct behaviours:
 
-| Mode | `interaction` value | Height | Scroll | Wheel | Pointer | Canvas chrome CSS |
-|---|---|---|---|---|---|---|
-| Design canvas frame | `'canvas'` (default) | grows to content | none (frame scrolls with canvas pan) | forwarded to parent pan/zoom | forwarded for middle-click / space pan | applied (cursor, user-select, outline overrides) |
-| Live frame | `'live'` | 100% | native (iframe is the scroll viewport) | not forwarded | not forwarded | not applied (real cursors, text selection) |
+| Mode | `interaction` value | Height | Scroll | Wheel | Pointer | Keyboard | Canvas chrome CSS |
+|---|---|---|---|---|---|---|---|
+| Design canvas frame | `'canvas'` (default) | grows to content | none (frame scrolls with canvas pan) | forwarded to parent pan/zoom | forwarded for middle-click / space pan | forwarded to parent `document` (shortcuts); `Tab` blocked | applied (cursor, user-select, outline overrides) |
+| Live frame | `'live'` | 100% | native (iframe is the scroll viewport) | not forwarded | not forwarded | not forwarded | not applied (real cursors, text selection) |
 
 ### Viewport-unit feedback loop guard
 
@@ -126,17 +126,18 @@ Rebuild triggers: script file content changes, `packageJson` changes, `site.runt
 
 ## Event handling across the iframe boundary
 
-React synthetic events bubble through the React fiber tree, not the DOM tree, so click/hover/keyboard handlers in `NodeRenderer` fire normally even though the DOM is inside an iframe.
+React synthetic events bubble through the React fiber tree, not the DOM tree, so click/hover/keyboard handlers in `NodeRenderer` (and the canvas-root `onKeyDown` they bubble up to — delete / duplicate / clipboard / Escape) fire normally even though the DOM is inside an iframe. **Native** listeners on the parent `window` / `document` do not get that treatment — events fired inside an iframe never reach them — so they need explicit bridging (see keyboard events below).
 
-Native events require explicit handling for three cases:
+Native events require explicit handling for four cases:
 
 - **Wheel events (design mode):** `IframeFrameSurface` listens for `wheel` inside the iframe document and re-dispatches a new `WheelEvent` on the iframe element (parent document) so `useCanvas`'s pan/zoom handler picks it up.
 - **Pointer events (design mode):** Middle-click pan, space+left-click pan, and active reorder drags (`data-instatic-canvas-dragging` on `<html>`) all need to cross the iframe boundary. `IframeFrameSurface` tracks `spaceHeld` and `panPointerId` state to identify when a pointerdown starts a pan, then forwards `pointerdown`/`pointermove`/`pointerup`/`pointercancel` to the parent document.
+- **Keyboard shortcuts (design mode):** Clicking a node to select it focuses the iframe, so subsequent keystrokes are delivered to the iframe document. The editor's global / editor / panel shortcuts are native listeners on the parent `window` (spotlight `⌘K`, save `⌘S`) and parent `document` (panel toggles, undo/redo), which never see iframe events. `IframeFrameSurface` re-dispatches a cloned `keydown` on the **parent `document`** (not the iframe element) so it reaches those window/document listeners without re-entering React's root container — which would otherwise double-fire the canvas-root `onKeyDown` shortcuts that already receive the original via fiber bubbling. `Tab` is the exception: it is blocked (not forwarded) to keep the browser from tab-walking focusable nodes inside the design preview.
 - **Portal overlay dismiss (all modes):** Portal-based overlays (context menus, dropdowns) attach their dismiss-on-outside-click listeners at the document level. A `mousedown` inside an iframe fires on the iframe's own document and never bubbles to the parent's listener, leaving the overlay stuck open. `ContextMenu` calls `collectSameOriginDocuments` (`src/ui/lib/sameOriginDocuments.ts`) to gather the parent document plus every reachable same-origin iframe document, then attaches dismiss listeners to all of them. Cross-origin iframes are skipped — their events are unreachable. The check for whether an event target is a valid DOM node uses `isNode` (also in `sameOriginDocuments.ts`), a structural check on `nodeType` that works across iframe realms where `instanceof Node` would fail.
 
 Native mouse movement is also surfaced for editor chrome that must follow the cursor in the parent document, such as inactive-viewport activation hints. These events are not forwarded as new DOM events; `IframeFrameSurface` invokes callback props with the iframe-native `MouseEvent`, and callers translate the point with `clientPointToEditorDoc`.
 
-Live frames skip wheel/pointer forwarding — they scroll natively and have no pan/zoom. Overlay dismiss listeners still apply in live mode (menus can be open while the canvas is in live view).
+Live frames skip wheel/pointer/keyboard forwarding — they scroll natively, have no pan/zoom, and host real interactive controls (forms, links) that must keep their own keystrokes. Overlay dismiss listeners still apply in live mode (menus can be open while the canvas is in live view).
 
 ---
 
