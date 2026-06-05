@@ -33,6 +33,10 @@ server/ai/
 │   ├── credentials.ts      — CRUD for ai_credentials rows (encrypted API keys); auto-seeds defaults on create
 │   ├── defaults.ts         — GET /admin/api/ai/defaults (per-scope defaults)
 │   └── models.ts           — list available models per provider; enriches Anthropic/OpenAI with catalogue prices + context windows
+├── conversations/
+│   ├── history.ts          — buildMessageHistory(): reconstruct AiMessage[] from persisted rows; heals interrupted tool calls (synthetic error results for unanswered tool_use blocks)
+│   ├── store.ts            — appendMessage / listMessagesForConversation / readConversationForUser
+│   └── types.ts            — MessageRecord type
 ├── pricing/
 │   ├── index.ts            — resolveCostUsd / getModelCatalogue (6h in-memory cache, DB fallback)
 │   ├── openrouterCatalogue.ts — fetches OpenRouter /api/v1/models; pricingKey() normaliser; ModelCatalogue type
@@ -72,7 +76,8 @@ src/admin/pages/site/agent/
 ├── streamEvents.ts         — NDJSON schema (ServerStreamEventSchema) + processStreamEvent reducer
 ├── siteAgentSnapshot.ts    — `SiteAgentSnapshot` raw-tree wire shape + `buildSiteAgentSnapshot` serializer
 ├── pageContext.ts          — editor adapter: reads active page + store scalars, calls `buildSiteAgentSnapshot`
-├── executor.ts             — browser-side dispatcher: validates + runs write tools
+├── executor.ts             — browser-side dispatcher: validates + runs write tools; auto-navigates canvas to node's owning document before each write
+├── tokenRunners.ts         — set_color_tokens / set_font_tokens / set_type_scale / set_spacing_scale runners (split from executor.ts)
 ├── renderEvidence.ts       — captureAgentRenderSnapshot (render_snapshot tool)
 ├── storeRef.ts             — setAgentStoreApi / getAgentStoreApi (avoids store ↔ executor cycle)
 └── types.ts                — ServerStreamEvent, AgentMessage, AgentRequestBody, …
@@ -241,11 +246,11 @@ All 23 tools carry `execution: 'browser'` in their `AiTool` definition. The serv
 
 **Structure (HTML-native)**
 
-| Tool              | Input                                  | Success `data`        | What it does                                           |
-|-------------------|----------------------------------------|-----------------------|--------------------------------------------------------|
-| `insertHtml`      | `{ parentId, index?, html }`           | `{ nodeIds }`         | Parse HTML (+ any `<style>` CSS) → import as `PageNode`s under `parentId` |
-| `getNodeHtml`     | `{ nodeId }`                           | `{ html }`            | Render subtree to HTML via the publisher's `renderNode`|
-| `replaceNodeHtml` | `{ nodeId, html }`                     | `{ nodeIds }`         | Delete existing children; re-import HTML under the same parent |
+| Tool              | Input                                  | Success `data`                        | What it does                                           |
+|-------------------|----------------------------------------|---------------------------------------|--------------------------------------------------------|
+| `insertHtml`      | `{ parentId, index?, html }`           | `{ nodeIds }` or `{ styleRulesAdded }` | Parse HTML (+ any `<style>` CSS) → import as `PageNode`s under `parentId`. A `<style>`-only payload (no elements) registers CSS rules without inserting nodes — returns `{ styleRulesAdded: N }` |
+| `getNodeHtml`     | `{ nodeId }`                           | `{ html }`                            | Render subtree to HTML via the publisher's `renderNode`|
+| `replaceNodeHtml` | `{ nodeId, html }`                     | `{ nodeIds }` or `{ styleRulesAdded }` | Delete existing children; re-import HTML under the same parent. A `<style>`-only payload registers CSS rules WITHOUT touching the children |
 
 Styling rides on the `html` payload — there is no separate `classes` parameter. The executor runs `importHtml(html)`, which harvests any `<style>` block's CSS, then hands it to `cssToStyleRules`. That classifier routes each selector:
 
@@ -254,6 +259,8 @@ Styling rides on the `html` payload — there is no separate `classes` parameter
 - inline `style="…"` attributes → the node's inline styles.
 
 `insertImportedNodes` then links every `class=` token on the imported nodes to its registry class id in the same undo step, so `class="hero-section"` renders and is styleable whether its styles came from a `<style>` rule or an automatically-created bare class. See [html-import.md → Class linking](html-import.md#class-linking-name--id).
+
+**Style-only payloads.** A `<style>`-only string (e.g. `"<style>.hero a:hover{color:var(--primary)}</style>"`) applies CSS — pseudo-classes, hover states, descendant selectors, `::before`/`::after` — without inserting any nodes. Both `insertHtml` and `replaceNodeHtml` accept these; when `importHtml` returns no element nodes but the `<style>` block produced rules or conditions, they are registered via `applyImportedStyleRules` and the call returns `{ styleRulesAdded: N }`. `replaceNodeHtml` with a `<style>`-only payload leaves the target node's existing children intact. This is the canonical way to author pseudo/hover/descendant CSS that `createClass`/`updateClassStyles` cannot express.
 
 **Node edits**
 
@@ -308,6 +315,12 @@ The agent works **design-system-first**: it establishes or reuses tokens, then r
 | Tool              | Input                 | Success `data` | What it does                                                     |
 |-------------------|-----------------------|----------------|------------------------------------------------------------------|
 | `render_snapshot` | `{ breakpointId?, nodeId? }`   | `{ breakpointId, nodeId?, label, width, capturedAt, layout, screenshot }` + optional `images[]` | Inspect the rendered canvas: always returns a layout report (viewport, per-node bounding boxes, overflow / broken-image / invisible warnings); on a vision-capable model a PNG is attached via the tool-output **image channel**. `breakpointId` picks the frame (defaults to active); `nodeId` scopes the capture to that node's subtree — image and report cover only that section, with coordinates relative to its box, and the report carries the same `nodeId`. Omit `nodeId` for the whole page; an unknown `nodeId` returns an `aiToolError` |
+
+### Auto-navigation
+
+When a node-targeting write tool (`insertHtml`, `getNodeHtml`, `replaceNodeHtml`, `deleteNode`, `updateNodeProps`, `moveNode`, `renameNode`, `duplicateNode`, `assignClass`, `removeClass`) receives a node id that belongs to a different document (another page, a template, or a VC), the executor automatically navigates the canvas to that document **before** running the mutation. This is done via `focusNodeDocument` in `executor.ts`, which calls `store.openPageInCanvas` or `store.setActiveDocument` as appropriate. The effect: the edit lands in the correct tree, stays visible to the user, and the mid-turn snapshot refresh picks up the navigated state for any subsequent read tool in the same turn.
+
+`render_snapshot`, catalog tools (`list_pages`, etc.), and token tools have no node target — they are excluded from auto-navigation.
 
 ### Heavy evidence — image channel + vision gating + elision
 
@@ -468,6 +481,7 @@ When `POST /admin/api/ai/credentials` creates a new credential, `seedEmptyDefaul
   - `req.signal` is passed straight to every `fetch()` call in the driver loop (`fetch(endpoint, { signal })`). The in-flight HTTP request to the provider is cancelled immediately — no further tokens are generated or billed. On `AbortError` the loop returns cleanly with no `error` event.
   - Any `callBrowser` promise still waiting for a browser tool-result rejects via the `onAbort` listener registered per pending call (in `server/ai/runtime/transport.ts`). The listener fires, clears the timeout, and removes the pending entry.
   - The stream's `destroy()` hook fires, rejects any remaining pending entries, and removes the bridge from the registry.
+- **Interrupted tool calls.** If a stream aborts mid-turn — between the assistant's `tool_use` row write and the matching `tool_result` row write (e.g. `ERR_INCOMPLETE_CHUNKED_ENCODING`, server restart) — the persisted history has an unanswered `tool_use` block. `buildMessageHistory` in `server/ai/conversations/history.ts` heals the gap: every tool-call id that has no persisted `tool` result row gets a synthetic error result (`INTERRUPTED_TOOL_RESULT_ERROR`) injected before the next user turn. The model reads the error and can retry; the conversation is never permanently un-sendable. Adjacent synthetic results plus the following real user prompt are merged into one user turn by `pushUserContent` in `server/ai/drivers/anthropic.ts`, satisfying Anthropic's strict user/assistant alternation requirement.
 - **Browser tool timeout.** If the browser never POSTs a tool-result, `callBrowser` rejects after 90 seconds (`BROWSER_TOOL_TIMEOUT_MS` in `server/ai/runtime/transport.ts`). The driver sees a rejection, emits an error, and the stream closes. This prevents a closed or unresponsive tab from hanging the tool loop indefinitely.
 - **Crash on server.** If `runChat` throws, the stream emits `{ type: 'error', message }`. The browser surfaces the message verbatim in the Agent Panel (admin-only surface, so info-disclosure is not a concern).
 - **Tool failure.** Browser executors wrap every call in try/catch. Failures return `{ ok: false, error }`. The model reads the error message in the next turn and retries with corrected input.
@@ -484,7 +498,6 @@ When `POST /admin/api/ai/credentials` creates a new credential, `seedEmptyDefaul
 | Importing `zod` anywhere | Banned repo-wide — TypeBox schemas pass directly as JSON Schema to every provider. Gated by `ai-driver-isolation.test.ts`. |
 | Routing a write tool as a server-side read (resolving from snapshot) | Write tools are `execution: 'browser'` — they must go through the bridge. The editor store is the write authority. |
 | Using invented breakpoint ids in `breakpointStyles` (`"mobile"`, `"desktop"`, etc.) | Use verbatim ids from the dynamic suffix. Invalid ids are rejected by the executor. |
-| Editing nodes outside the active page | Agent mutations target the active page tree. Cross-page edits require the user to switch pages first. |
 
 ---
 
@@ -505,6 +518,8 @@ When `POST /admin/api/ai/credentials` creates a new credential, `seedEmptyDefaul
   - `src/admin/pages/site/agent/siteAgentSnapshot.ts` — `SiteAgentSnapshot` raw-tree wire type + `buildSiteAgentSnapshot`
   - `server/ai/handlers/chat.ts` — `POST /admin/api/ai/chat/site` endpoint
   - `server/ai/handlers/toolResult.ts` — `POST /admin/api/ai/tool-result` endpoint
+  - `server/ai/conversations/history.ts` — `buildMessageHistory()` + `INTERRUPTED_TOOL_RESULT_ERROR` (heals interrupted tool calls)
+  - `server/ai/conversations/store.ts` — `appendMessage`, `listMessagesForConversation`, `readConversationForUser`
   - `server/ai/runtime/runner.ts` — `runChat()` driver loop
   - `server/ai/contextTokens.ts` — `normalizeContextTokens()` — provider-normalised "context used" for the meter
   - `server/ai/pricing/index.ts` — `resolveCostUsd`, `getModelCatalogue`, `computeCostUsd`
@@ -518,7 +533,8 @@ When `POST /admin/api/ai/credentials` creates a new credential, `seedEmptyDefaul
   - `src/admin/pages/site/agent/agentApi.ts` — tool-result POST, conversation bootstrap, message rehydration
   - `src/admin/pages/site/agent/streamEvents.ts` — `ServerStreamEventSchema` + `processStreamEvent`
   - `src/admin/pages/site/agent/pageContext.ts` — `buildCurrentPageContext`
-  - `src/admin/pages/site/agent/executor.ts` — write-tool browser dispatcher
+  - `src/admin/pages/site/agent/executor.ts` — write-tool browser dispatcher + auto-navigation
+  - `src/admin/pages/site/agent/tokenRunners.ts` — design-system token tool runners (`set_color_tokens`, `set_font_tokens`, `set_type_scale`, `set_spacing_scale`)
   - `src/admin/pages/site/agent/agentConfig.ts` — API path constants
   - `src/admin/pages/site/agent/renderEvidence.ts` — `captureAgentRenderSnapshot`
   - `src/admin/pages/site/agent/types.ts` — `ServerStreamEvent`, `AgentMessage`, `AgentRequestBody`, …
