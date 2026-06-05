@@ -256,7 +256,7 @@ Right-click a page row → **Use as template** → the **Template settings** dia
 | Post types | Checkbox list of all post-type tables — visible when "Post types" is selected |
 | Priority | Higher number wins when multiple templates match the same breadth level |
 
-The dialog validates that the page contains exactly one `base.outlet` before saving — it shows a blocking alert if the count is not 1.
+The dialog has no outlet requirement — save is never gated on outlet count. Add `base.outlet` after the page is already a template (the outlet block is only meaningful on templates; requiring it before save would be circular). See [base.outlet](#baseoutlet) for how the composer handles templates with missing or multiple outlets.
 
 Store action: `convertPageToTemplate(pageId, { target, priority })` in `siteSlice`.
 
