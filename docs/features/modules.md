@@ -30,7 +30,9 @@ src/core/module-engine/
 ├── registry.ts          — ModuleRegistry singleton (`registry`)
 ├── propertySchema.ts    — PropertyControl discriminated union, PropertySchemaSchema
 ├── dependencies.ts      — module dependency normalization + checks
-└── runtimeResolver.ts   — bare-specifier → runtime URL mapping for ESM modules
+├── runtimeResolver.ts   — bare-specifier → runtime URL mapping for ESM modules
+├── htmlTagBadge.ts      — resolveHtmlTagBadge (shared dispatch for htmlTag field)
+└── validateNodeProps.ts — coerce + default-fill authored props against propsSchema
 
 src/modules/base/
 ├── body/                — base.body (root container)
@@ -47,8 +49,11 @@ src/modules/base/
 ├── visualComponentRef/  — base.visual-component-ref
 ├── slotOutlet/          — base.slot-outlet (VC author side)
 ├── slotInstance/        — base.slot-instance (VC consumer side)
-├── utils/               — shared helpers (escape, common html templates)
-└── index.ts             — registers every base module with the registry
+├── utils/
+│   ├── escape.ts        — escapeHtml, safeUrl, sanitiseCssValue, buildStyle (re-exports publisher utils)
+│   ├── htmlTag.ts       — resolveHtmlTag, htmlTagControl, customHtmlTagControl, VOID_HTML_ELEMENTS
+│   └── mediaAttrs.ts    — buildMediaSrcset, pickMediaVariantUrl
+└── index.ts             — side-effect imports; each module self-registers on load
 ```
 
 ---
@@ -81,6 +86,34 @@ interface ModuleDefinition<TProps extends Record<string, unknown>> {
   /** Whether this module accepts children. */
   canHaveChildren: boolean
 
+  /**
+   * How the publisher dispatches this node. Makes the two-tier render contract
+   * explicit on the definition:
+   *   'standard'    — (default, omit) normal bottom-up walk via renderStandardNode
+   *   'special'     — publisher replaces the walk with a keyed specialised renderer
+   *                   (base.loop, base.visual-component-ref). Must have a matching
+   *                   entry in SPECIAL_RENDERER_IMPLS or the publisher throws.
+   *   'transparent' — node contributes nothing on its own; render() MUST return
+   *                   empty HTML (validated at registration). Used by base.slot-*.
+   */
+  publishBehavior?: 'standard' | 'special' | 'transparent'
+
+  /**
+   * When true, this node's render output varies per visitor request.
+   * Layer A/C auto-wraps it in an `<instatic-hole>` placeholder and defers
+   * rendering to request time. No first-party module sets this yet — it is
+   * infrastructure for plugin modules that hit live APIs.
+   */
+  dynamic?: boolean
+
+  /**
+   * Optional static fallback rendered into the <instatic-hole> placeholder at
+   * publish time (sanitised via DOMPurify). Non-JS visitors see it as a
+   * meaningful skeleton; JS visitors see it briefly until the hole runtime fires.
+   * Only relevant when dynamic: true or the node is otherwise classified as dynamic.
+   */
+  staticPlaceholder?: (props: TProps) => string
+
   /** Default prop values — derive from propsSchema via Value.Create(propsSchema). */
   defaults: TProps
 
@@ -94,18 +127,25 @@ interface ModuleDefinition<TProps extends Record<string, unknown>> {
    */
   propsSchema?: TSchema
 
+  /** Optional: external npm dependencies this module needs at runtime. */
+  dependencies?: ModuleDependencies
+
+  /** React component for the editor canvas live preview. */
+  component: React.ComponentType<ModuleComponentProps<TProps>>
+
+  /**
+   * Optional dependency-backed editor runtime. When present, the canvas renders
+   * this module in a sandboxed iframe with an import map built from the module's
+   * site dependencies, so packages like `three` don't become builder deps.
+   */
+  editorRuntime?: ModuleEditorRuntime
+
   /**
    * Pure render function — called by the publisher and the canvas.
    * props: already HTML-escaped + dynamic-prop-resolved.
    * renderedChildren: already-rendered child HTML strings (join them: renderedChildren.join('')).
    */
   render: (props: TProps, renderedChildren: string[]) => RenderOutput
-
-  /** React component for the editor canvas live preview. */
-  component: React.ComponentType<ModuleComponentProps<TProps>>
-
-  /** Optional: external npm dependencies this module needs (e.g. 'three'). */
-  dependencies?: ModuleDependencies
 
   /** Display-only HTML tag hint for the DOM panel badge. Not consumed by the publisher. */
   htmlTag?: string | ((props: TProps) => string | null)
@@ -186,31 +226,36 @@ schema: {
 `src/core/module-engine/registry.ts` exports a singleton:
 
 ```ts
-import { registry } from '@core/module-engine/registry'
+import { registry } from '@core/module-engine'
 
-registry.register(MyModuleDefinition)
-registry.get('base.text')          // → ModuleDefinition | undefined
-registry.list()                    // → AnyModuleDefinition[]
-registry.subscribe(listener)       // notified on register/unregister
+registry.registerOrReplace(MyModuleDefinition) // first-party: always overwrite on hot reload
+registry.register(MyModuleDefinition)          // throws if already registered
+registry.get('base.text')                      // → AnyModuleDefinition | undefined
+registry.getOrThrow('base.text')               // → AnyModuleDefinition (throws on miss)
+registry.has('base.text')                      // → boolean
+registry.list()                                // → AnyModuleDefinition[]
+registry.listByCategory()                      // → Record<string, AnyModuleDefinition[]>
+registry.subscribe(listener)                   // notified on register/unregister
+registry.generation()                          // monotonic counter — pair with useSyncExternalStore
 ```
 
-The registry is type-erased — every module is held as `AnyModuleDefinition` (props typed as `Record<string, unknown>`). The narrow → erased cast happens once at `register()` so user code never needs to widen its types.
+The registry is type-erased — every module is held as `AnyModuleDefinition` (props typed as `Record<string, unknown>`). The narrow → erased cast happens once at the registry boundary so user code never needs to widen its types.
+
+`register()` throws if the id is already taken (duplicate module guard). `registerOrReplace()` silently overwrites — used by every first-party module because each module's `index.ts` self-registers at import time and hot module reload will re-run the import.
 
 ### Boot-time registration
 
-`src/modules/base/index.ts` registers every first-party module. It's imported by
-`AdminCanvasEditorBody.tsx` (the visual editor body) so the registry is
-populated before the canvas mounts, without pulling module definitions into the
-route shell:
+`src/modules/base/index.ts` triggers registration for every first-party module. It's imported once
+inside `AdminEntry.tsx` (the lazy admin chunk) so the base modules stay out of the eager entry bundle.
+The server's public renderer imports it too via `server/publish/publicRenderer.ts`.
+
+Each module's `index.ts` calls `registry.registerOrReplace(XModule)` at the bottom — so importing
+the file is the registration. `base/index.ts` uses side-effect imports:
 
 ```ts
 // src/modules/base/index.ts
-import { registry } from '@core/module-engine'
-import { ContainerModule } from './container'
-import { TextModule } from './text'
-// ...
-registry.register(ContainerModule)
-registry.register(TextModule)
+import './container'   // ContainerModule self-registers on load
+import './text'        // TextModule self-registers on load
 // ...
 ```
 
@@ -229,12 +274,16 @@ The publisher's per-node flow (see [docs/features/publisher.md](publisher.md)):
 ```text
 For each node, bottom-up:
   1. renderedChildren = node.children.map(renderNode)
-  2. resolvedProps  = resolveProps(node, breakpoint)
-  3. dynamicProps   = resolveDynamicProps(...)
-  4. safeProps      = escapeProps(dynamicProps, schema)   ← string props HTML-escaped
-  5. { html, css } = def.render(safeProps, renderedChildren)
-  6. cssCollector.add(moduleId, css)                       ← dedup by moduleId
-  7. html = injectNodeClassIds(html, node, site)           ← splice classIds into root tag
+  2. effectiveProps  = resolveProps(node, breakpoint, def.schema)  ← merge breakpoint overrides
+  3. dynamicProps    = resolveDynamicProps(effectiveProps, ...)     ← template bindings
+  4. resolvedProps   = resolvePageRefProps(dynamicProps, pages)     ← cms:page:<id> → /path
+  5. validatedProps  = validateNodeProps(def, resolvedProps)        ← coerce + default-fill
+  6. safeProps       = escapeProps(validatedProps, schema)          ← HTML-escape string props
+  7. attachResolvedMediaByKey(safeProps, ...)                       ← prefetched media assets
+  8. { html, css }  = def.render(safeProps, renderedChildren)
+  9. cssMap.set(moduleId, sanitizeModuleCSS(css))                   ← dedup by moduleId
+ 10. html = injectNodeClassIds(html, node.classIds, site)           ← splice CSS classIds
+ 11. html = injectNodeInlineStyles(html, node.inlineStyles)         ← splice inline styles
 ```
 
 A module's CSS is **collected and deduped by `moduleId`** — emitting the same CSS for every instance is fine; it appears once in the published page bundle.
@@ -369,6 +418,7 @@ export const HeadingModule: ModuleDefinition<HeadingProps> = {
 }
 
 registry.registerOrReplace(HeadingModule)
+// Then add `import './heading'` to src/modules/base/index.ts
 ```
 
 That's it. The module shows up in the picker, in the Properties panel, in the publisher, in the canvas.
@@ -435,8 +485,13 @@ At render time, `resolveDynamicProps(...)` substitutes the bound value. Used ins
   - `src/core/module-engine/types.ts` — `ModuleDefinition`, `RenderOutput`, `ModuleComponentProps`
   - `src/core/module-engine/registry.ts` — `ModuleRegistry`, `registry` singleton
   - `src/core/module-engine/propertySchema.ts` — `PropertyControl` union, `PropertySchemaSchema`
+  - `src/core/module-engine/htmlTagBadge.ts` — `resolveHtmlTagBadge`
   - `src/core/module-engine/dependencies.ts` — `ModuleDependencies`, `getMissingModuleDependencies`
   - `src/modules/base/index.ts` — boot-time first-party registration
+  - `src/modules/base/utils/escape.ts` — `escapeHtml`, `safeUrl`, `buildStyle`
+  - `src/modules/base/utils/htmlTag.ts` — `resolveHtmlTag`, `htmlTagControl`, `VOID_HTML_ELEMENTS`
+  - `src/modules/base/utils/mediaAttrs.ts` — `buildMediaSrcset`, `pickMediaVariantUrl`
 - Gate tests:
   - `src/__tests__/architecture/component-system-placement.test.ts`
   - `src/__tests__/architecture/framework-typography-spacing.test.ts`
+  - `src/__tests__/module-engine/moduleConsolidation.test.ts` — publishBehavior contract, shared media helpers, transparent validation

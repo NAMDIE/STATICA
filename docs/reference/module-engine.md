@@ -279,20 +279,42 @@ The canonical example is `src/modules/base/text/`: `tags.ts` holds `normalizeTag
 
 ## Media in `render`
 
-For `image` and `media` props the publisher's `attachResolvedMediaByKey` puts a resolved object on `props._resolvedMediaByKey?.<propKey>`:
+For `image` and `media` props the publisher's `attachResolvedMediaByKey` puts a resolved `RenderResolvedMedia` object on `props._resolvedMediaByKey?.<propKey>`. Use the shared helpers from `@modules/base/utils/mediaAttrs` instead of hand-rolling srcset/URL logic:
 
 ```ts
+import { buildMediaSrcset, pickMediaVariantUrl } from '@modules/base/utils/mediaAttrs'
+import { safeUrl, escapeHtml } from '@modules/base/utils/escape'
+
 render: (props) => {
-  const resolved = (props._resolvedMediaByKey as Record<string, unknown> | undefined)?.src
-  if (!resolved) {
-    return { html: `<img src="${props.src}" alt="${props.alt ?? ''}">` }
+  const src = safeUrl(props.src)
+  if (!src) return { html: '' }
+
+  const media = (props._resolvedMediaByKey as Record<string, RenderResolvedMedia> | undefined)?.src
+  const alt = escapeHtml(media?.altText?.trim() ?? '')
+  const srcset = media ? buildMediaSrcset(media) : null
+  // fall back to plain <img> when publisher hasn't pre-fetched the asset
+  return {
+    html: srcset
+      ? `<img src="${src}" srcset="${srcset}" sizes="100vw" alt="${alt}">`
+      : `<img src="${src}" alt="${alt}">`,
   }
-  // Use resolved.sources, resolved.fallback, resolved.width, resolved.height
-  return { html: `<img src="${(resolved as { fallback: string }).fallback}" alt="${props.alt ?? ''}">` }
 }
 ```
 
-See `src/core/publisher/mediaPresentation.ts` for the resolved shape.
+`RenderResolvedMedia` shape (source: `src/core/publisher/renderConfig.ts`):
+```ts
+interface RenderResolvedMedia {
+  publicPath: string          // original upload URL
+  width: number | null
+  height: number | null
+  altText: string
+  blurHash: string | null
+  posterPath: string | null   // video poster frame URL
+  variants: Array<{ width: number; height: number; format: string; path: string; sizeBytes: number }>
+}
+```
+
+`buildMediaSrcset(media)` returns a `srcset` string sorted by ascending width with the original appended, or `null` when no variants exist. `pickMediaVariantUrl(media, targetWidth)` returns the smallest variant ≥ `targetWidth` (safe URL-escaped).
 
 ---
 
@@ -378,5 +400,10 @@ The publisher emits a `<script type="importmap">` entry. `getMissingModuleDepend
   - `src/core/module-engine/types.ts` — `ModuleDefinition`, `RenderOutput`, `ModuleComponentProps`, `NodeWrapperProps`
   - `src/core/module-engine/propertySchema.ts` — `PropertyControl` discriminated union
   - `src/core/module-engine/registry.ts` — `IModuleRegistry`, `registry` singleton
+  - `src/core/module-engine/htmlTagBadge.ts` — `resolveHtmlTagBadge`
+  - `src/core/publisher/renderConfig.ts` — `RenderResolvedMedia` shape
   - `src/modules/base/*` — first-party modules (read these for real examples)
   - `src/modules/base/container/ContainerEditor.tsx` — canonical editor component pattern
+  - `src/modules/base/utils/htmlTag.ts` — `resolveHtmlTag`, `htmlTagControl`, `customHtmlTagControl`, `VOID_HTML_ELEMENTS`
+  - `src/modules/base/utils/mediaAttrs.ts` — `buildMediaSrcset`, `pickMediaVariantUrl`
+  - `src/modules/base/utils/escape.ts` — `escapeHtml`, `safeUrl`, `buildStyle`
