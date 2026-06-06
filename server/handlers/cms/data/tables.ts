@@ -22,7 +22,10 @@ import type { DbClient } from '../../../db/client'
 import type { AuthUser } from '../../../repositories/users'
 import type { DataTable } from '@core/data/schemas'
 import { createAuditEvent } from '../../../repositories/audit'
-import { emitContentEntryCreated } from '../../../publish/contentEvents'
+import {
+  applyContentEntryCellsFilter,
+  emitContentEntryCreated,
+} from '../../../publish/contentEvents'
 import {
   createDataTable,
   getDataTable,
@@ -33,8 +36,7 @@ import {
   listDataRows,
 } from '../../../repositories/data'
 import { normalizeDataTableFields } from '@core/data/fields'
-import { dataTableHasField } from '@core/data/fields'
-import { readSlugCell } from '@core/data/cells'
+import { slugForTable } from '@core/data/cells'
 import { slugFromTitle } from '@core/utils/slug'
 import { normalizeRouteBase } from '@core/templates/templateMatching'
 import { fetchPublishedDataRowItems } from '@core/loops/sources/dataRows'
@@ -118,17 +120,6 @@ async function recordTableAuditEvent(
     metadata: { slug: table.slug },
     ...requestAuditContext(req),
   })
-}
-
-/**
- * Derive a denormalized slug from a row's cells. Returns an empty string when
- * the table has no slug field — the unique index on `data_rows` excludes empty
- * strings so non-routable tables can have many rows without conflicts.
- */
-function extractRowSlug(table: DataTable, cells: Record<string, unknown>): string {
-  if (!dataTableHasField(table, 'slug')) return ''
-  const rawSlug = readSlugCell(cells)
-  return rawSlug ? slugFromTitle(rawSlug) : ''
 }
 
 // ---------------------------------------------------------------------------
@@ -287,8 +278,15 @@ async function handleTableRows(
     const body = await readValidatedBody(req, RowUpsertBodySchema)
     if (!body) return badRequest('Invalid row payload')
 
-    const cells = body.cells ?? {}
-    const slug = extractRowSlug(table, cells)
+    // Run the `content.entry.cells` filter pipeline before persistence so
+    // plugins can validate / normalize / auto-fill cells — the same shared
+    // helper the plugin `cms.content.*` surface applies.
+    const cells = await applyContentEntryCellsFilter(body.cells ?? {}, {
+      tableSlug: table.slug,
+      entryId: 'new',
+      actor: { kind: 'user', userId: user.id },
+    })
+    const slug = slugForTable(table, cells)
 
     const row = await createDataRow(db, { tableId, cells, slug }, user.id)
     await emitContentEntryCreated(db, row.id, { kind: 'user', userId: user.id })

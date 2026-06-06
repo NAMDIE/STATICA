@@ -18,6 +18,7 @@ import type { AuthUser } from '../../../repositories/users'
 import type { DataRow } from '@core/data/schemas'
 import { createAuditEvent } from '../../../repositories/audit'
 import {
+  applyContentEntryCellsFilter,
   emitContentEntryDeleted,
   emitContentEntryUpdated,
 } from '../../../publish/contentEvents'
@@ -36,9 +37,7 @@ import {
   updateDataRowTable,
 } from '../../../repositories/data'
 import { findUserById } from '../../../repositories/users'
-import { dataTableHasField } from '@core/data/fields'
-import { readSlugCell } from '@core/data/cells'
-import { slugFromTitle } from '@core/utils/slug'
+import { slugForTable } from '@core/data/cells'
 import { badRequest, jsonResponse, methodNotAllowed, readValidatedBody } from '../../../http'
 import type { CmsHandlerOptions } from '../shared'
 import { CMS_API_PREFIX, requestAuditContext } from '../shared'
@@ -120,21 +119,6 @@ async function loadRowForAccess(
   return row
 }
 
-/**
- * Derive the denormalized slug from a cells payload for a given table.
- * Returns an empty string when the table has no slug field.
- */
-async function extractSlugForTable(
-  db: DbClient,
-  tableId: string,
-  cells: Record<string, unknown>,
-): Promise<string> {
-  const table = await getDataTable(db, tableId)
-  if (!table || !dataTableHasField(table, 'slug')) return ''
-  const rawSlug = readSlugCell(cells)
-  return rawSlug ? slugFromTitle(rawSlug) : ''
-}
-
 // ---------------------------------------------------------------------------
 // Per-route handlers
 // ---------------------------------------------------------------------------
@@ -172,15 +156,28 @@ async function handleRowItem(
     const body = await readValidatedBody(req, RowUpsertBodySchema)
     if (!body) return badRequest('Invalid row payload')
 
-    const cells = body.cells ?? currentRow.cells
-    const slug = await extractSlugForTable(db, currentRow.tableId, cells)
+    const table = await getDataTable(db, currentRow.tableId)
+    if (!table) return rowNotFound()
+
+    const rawCells = body.cells ?? currentRow.cells
+    // Run the `content.entry.cells` filter pipeline before persistence so
+    // plugins can validate / normalize / auto-fill cells — the same shared
+    // helper the plugin `cms.content.*` surface applies.
+    const cells = await applyContentEntryCellsFilter(rawCells, {
+      tableSlug: table.slug,
+      entryId: rowId,
+      actor: { kind: 'user', userId: user.id },
+    })
+    const slug = slugForTable(table, cells)
 
     const row = await saveDataRowDraft(db, rowId, { cells, slug }, user.id)
     if (!row) return rowNotFound()
-    // Compute changed cell ids from the patch (sufficient for plugin loop
-    // guards — the diff in plugin handlers is finer-grained but the admin
-    // path doesn't read the previous cells anyway).
-    const changedFieldIds = body.cells ? Object.keys(body.cells) : []
+    // Changed cell ids: the patch's own keys plus any keys the filter added
+    // or rewrote. Plugins watch this list to loop-guard their own writes;
+    // false positives are fine, false negatives are not.
+    const patchedIds = body.cells ? Object.keys(body.cells) : []
+    const filterChangedIds = Object.keys(cells).filter((k) => cells[k] !== rawCells[k])
+    const changedFieldIds = [...new Set([...patchedIds, ...filterChangedIds])]
     await emitContentEntryUpdated(db, rowId, changedFieldIds, { kind: 'user', userId: user.id })
     await recordRowAuditEvent(db, user, req, 'data.row.update', row)
     return jsonResponse({ row })

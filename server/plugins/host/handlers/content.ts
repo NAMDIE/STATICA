@@ -69,6 +69,7 @@ import {
   publishDataRow,
 } from '../../../repositories/data'
 import { republishAllPages } from '../../../publish/republish'
+import { applyContentEntryCellsFilter } from '../../../publish/contentEvents'
 import type { DbClient } from '../../../db/client'
 import {
   assertContentTableAccess,
@@ -263,23 +264,6 @@ function diffCells(
   return changed
 }
 
-/**
- * Apply the `content.entry.cells` filter pipeline. Lets plugins
- * validate / normalize / auto-fill cells before persistence. The
- * filter context carries the table slug, entry id (or `'new'` for
- * `create`), and the actor.
- */
-async function applyCellsFilter(
-  cells: Record<string, unknown>,
-  ctx: { tableSlug: string; entryId: string; actor: PluginActor },
-): Promise<Record<string, unknown>> {
-  return hookBus.applyFilter('content.entry.cells', cells, {
-    tableSlug: ctx.tableSlug,
-    entryId: ctx.entryId,
-    actor: ctx.actor,
-  })
-}
-
 // ---------------------------------------------------------------------------
 // Tables — list / get / create
 // ---------------------------------------------------------------------------
@@ -412,7 +396,7 @@ export async function handleContentEntriesCreate(
   assertContentTableAccess(entry, tableSlug, 'write')
   const table = await resolveTableBySlug(db, tableSlug)
   const actor: PluginActor = { kind: 'plugin', pluginId: msg.pluginId }
-  const cells = await applyCellsFilter(input.cells, {
+  const cells = await applyContentEntryCellsFilter(input.cells, {
     tableSlug,
     entryId: 'new',
     actor,
@@ -443,7 +427,7 @@ export async function handleContentEntriesUpdate(
   }
   const actor: PluginActor = { kind: 'plugin', pluginId: msg.pluginId }
   const mergedCells = patch.cells ? { ...existing.cells, ...patch.cells } : existing.cells
-  const filteredCells = await applyCellsFilter(mergedCells, {
+  const filteredCells = await applyContentEntryCellsFilter(mergedCells, {
     tableSlug,
     entryId,
     actor,
@@ -553,7 +537,7 @@ export async function handleContentEntriesCreateMany(
   // runs INSIDE the same plugin's worker; running it inside the per-row
   // transaction would tie up the DB connection.
   const prepared = await Promise.all(inputs.map(async (input) => {
-    const cells = await applyCellsFilter(input.cells, { tableSlug, entryId: 'new', actor })
+    const cells = await applyContentEntryCellsFilter(input.cells, { tableSlug, entryId: 'new', actor })
     const slug = input.slug ?? denormalizeSlug(table, cells)
     return { tableId: table.id, cells, slug }
   }))
@@ -583,7 +567,7 @@ export async function handleContentEntriesUpdateMany(
       throw new Error(`Entry "${id}" not found in table "${tableSlug}"`)
     }
     const mergedCells = patch.cells ? { ...existing.cells, ...patch.cells } : existing.cells
-    const filteredCells = await applyCellsFilter(mergedCells, {
+    const filteredCells = await applyContentEntryCellsFilter(mergedCells, {
       tableSlug,
       entryId: id,
       actor,
@@ -705,7 +689,7 @@ export async function handleContentTreeMutate(
   parsePageNodeTree(tree, `entry "${entryId}" field "${fieldId}" after mutation`)
 
   const actor: PluginActor = { kind: 'plugin', pluginId: msg.pluginId }
-  const nextCells = await applyCellsFilter(
+  const nextCells = await applyContentEntryCellsFilter(
     { ...row.cells, [fieldId]: tree },
     { tableSlug: table.slug, entryId, actor },
   )
@@ -737,7 +721,7 @@ export async function handleContentTreeReplace(
   )
 
   const actor: PluginActor = { kind: 'plugin', pluginId: msg.pluginId }
-  const nextCells = await applyCellsFilter(
+  const nextCells = await applyContentEntryCellsFilter(
     { ...row.cells, [fieldId]: replacementTree },
     { tableSlug: table.slug, entryId, actor },
   )

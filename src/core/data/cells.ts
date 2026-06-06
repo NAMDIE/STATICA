@@ -9,7 +9,9 @@
 
 import { NodeTreeSchema, type NodeTree } from '@core/page-tree'
 import type { BaseNode } from '@core/page-tree'
-import { DataFieldSchema, type DataField, type DataRowCells } from './schemas'
+import { DataFieldSchema, type DataField, type DataRowCells, type DataTable } from './schemas'
+import { dataTableHasField } from './fields'
+import { slugFromTitle } from '@core/utils/slug'
 import { safeParseValue } from '@core/utils/typeboxHelpers'
 
 export function readStringCell(cells: DataRowCells, fieldId: string, fallback = ''): string {
@@ -48,6 +50,18 @@ export function readTitleCell(cells: DataRowCells): string {
 
 export function readSlugCell(cells: DataRowCells): string {
   return readStringCell(cells, 'slug')
+}
+
+/**
+ * Derive the denormalized, routable slug for a row in a given table.
+ * Returns an empty string when the table has no slug field — the unique
+ * index on `data_rows` excludes empty strings, so non-routable tables can
+ * hold many rows without slug conflicts.
+ */
+export function slugForTable(table: Pick<DataTable, 'fields'>, cells: DataRowCells): string {
+  if (!dataTableHasField(table, 'slug')) return ''
+  const rawSlug = readSlugCell(cells)
+  return rawSlug ? slugFromTitle(rawSlug) : ''
 }
 
 export function readBodyCell(cells: DataRowCells): string {
