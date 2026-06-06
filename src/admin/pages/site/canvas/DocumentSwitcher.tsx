@@ -24,6 +24,13 @@ export interface DocumentSwitcherCurrent {
   label: string
 }
 
+/**
+ * Shared stable empty-array fallback. A fresh `[]` literal per render is a new
+ * reference each time, which both churns derived work and trips the
+ * Zustand-stability gate; this module-level constant keeps the identity stable.
+ */
+const EMPTY_PAGES: never[] = []
+
 /** Cap the trigger width (px) so a long document title can't blow out the toolbar. */
 const MAX_SWITCHER_PX = 180
 /** Space reserved after the value text for the gap + chevron. */
@@ -38,9 +45,9 @@ export function DocumentSwitcher({ current }: { current: DocumentSwitcherCurrent
   const isCurrentPage = (id: string) => current.kind === 'page' && current.id === id
   const isCurrentVc = (id: string) => current.kind === 'component' && current.id === id
 
-  const regularPages = (pages ?? []).filter((p) => !isTemplatePage(p) && !isCurrentPage(p.id))
-  const templates = (pages ?? []).filter((p) => isTemplatePage(p) && !isCurrentPage(p.id))
-  const vcs = (components ?? []).filter((c) => !isCurrentVc(c.id))
+  const regularPages = (pages ?? EMPTY_PAGES).filter((p) => !isTemplatePage(p) && !isCurrentPage(p.id))
+  const templates = (pages ?? EMPTY_PAGES).filter((p) => isTemplatePage(p) && !isCurrentPage(p.id))
+  const vcs = (components ?? EMPTY_PAGES).filter((c) => !isCurrentVc(c.id))
 
   function handleChange(rawValue: string) {
     const sep = rawValue.indexOf(':')

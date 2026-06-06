@@ -383,7 +383,7 @@ describe('Select', () => {
 
     const listbox = screen.getByRole('listbox', { name: /scroll status/i })
     expect(listbox.getAttribute('style')).toContain('--context-menu-max-height: 320px')
-    expect(listbox.hasAttribute('data-scrollable')).toBe(true)
+    expect(listbox.querySelector('[data-scrollable]')).not.toBeNull()
   })
 
   it('auto-enables a search box for long lists and filters as you type', () => {

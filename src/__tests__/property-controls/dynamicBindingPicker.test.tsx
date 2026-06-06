@@ -316,11 +316,12 @@ describe('DynamicBindingControl picker', () => {
 
   it('toggles the popover closed when the affordance button is clicked again', async () => {
     renderBinding()
-    const toggleBtn = screen.getByRole('button', { name: /bind text/i })
-    fireEvent.click(toggleBtn)
+    fireEvent.click(screen.getByRole('button', { name: /bind text/i }))
     await waitFor(() => expect(screen.getByRole('menu', { name: /bind text/i })).toBeDefined())
-    // Click the trigger again — popover should dismiss.
-    fireEvent.click(toggleBtn)
+    // Re-query the affordance button before clicking again: opening the picker
+    // re-creates its DOM node, so a reference captured before opening is detached
+    // and never receives the click. Clicking the fresh node toggles it closed.
+    fireEvent.click(screen.getByRole('button', { name: /bind text/i }))
     await waitFor(() => expect(screen.queryByRole('menu', { name: /bind text/i })).toBeNull())
   })
 })

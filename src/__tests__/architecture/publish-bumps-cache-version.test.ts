@@ -6,7 +6,7 @@
  * Covered files:
  *   - server/repositories/publish.ts            (publishDraftSite)
  *   - server/repositories/data/publish.ts       (publishDataRow)
- *   - server/repositories/data/rows.ts          (updateDataRowStatus — unpublish)
+ *   - server/repositories/data/rows/mutations.ts (updateDataRowStatus — unpublish)
  *
  * A simple text scan is sufficient — no AST parsing needed. The check matches
  * the pattern used by other architecture tests in this directory.
@@ -28,7 +28,7 @@ function read(relative: string): string {
 const EXPECTED_IMPORT_PATHS: Record<string, string> = {
   'server/repositories/publish.ts': "'../publish/renderCache'",
   'server/repositories/data/publish.ts': "'../../publish/renderCache'",
-  'server/repositories/data/rows.ts': "'../../publish/renderCache'",
+  'server/repositories/data/rows/mutations.ts': "'../../../publish/renderCache'",
 }
 
 const FILES_UNDER_TEST = Object.keys(EXPECTED_IMPORT_PATHS)
