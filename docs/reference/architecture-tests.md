@@ -6,7 +6,7 @@ Catalog of every test in `src/__tests__/architecture/`. These are structural gat
 
 ## TL;DR
 
-- 83 gate files across structural domains: SQL, JSON columns, migrations, CSS, icons, primitives, page tree, sandbox, agent, router, content storage, boundary validation, module size, AI, auth, etc.
+- 85 gate files across structural domains: SQL, JSON columns, migrations, CSS, icons, primitives, page tree, sandbox, agent, router, content storage, boundary validation, module size, AI, auth, etc.
 - Naming convention: `<topic>.test.ts` (kebab-case) or `<group>-<topic>.test.ts`. A few legacy `task<N>-*` ids remain for live invariants; new gates should use topic names.
 - Run them all: `bun test src/__tests__/architecture/`.
 - Most are **import / source scans** — they parse the files in scope and assert / reject patterns. Some are unit-style (a small in-test database, a synthesized page tree).
@@ -155,11 +155,12 @@ See [docs/features/plugin-system.md](../features/plugin-system.md).
 
 | Test                                          | What it enforces                                                                 |
 |-----------------------------------------------|----------------------------------------------------------------------------------|
+| `ai-tool-schema-ssot.test.ts`                 | Site write-tool input schemas live once in `src/core/ai/toolSchemas.ts` (re-exported from `@core/ai`). Every registered tool's `inputSchema` is the exact object from `@core/ai` (referential identity check); consumer modules (`writeTools.ts`, `executor.ts`, `tokenRunners.ts`) import from `@core/ai` and do not redeclare local copies. |
 | `ai-driver-isolation.test.ts`                 | Provider SDKs (`@anthropic-ai/claude-agent-sdk`, `@openai/agents`, `@openrouter/agent`, `@modelcontextprotocol/sdk`), `zod`, and `@anthropic-ai/sdk` are all banned repo-wide with no allowed callers. Drivers talk directly to each provider's REST API over HTTP/SSE and pass TypeBox schemas through as JSON Schema. `src/` and `server/` are both scanned. |
 | `ai-driver-shared-helpers.test.ts`            | Two cross-provider helpers must have exactly one source: (1) `parseToolArguments` is exported only from `server/ai/drivers/http/toolArgs.ts` — every driver imports it; private copies (`parseJsonOrEmpty`, etc.) are banned. (2) `SYSTEM_PROMPT_DYNAMIC_BOUNDARY` is declared only in `server/ai/runtime/types.ts` — prompt builders and drivers import it. Divergent copies silently produce different error handling or break prompt caching per provider. |
 | `ai-handlers-capability-gated.test.ts`        | Every handler under `server/ai/handlers/` calls `requireCapability` or `requireAnyCapability` before doing work. Prevents unauthenticated access to AI endpoints. |
 | `ai-credentials-never-leak.test.ts`           | AI handler response bodies do not contain credential ciphertext or raw `apiKey` fields. Handlers must project through `toCredentialView()` before serialising a `CredentialRecord`. |
-| `ai-tools-typebox-only.test.ts`               | Every file under `server/ai/tools/` defines schemas with TypeBox, not Zod. Drivers pass TypeBox schemas through as JSON Schema to each provider's REST API; tool files are the single source of truth for tool input shapes. |
+| `ai-tools-typebox-only.test.ts`               | Every file under `server/ai/tools/` defines schemas with TypeBox, not Zod. Tool files satisfy the gate either by using TypeBox directly or by importing from `@core/ai` (the shared schema leaf). |
 
 See [docs/features/agent.md](../features/agent.md).
 

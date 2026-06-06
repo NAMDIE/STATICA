@@ -13,7 +13,7 @@ The agent runs on a provider-agnostic AI runtime (`server/ai/`) that can drive a
 - **28 tools total.** 6 server-side read tools (resolved server-side from the posted snapshot) + 22 browser-bridged write tools.
 - **Two-endpoint bridge.** `POST /admin/api/ai/chat/site` opens an NDJSON stream. When the model calls a write tool, the server emits `toolRequest`; the browser executor applies it to the editor store and POSTs the `AiToolOutput` result to `POST /admin/api/ai/tool-result`.
 - **Provider-agnostic.** The runtime selects a driver (Anthropic, OpenAI, OpenRouter, Ollama) from the conversation's configured credential.
-- **Tools defined with TypeBox** (`server/ai/tools/`). Gated by `ai-tools-typebox-only.test.ts`.
+- **Tool input schemas are a single source of truth** in `@core/ai` (`src/core/ai/toolSchemas.ts`). The server tool registry (`server/ai/tools/site/writeTools.ts`) and the browser executor (`executor.ts` + `tokenRunners.ts`) import the exact same schema objects — a constraint added once is enforced on both sides at build time. Gated by `ai-tool-schema-ssot.test.ts` and `ai-tools-typebox-only.test.ts`.
 - **Capabilities.** `ai.chat` required to stream; `ai.tools.write` required for write tools. Gated by `ai-handlers-capability-gated.test.ts`.
 
 ---
@@ -23,6 +23,7 @@ The agent runs on a provider-agnostic AI runtime (`server/ai/`) that can drive a
 ```text
 src/core/ai/
 ├── toolOutput.ts           — AiToolOutput type + AiToolOutputSchema + aiToolOk / aiToolError
+├── toolSchemas.ts          — all site write-tool input schemas (single source of truth for both server and browser)
 └── index.ts                — barrel re-export (canonical @core/ai import path)
 
 server/ai/
@@ -561,8 +562,9 @@ When `POST /admin/api/ai/credentials` creates a new credential, `seedEmptyDefaul
 - `docs/features/auth-and-access.md` — capability model (`ai.chat`, `ai.tools.write`)
 - Source-of-truth files:
   - `src/core/ai/toolOutput.ts` — `AiToolOutput` type, `AiToolOutputSchema`, `aiToolOk`, `aiToolError` (canonical bridge result)
+  - `src/core/ai/toolSchemas.ts` — all site write-tool input schemas (single source of truth; imported by both the server registry and the browser executor)
   - `src/core/ai/index.ts` — barrel re-exporting the above
-  - `server/ai/tools/site/writeTools.ts` — 22 browser-bridged write tool definitions (TypeBox schemas)
+  - `server/ai/tools/site/writeTools.ts` — 22 browser-bridged write tool definitions (uses `@core/ai` input schemas)
   - `server/ai/tools/site/readTools.ts` — 6 server-side read tool definitions
   - `server/ai/tools/site/render.ts` — `renderAgentPage`, `describeAgentModules`, `describeAgentTokens`, `filterTokenFamily`
   - `server/ai/tools/site/systemPrompt.ts` — HTML-native system prompt
@@ -598,6 +600,7 @@ When `POST /admin/api/ai/credentials` creates a new credential, `seedEmptyDefaul
   - `src/admin/pages/site/panels/AgentPanel/AgentPanel.tsx` — Agent Panel; resolves `contextWindow` for the meter
   - `src/admin/pages/site/panels/AgentPanel/ContextMeter.tsx` — context used / window progress bar
 - Gate tests:
+  - `src/__tests__/architecture/ai-tool-schema-ssot.test.ts`
   - `src/__tests__/architecture/ai-driver-isolation.test.ts`
   - `src/__tests__/architecture/ai-tools-typebox-only.test.ts`
   - `src/__tests__/architecture/ai-handlers-capability-gated.test.ts`
