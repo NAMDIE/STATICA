@@ -36,6 +36,10 @@ const CSSPropertyBagSchema = Type.Object({
   textTransform: Type.Optional(Type.Union([
     Type.Literal('none'), Type.Literal('uppercase'), Type.Literal('lowercase'), Type.Literal('capitalize'),
   ])),
+  whiteSpace: Type.Optional(Type.Union([
+    Type.Literal('normal'), Type.Literal('nowrap'), Type.Literal('pre'),
+    Type.Literal('pre-wrap'), Type.Literal('pre-line'), Type.Literal('break-spaces'),
+  ])),
   color: Type.Optional(Type.String()),
   textShadow: Type.Optional(Type.String()),
 

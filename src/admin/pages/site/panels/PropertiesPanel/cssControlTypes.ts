@@ -94,6 +94,7 @@ const ENUM_OPTIONS = new Map<keyof CSSPropertyBag, string[]>([
   ['fontWeight',       ['300', '400', '500', '600', '700', 'bold', 'normal']],
   ['textAlign',        ['left', 'center', 'right', 'justify']],
   ['textTransform',    ['none', 'uppercase', 'lowercase', 'capitalize']],
+  ['whiteSpace',       ['normal', 'nowrap', 'pre', 'pre-wrap', 'pre-line', 'break-spaces']],
   ['textDecoration',   ['none', 'underline', 'line-through', 'overline']],
   ['boxSizing',        ['border-box', 'content-box']],
   ['position',         ['static', 'relative', 'absolute', 'fixed', 'sticky']],
@@ -183,6 +184,7 @@ const DEFAULT_CSS_VALUES: Partial<Record<keyof CSSPropertyBag, string | number>>
   textAlign:      'left',
   textDecoration: 'none',
   textTransform:  'none',
+  whiteSpace:     'normal',
   color:          'inherit',  // NOT '#000000' — inheriting keeps text legible by default
   textShadow:     'none',
   // ── Layout ───────────────────────────────────────────────────────────────
@@ -423,6 +425,7 @@ export const CLASS_STYLE_SECTIONS: ReadonlyArray<ClassStyleSectionDefinition> = 
       'textAlign',
       'textDecoration',
       'textTransform',
+      'whiteSpace',
       'color',
       'textShadow',
     ],
