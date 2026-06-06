@@ -1,6 +1,6 @@
 # AI Agent
 
-The AI Agent is a model-powered assistant integrated into the visual editor. The user types a request in the Agent Panel; the agent reads the current page snapshot, plans a sequence of edits, and executes them by calling tools. Structure is written as semantic HTML (`insertHtml` / `replaceNodeHtml`); styling is written as CSS in the same call — a `<style>` block and/or `class=` attributes that the importer parses into Selectors-panel classes and ambient rules. `createClass` / `updateClassStyles` / `assignClass` remain for editing styles on existing nodes.
+The AI Agent is a model-powered assistant integrated into the visual editor. The user types a request in the Agent Panel; the agent reads the current page snapshot, plans a sequence of edits, and executes them by calling tools. Structure is written as semantic HTML (`insertHtml` / `replaceNodeHtml`); styling is written as CSS — a `<style>` block and/or `class=` attributes inside the insert, or the dedicated `applyCss` tool for authoring/editing any CSS on its own. There is one CSS path and it accepts every selector; `assignClass` / `removeClass` attach existing classes to nodes.
 
 The agent runs on a provider-agnostic AI runtime (`server/ai/`) that can drive any supported model (Anthropic Claude, OpenAI, OpenRouter, Ollama). Every driver talks directly to its provider's REST API over HTTP/SSE — no provider SDKs. All four share one multi-turn tool loop (`drivers/http/toolLoop.ts`); each supplies only a small `ProviderAdapter` of pure mapping functions. The plain `@anthropic-ai/sdk` (and any provider SDK) is banned repo-wide. Gated by `ai-driver-isolation.test.ts`.
 
@@ -58,6 +58,7 @@ server/ai/
 │   │   ├── sse.ts          — parseSseStream(res): reassemble SSE frames across chunks
 │   │   ├── execTool.ts     — executeAiTool(): server-handler vs browser-bridge dispatch
 │   │   ├── toolLoop.ts     — runToolLoop(): provider-agnostic multi-turn loop
+│   │   ├── toolArgs.ts     — parseToolArguments(json): shared tool-argument JSON parsing (one copy for all drivers)
 │   │   └── errors.ts       — isAbortError / classifyHttpError
 │   ├── responses-shared.ts — OpenAI-Responses mapping + SSE translator + adapter factory (openai + openrouter)
 │   ├── anthropic.ts        — Anthropic driver: direct POST /v1/messages (no SDK)
@@ -379,6 +380,8 @@ When a node-targeting write tool (`insertHtml`, `getNodeHtml`, `replaceNodeHtml`
 ```
 Drivers that support prompt caching (Anthropic) apply `cache_control` to the static prefix automatically; drivers that don't concatenate the three strings. Content is intentionally static across providers — every observable behaviour comes from the tool definitions, not prompt knobs.
 
+`SYSTEM_PROMPT_DYNAMIC_BOUNDARY` is the literal `'__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__'`, declared **once** in `server/ai/runtime/types.ts` and imported everywhere — prompt builders and every driver. A duplicate definition would silently break prompt caching on whichever driver drifted. Gated by `ai-driver-shared-helpers.test.ts`.
+
 **Static prefix** (full text in `server/ai/tools/site/systemPrompt.ts`):
 - **Design system first.** Establish or reuse tokens before/while building (`set_color_tokens`, `set_type_scale`, `set_spacing_scale`, `set_font_tokens`), then reference them in CSS (`var(--<slug>)`, `var(--text-l)`, `var(--space-m)`, `var(--<font-var>)`) instead of raw hex/px/font-family. The dynamic suffix's `Tokens —` line shows what already exists; `(none …)` means no design system yet.
 - Structure as HTML (`insertHtml` / `replaceNodeHtml`); style with CSS in the same payload — a `<style>` block and/or `class=` attributes referencing the design tokens. The importer classifies selectors, so the agent never hand-builds classes at insert time.
@@ -480,6 +483,10 @@ interface AgentSlice {
 
 Conversations and their message history are persisted server-side in `ai_conversations` + `ai_messages`. `loadAgentConversation(id)` rehydrates a past thread into `agentMessages` without re-running the conversation.
 
+**Content blocks are one schema.** Every message body is an `AiContentBlock[]` — a discriminated union of `text` / `image` / `toolCall` / `toolResult` kinds defined once as a TypeBox schema in `@core/ai` (`src/core/ai/contentBlock.ts`). The server runtime type (`AiContentBlock`), the read boundary (`ContentBlocksSchema` in `conversations/store.ts`, which validates every block out of `content_json`), and the client wire schema (`MessageViewSchema` in `src/admin/ai/api.ts`) all derive from it. Add a kind there and every reader/writer sees it.
+
+**Tool outcomes are first-class.** A `role:'tool'` row records its result as a `{ kind: 'toolResult', ok, error? }` block — `ok` is an explicit boolean, never inferred from the emptiness of a text block. The persister writes it (`appendToolResult`), `buildMessageHistory` reads `ok`/`error` straight off the block to reconstruct the replay `AiToolOutput`, and the client folds it back into the matching tool-call badge (`rehydrateMessages`). The heavy successful `data` an `AiToolOutput` may carry is intentionally **not** persisted: the model already consumed it in the round that produced the result, so replay only needs `{ ok, error }` — re-feeding large tool payloads every turn would bloat the context for no benefit.
+
 ---
 
 ## Context meter and live model catalogue
@@ -535,6 +542,8 @@ When `POST /admin/api/ai/credentials` creates a new credential, `seedEmptyDefaul
 |---|---|
 | Importing any provider SDK (`@anthropic-ai/sdk`, `@anthropic-ai/claude-agent-sdk`, `@openai/agents`, `@openrouter/agent`, `@modelcontextprotocol/sdk`) | Banned repo-wide — no exceptions, including inside `server/ai/drivers/`. Drivers talk directly to the REST API. Gated by `ai-driver-isolation.test.ts`. |
 | Importing `zod` anywhere | Banned repo-wide — TypeBox schemas pass directly as JSON Schema to every provider. Gated by `ai-driver-isolation.test.ts`. |
+| Writing a private `parseToolArguments` / `parseJsonOrEmpty` copy inside a driver | Import `parseToolArguments` from `./http/toolArgs`. Private copies diverge silently — the same malformed model output produces different outcomes per provider. Gated by `ai-driver-shared-helpers.test.ts`. |
+| Redefining `SYSTEM_PROMPT_DYNAMIC_BOUNDARY` in a driver or prompt builder | Import it from `server/ai/runtime/types.ts`. One source — if a driver or builder drifts the literal, prompt caching silently breaks for that driver. Gated by `ai-driver-shared-helpers.test.ts`. |
 | Routing a write tool as a server-side read (resolving from snapshot) | Write tools are `execution: 'browser'` — they must go through the bridge. The editor store is the write authority. |
 | Using invented breakpoint ids in `breakpointStyles` (`"mobile"`, `"desktop"`, etc.) | Use verbatim ids from the dynamic suffix. Invalid ids are rejected by the executor. |
 
@@ -588,3 +597,4 @@ When `POST /admin/api/ai/credentials` creates a new credential, `seedEmptyDefaul
   - `src/__tests__/architecture/ai-driver-isolation.test.ts`
   - `src/__tests__/architecture/ai-tools-typebox-only.test.ts`
   - `src/__tests__/architecture/ai-handlers-capability-gated.test.ts`
+  - `src/__tests__/architecture/ai-driver-shared-helpers.test.ts`
