@@ -26,7 +26,7 @@ import { cssToStyleRules } from '@core/siteImport'
 import type { NewStyleRule } from '@core/siteImport'
 import type { BaseNode, ConditionDef, Page, PageTemplateConfig } from '@core/page-tree'
 import { renderNode } from '@core/publisher'
-import type { RenderContext } from '@core/publisher'
+import type { RenderConfig, RenderAccumulators } from '@core/publisher'
 import { getAgentStoreApi } from './storeRef'
 import { captureAgentRenderSnapshot, SnapshotNodeNotFoundError } from './renderEvidence'
 import type { AgentRenderSnapshotPayload } from './types'
@@ -402,16 +402,20 @@ function runGetNodeHtml(input: Static<typeof getNodeHtmlSchema>): AiToolOutput {
     return nodeNotInActiveDocError(store, input.nodeId)
   }
 
-  const ctx: RenderContext = {
+  const config: RenderConfig = {
     page: activePage,
     site,
     registry,
     breakpointId: undefined,
-    cssMap: new Map(),
     annotateNodeIds: true,
   }
+  const acc: RenderAccumulators = {
+    cssMap: new Map(),
+    infiniteLoopIds: new Set(),
+    holeNodeIds: new Set(),
+  }
 
-  const html = renderNode(input.nodeId, ctx)
+  const html = renderNode(input.nodeId, config, acc)
   return aiToolOk({ html })
 }
 

@@ -5,8 +5,11 @@
  * The stack semantics are the heart of how templates compose with loops:
  *  - The publisher seeds the stack with the page's primary entry when
  *    rendering a single-entry content template.
- *  - The `base.loop` renderer pushes each iteration's item onto the stack
- *    before recursing into the loop's child subtree, then pops on exit.
+ *  - The `base.loop` renderer renders each iteration against a fresh child
+ *    `RenderConfig` whose `entryStack` is an immutable snapshot
+ *    (`[...baseStack, item]`) — there is no in-place push/pop on a shared
+ *    array, so a nested loop or VC ref in the body sees a stable per-iteration
+ *    stack.
  *  - `dynamicBindings.source: 'currentEntry'` always reads the stack top,
  *    i.e. "the closest enclosing entity". Inside a loop nested in a
  *    template, that's the loop iteration; outside the loop it's still
@@ -40,23 +43,27 @@ import {
 /**
  * Render-time context handed to the publisher.
  *
- * `entryStack` is mutated in place by the publisher's loop interceptor
- * (push on iteration enter, pop on iteration exit). Stack-top resolves
+ * `entryStack` is an IMMUTABLE snapshot for the current frame. The publisher's
+ * loop renderer does not push/pop in place — for each iteration it derives a
+ * new context with `entryStack: [...baseStack, item]`, so a subtree rendered
+ * inside the loop body (including a VC ref) sees a stable per-iteration stack
+ * rather than a live, mutating list. Stack-top resolves
  * `source: 'currentEntry'`; one below resolves `source: 'parentEntry'`.
  *
  * The three named frames (`page`, `site`, `route`) are always provided
  * on every render — they're built once by the publisher and referenced
  * by the corresponding binding sources.
  *
- * Frames are stable references across the whole render pass; the loop
- * interceptor only mutates `entryStack`. This keeps the resolver
- * branchless for the common case (frame lookup is a property read).
+ * Every field is `readonly`: a render pass treats the whole context as an
+ * immutable input. This keeps the resolver branchless for the common case
+ * (frame lookup is a property read) and makes the per-iteration derivation
+ * the only way to extend the stack.
  */
 export interface TemplateRenderDataContext {
-  entryStack: LoopItem[]
-  page?: PageFrame
-  site?: SiteFrame
-  route?: RouteFrame
+  readonly entryStack: readonly LoopItem[]
+  readonly page?: PageFrame
+  readonly site?: SiteFrame
+  readonly route?: RouteFrame
 }
 
 /**

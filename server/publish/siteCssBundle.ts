@@ -32,7 +32,8 @@ import {
   collectUserStylesheetCss,
 } from '@core/publisher'
 import type {
-  RenderContext,
+  RenderConfig,
+  RenderAccumulators,
   CssBundleFile,
   SiteCssBundle,
   SiteCssBundleId,
@@ -90,18 +91,24 @@ function buildFrameworkCss(site: SiteDocument, registry: IModuleRegistry): strin
  * return.
  */
 function collectAllModuleCss(site: SiteDocument, registry: IModuleRegistry): string {
-  const cssMap = new Map<string, string>()
+  // One accumulator shared across every page so a module's CSS is collected at
+  // most once for the whole site. infiniteLoopIds / holeNodeIds are unused here
+  // (we throw the HTML away) but still owned up-front — no lazy undefined.
+  const acc: RenderAccumulators = {
+    cssMap: new Map<string, string>(),
+    infiniteLoopIds: new Set<string>(),
+    holeNodeIds: new Set<string>(),
+  }
   for (const page of site.pages) {
-    const ctx: RenderContext = {
+    const config: RenderConfig = {
       page,
       site,
       registry,
       breakpointId: undefined,
-      cssMap,
     }
-    renderNode(page.rootNodeId, ctx)
+    renderNode(page.rootNodeId, config, acc)
   }
-  return Array.from(cssMap.values()).join('\n')
+  return Array.from(acc.cssMap.values()).join('\n')
 }
 
 /**

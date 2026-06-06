@@ -17,7 +17,7 @@ import { selectVisualComponentById } from '@core/page-tree'
 import { instantiateVCAtRef, type InstantiatedVCNode } from '@core/visualComponents'
 import { injectNodeClassIds, injectNodeId, injectNodeInlineStyles } from './classInjection'
 import { escapeHtml } from './utils'
-import type { RenderContext } from './renderContext'
+import type { RenderConfig, RenderAccumulators, RenderNodeFn } from './renderConfig'
 
 /**
  * Adapt an InstantiatedVCNode to the PageNode shape required by the publisher walker.
@@ -51,16 +51,20 @@ function instantiatedNodeToPageNode(node: InstantiatedVCNode): PageNode {
  * base.visual-component-ref nodes. The VC is instantiated via
  * instantiateVCAtRef (which applies propOverrides and expands slot outlets),
  * then rendered recursively using a synthetic Page built from the flat
- * instantiated node map. The shared ctx.cssMap ensures CSS deduplication
- * across the whole page — a VC used three times contributes module CSS only once.
+ * instantiated node map. The `acc` accumulators are passed through unchanged —
+ * the SAME `cssMap` instance — which is what makes CSS dedup work across the
+ * VC boundary: a VC used three times contributes module CSS only once. The
+ * sharing is now VISIBLE because `acc` is an explicit parameter, not a field
+ * smuggled inside a cloned context.
  *
  * The page-level ref node's own classIds are injected onto the VC's root
  * element after recursive rendering, preserving the page author's intent.
  */
 export function renderVisualComponentRef(
   node: PageNode,
-  ctx: RenderContext,
-  renderNode: (nodeId: string, ctx: RenderContext) => string,
+  config: RenderConfig,
+  acc: RenderAccumulators,
+  renderNode: RenderNodeFn,
 ): string {
   const componentId =
     typeof node.props.componentId === 'string' ? node.props.componentId.trim() : ''
@@ -75,7 +79,7 @@ export function renderVisualComponentRef(
       ? (node.props.propOverrides as Record<string, unknown>)
       : {}
 
-  const vc = selectVisualComponentById(ctx.site, componentId)
+  const vc = selectVisualComponentById(config.site, componentId)
   if (!vc) {
     return `<!-- instatic: unknown component "${escapeHtml(componentId)}" -->`
   }
@@ -84,7 +88,7 @@ export function renderVisualComponentRef(
   // in the page tree. Each slot-instance's children are the user-authored slot content.
   const slotInstancesByName: Record<string, string[]> = {}
   for (const childId of node.children ?? []) {
-    const child = ctx.page.nodes[childId]
+    const child = config.page.nodes[childId]
     if (child?.moduleId === 'base.slot-instance') {
       const slotName =
         typeof child.props.slotName === 'string' && child.props.slotName
@@ -98,7 +102,7 @@ export function renderVisualComponentRef(
     vc,
     propOverrides,
     slotInstancesByName,
-    ctx.page.nodes,
+    config.page.nodes,
     node.id,
   )
 
@@ -118,37 +122,35 @@ export function renderVisualComponentRef(
     rootNodeId,
   }
 
-  // Reuse all context fields but swap the page for the VC's synthetic page.
-  // Sharing cssMap is critical: CSS dedup is keyed by moduleId across the
-  // whole published page, including all inlined VC instances.
-  const syntheticCtx: RenderContext = {
+  // Derive a read-only child config: every input field carries over (so a
+  // base.loop / image inside the VC body resolves with data — ISS-022;
+  // instantiateVCAtRef preserves vc.tree node ids, so loopData/mediaAssets keyed
+  // by those ids match the synthetic page nodes), with two deliberate overrides:
+  //   - page: the VC's synthetic page replaces the host page.
+  //   - dynamicNodeIds: cleared — VC-internal holes aren't supported, the OUTER
+  //     ref is what gets holed.
+  //   - annotateNodeIds: cleared — VC-definition nodes are not part of the page
+  //     snapshot the agent reads, so they must not be annotated. Only the
+  //     page-level ref node id (applied below) lands on the VC's root element.
+  // The `acc` accumulators are passed through unchanged (NOT cloned): sharing
+  // the same cssMap is what dedups CSS across the VC boundary, and the sharing
+  // is visible right here at the renderNode call.
+  const syntheticConfig: RenderConfig = {
+    ...config,
     page: syntheticPage,
-    site: ctx.site,
-    registry: ctx.registry,
-    breakpointId: ctx.breakpointId,
-    templateContext: ctx.templateContext,
-    cssMap: ctx.cssMap,
-    // Thread the data-bearing fields so a base.loop / image inside the VC body
-    // resolves with data (ISS-022). instantiateVCAtRef preserves vc.tree node
-    // ids, so these maps (keyed by those ids) match the synthetic page nodes.
-    // dynamicNodeIds is intentionally omitted: VC-internal holes aren't
-    // supported — the OUTER ref is what gets holed.
-    loopData: ctx.loopData,
-    mediaAssets: ctx.mediaAssets,
-    infiniteLoopIds: ctx.infiniteLoopIds,
-    publishVersion: ctx.publishVersion,
-    holeNodeIds: ctx.holeNodeIds,
-    // Intentionally NOT propagated: VC-definition nodes are not part of the
-    // page snapshot the agent reads, so they must not be annotated. Only the
-    // page-level ref node id (applied below) lands on the VC's root element.
+    dynamicNodeIds: undefined,
     annotateNodeIds: undefined,
   }
 
   // The page-level ref node's classIds + inline styles belong on the VC's root
   // element; the VC's own nodes contribute their classIds via the recursive call.
-  const rendered = injectNodeClassIds(renderNode(rootNodeId, syntheticCtx), node.classIds, ctx.site)
+  const rendered = injectNodeClassIds(
+    renderNode(rootNodeId, syntheticConfig, acc),
+    node.classIds,
+    config.site,
+  )
   const withStyles = injectNodeInlineStyles(rendered, node.inlineStyles)
   // Annotate the VC root with the ref node id (the page-tree node the agent can
   // target) — outermost element only, exactly one uid per element.
-  return ctx.annotateNodeIds ? injectNodeId(withStyles, node.id) : withStyles
+  return config.annotateNodeIds ? injectNodeId(withStyles, node.id) : withStyles
 }

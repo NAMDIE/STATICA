@@ -14,9 +14,9 @@
  */
 
 import { describe, it, expect } from 'bun:test'
-import { publishPage, renderNode, type RenderContext } from '@core/publisher'
+import { publishPage, renderNode } from '@core/publisher'
 import type { VisualComponent, VCParam, VCNode } from '@core/visualComponents'
-import { makeModule, makeRegistry, makePage, makeSite } from './helpers'
+import { makeModule, makeRegistry, makePage, makeSite, makeAccumulators } from './helpers'
 import { ContainerModule } from '@modules/base/container'
 import { TextModule } from '@modules/base/text'
 import { VisualComponentRefModule } from '@modules/base/visualComponentRef'
@@ -456,16 +456,22 @@ describe('VC inlining — class CSS collection', () => {
       },
     })
     const site = makeSite({ visualComponents: [vc], pages: [page] })
-    const cssMap = new Map<string, string>()
-    const html = renderNode('root', { page, site, registry: withCssRegistry, breakpointId: undefined, cssMap })
+    const acc = makeAccumulators()
+    const html = renderNode(
+      'root',
+      { page, site, registry: withCssRegistry, breakpointId: undefined },
+      acc,
+    )
 
     // Both instances of the VC appear in the HTML
     expect(html.match(/<p>Styled<\/p>/g)?.length).toBe(2)
-    // But the CSS rule is deduplicated — only one entry for the module type
-    expect(cssMap.has('test.styled')).toBe(true)
-    expect(cssMap.size).toBe(1) // only test.styled has CSS; base.container returns none
+    // But the CSS rule is deduplicated — only one entry for the module type.
+    // The shared acc.cssMap is what dedups across the VC boundary: both ref
+    // nodes inline the same module, yet it contributes CSS exactly once.
+    expect(acc.cssMap.has('test.styled')).toBe(true)
+    expect(acc.cssMap.size).toBe(1) // only test.styled has CSS; base.container returns none
     // And the CSS appears exactly once (not duplicated)
-    const cssCount = (cssMap.get('test.styled') ?? '').split('p { color: navy; }').length - 1
+    const cssCount = (acc.cssMap.get('test.styled') ?? '').split('p { color: navy; }').length - 1
     expect(cssCount).toBe(1)
   })
 })
@@ -483,8 +489,11 @@ describe('VC inlining — unknown componentId', () => {
       },
     })
     const site = makeSite({ visualComponents: [], pages: [page] })
-    const cssMap = new Map<string, string>()
-    const html = renderNode('root', { page, site, registry, breakpointId: undefined, cssMap })
+    const html = renderNode(
+      'root',
+      { page, site, registry, breakpointId: undefined },
+      makeAccumulators(),
+    )
     expect(html).toContain('<!-- instatic: unknown component')
     expect(html).toContain('nonexistent-vc')
     expect(html).not.toContain('<div>')
@@ -498,8 +507,11 @@ describe('VC inlining — unknown componentId', () => {
       },
     })
     const site = makeSite({ visualComponents: [], pages: [page] })
-    const cssMap = new Map<string, string>()
-    const html = renderNode('root', { page, site, registry, breakpointId: undefined, cssMap })
+    const html = renderNode(
+      'root',
+      { page, site, registry, breakpointId: undefined },
+      makeAccumulators(),
+    )
     expect(html).toContain('<!-- instatic: visual-component-ref missing componentId -->')
   })
 
@@ -511,8 +523,11 @@ describe('VC inlining — unknown componentId', () => {
       },
     })
     const site = makeSite({ visualComponents: [], pages: [page] })
-    const cssMap = new Map<string, string>()
-    const html = renderNode('root', { page, site, registry, breakpointId: undefined, cssMap })
+    const html = renderNode(
+      'root',
+      { page, site, registry, breakpointId: undefined },
+      makeAccumulators(),
+    )
     expect(html).not.toContain('<script>')
     expect(html).toContain('&lt;script&gt;')
   })

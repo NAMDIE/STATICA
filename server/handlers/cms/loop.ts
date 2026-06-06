@@ -23,7 +23,12 @@
 import type { DbClient } from '../../db/client'
 import { registry } from '@core/module-engine'
 import { loopSourceRegistry } from '@core/loops/registry'
-import { renderNode, type RenderContext, type ResolvedLoopRenderData } from '@core/publisher'
+import {
+  renderNode,
+  type RenderConfig,
+  type RenderAccumulators,
+  type ResolvedLoopRenderData,
+} from '@core/publisher'
 import { jsonResponse } from '../../http'
 import { getLatestPublishedSiteSnapshot, getPublishedPageBySlug } from '../../repositories/publish'
 import { collectLoopNodes, readLoopProps } from '../../publish/loopPrefetch'
@@ -133,31 +138,38 @@ export async function handleLoopRequest(
   if (variants.length === 0) {
     return jsonResponse({ html: '', hasMore, pageNumber })
   }
-  const ctxRender: RenderContext = {
+  const baseConfig: RenderConfig = {
     page: containingPage,
     site: fallbackSnapshot.site,
     registry,
     breakpointId: undefined,
-    cssMap: new Map(),
     templateContext: { entryStack: [] },
     loopData: new Map<string, ResolvedLoopRenderData>([
       [loopId, { items: result.items, totalItems: result.totalItems, pageNumber, hasMore }],
     ]),
   }
+  const acc: RenderAccumulators = {
+    cssMap: new Map(),
+    infiniteLoopIds: new Set(),
+    holeNodeIds: new Set(),
+  }
 
   // Render each item by walking each variant child once per iteration.
   // Bypass renderLoop so we don't re-emit the wrapper element — the
-  // existing wrapper on the client absorbs the appended fragments.
-  const stack = ctxRender.templateContext?.entryStack ?? []
+  // existing wrapper on the client absorbs the appended fragments. Each
+  // iteration derives a fresh config with a new entryStack snapshot rather
+  // than mutating a shared array in place.
   let html = ''
   result.items.forEach((item, i) => {
     const variantId = variants[i % variants.length]
-    stack.push(item)
-    try {
-      html += renderNode(variantId, ctxRender)
-    } finally {
-      stack.pop()
+    const iterationConfig: RenderConfig = {
+      ...baseConfig,
+      // Spread the base templateContext so any page/site/route frames survive —
+      // mirrors renderLoop.ts. Today the handler's base context carries no
+      // frames, but spreading keeps the two iteration paths symmetric.
+      templateContext: { ...baseConfig.templateContext, entryStack: [item] },
     }
+    html += renderNode(variantId, iterationConfig, acc)
   })
 
   return jsonResponse({ html, hasMore, pageNumber })

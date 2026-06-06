@@ -12,7 +12,7 @@ Loop sources are pluggable: built-in sources (`content.entries`, `site.pages`, `
 - `LoopEntitySource` shape: `{ id, label, fields, filterSchema?, orderByOptions?, fetch, preview? }` in `src/core/loops/types.ts`.
 - The `base.loop` module's children are **variants** — different per-item layouts (e.g. "Card", "Featured"). The walker round-robins across them as it iterates.
 - At publish time, `loopPrefetch.ts` calls each loop's `fetch()` and stores results on the render context. The walker is then purely synchronous.
-- Each iteration pushes a `LoopItem` onto the `entryStack`; nodes inside the loop resolve `currentEntry.<field>` against that item via dynamic bindings.
+- Each iteration renders against a fresh `entryStack` snapshot (`[...baseStack, item]`) carried in a child `RenderConfig`; nodes inside the loop resolve `currentEntry.<field>` against that item via dynamic bindings. The stack is never mutated in place.
 
 ---
 
@@ -202,26 +202,29 @@ A loop with one variant is the common case (every item uses the same layout).
 ## The render walk
 
 ```text
-renderLoop(loopNode, ctx, renderNode):
+renderLoop(loopNode, config, acc, renderNode):
     │
-    ├─→ prefetched = ctx.loopPrefetch.get(loopNode.id)
+    ├─→ prefetched = config.loopData.get(loopNode.id)
     │       (results already resolved by loopPrefetch.ts at publish time)
     │
     ├─→ variants = loopNode.children     ← N variant subtrees
+    │   baseStack = config.templateContext.entryStack   ← immutable snapshot
     │
     ├─→ const out: string[] = []
     │   for each (item, index) of prefetched.items:
-    │       push item onto ctx.entryStack
     │       variant = variants[index % variants.length]
-    │       out.push(renderNode(variant, ctx))
-    │       pop entryStack
+    │       childConfig = { ...config, templateContext:
+    │                       { ...config.templateContext, entryStack: [...baseStack, item] } }
+    │       out.push(renderNode(variant, childConfig, acc))   ← fresh per-iteration snapshot
     │
     └─→ return out.join('')
 ```
 
+Each iteration builds a **new** `entryStack` array (`[...baseStack, item]`) inside a fresh child config — there is no in-place push/pop on a shared array, so iterations are independent and a nested loop or VC ref in the body sees a stable per-item snapshot.
+
 The `renderNode` callback is the publisher's normal walker — so a variant's subtree renders exactly like any other tree, including:
 
-- `currentEntry.<field>` bindings resolve against the pushed item.
+- `currentEntry.<field>` bindings resolve against the iteration's item (the top of the per-iteration stack).
 - Nested loops can push a deeper item; the outer loop's item becomes `parentEntry`.
 - VC refs inside variants render with their own slot fills, with `currentEntry` still pointing at the loop item.
 
@@ -252,7 +255,7 @@ async function prefetchLoops(page, site, db) {
 }
 ```
 
-The map is passed into `RenderContext.loopData`. The walker reads from it; no async at render time.
+The map is passed into `RenderConfig.loopData`. The walker reads from it; no async at render time.
 
 ---
 
@@ -374,7 +377,7 @@ For static multi-page navigation (no JS required):
 | Plugin sources that hit the host DB directly                         | Use `api.cms.storage.*`                                  |
 | Reaching across loop iterations (e.g. "the previous item")           | Items are independent. Use a server-side fetch + materialize the relation. |
 | Per-iteration state (e.g. counter)                                   | Loop iterations are independent. The walker doesn't preserve state. |
-| Rendering a loop without prefetched data                             | `RenderContext.loopPrefetch` must be populated — otherwise the walker errors. |
+| Rendering a loop without prefetched data                             | `RenderConfig.loopData` must be populated — otherwise the loop renders a marker comment. |
 | Cycling variants by index `% items.length` instead of `% variants.length` | Round-robin is by variants. Read `node.children.length`. |
 | Source ids without a namespace (just `products`)                     | Namespace by plugin (`acme.products`) — collisions otherwise |
 

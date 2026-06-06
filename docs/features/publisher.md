@@ -27,7 +27,7 @@ The published output has **no framework runtime**, **no client-side hydration of
 src/core/publisher/
 ├── render.ts                       — publishPage (entry point + page-level orchestration)
 ├── renderNode.ts                   — recursive node walker; emits <instatic-hole> for nodes in dynamicNodeIds
-├── renderContext.ts                — RenderContext shape (includes dynamicNodeIds + publishVersion)
+├── renderConfig.ts                 — RenderConfig (read-only inputs) + RenderAccumulators (mutable outputs) + RenderNodeFn
 ├── renderVisualComponentRef.ts     — inline a Visual Component instance into the page
 ├── renderLoop.ts                   — iterate a loop source, round-robin child variants
 ├── escapeProps.ts                  — HTML-escape string props at the render boundary
@@ -95,13 +95,27 @@ For each node, bottom-up:
   5. attachResolvedMediaByKey(safeProps, def, ...)       ← attach <picture>/<srcset>
   6. attachAutoSizes(safeProps, def, ...)                ← auto <img sizes>
   7. { html, css } = def.render(safeProps, children)                  ← MODULE BOUNDARY
-  8. cssMap.set(moduleId, sanitizeModuleCSS(css))        ← neutralise </style (Constraint #228), dedup by moduleId
+  8. acc.cssMap.set(moduleId, sanitizeModuleCSS(css))    ← neutralise </style (Constraint #228), dedup by moduleId
   9. html = injectNodeClassIds(html, node, site)         ← splice classIds into root tag
  10. html = injectNodeInlineStyles(html, node.inlineStyles) ← splice inline styles onto root tag
  11. [annotateNodeIds] html = injectNodeId(html, node.id)   ← editor-only uid="<id>" on root element
 ```
 
-The walker is recursive, but every step is local — there's no global state mutation, no cross-node coupling. Each node's output is a function of its node + its already-rendered children.
+The walker is recursive. Each node's HTML output is a pure function of its node + its already-rendered children — no cross-node coupling. The only shared mutable state is the `RenderAccumulators` bag (`cssMap`, `infiniteLoopIds`, `holeNodeIds`), which is threaded as an explicit parameter rather than hidden in the read-only config — so every place that appends to it is visible at the call site.
+
+---
+
+## RenderConfig vs RenderAccumulators
+
+`renderNode` (and every specialised renderer) takes **two** explicit parameters — `(nodeId, config, acc)` — that separate the two structurally different roles a render pass mixes. Both shapes live in `renderConfig.ts`.
+
+- **`RenderConfig` (read-only inputs).** `page`, `site`, `registry`, `breakpointId`, `templateContext`, `dynamicNodeIds`, `publishVersion`, `annotateNodeIds`, plus the pre-fetched I/O (`loopData`, `mediaAssets`). Every field is `readonly`; collections are `ReadonlyMap` / `ReadonlySet`. A renderer that needs a different page (VC ref) or a different template frame (loop iteration) **derives a new child config** via `{ ...config, page }` — it never mutates the one it received. A function that takes only a `RenderConfig` is genuinely a pure string transform.
+
+- **`RenderAccumulators` (mutable outputs).** `cssMap` (deduped module CSS), `infiniteLoopIds` (loops that requested the infinite runtime), `holeNodeIds` (nodes that actually emitted a `<instatic-hole>`). `publishPage` owns this bag, initialises all three up-front (no lazy `undefined`), and threads the **same instances** by reference down the whole walk; renderers append to them. After the walk, the head builders read `acc.cssMap` / `acc.infiniteLoopIds.size` / `acc.holeNodeIds.size`.
+
+This split is why the loop and VC renderers are honest about their effects: `renderLoop` extends the entry stack by constructing a child config (no shared-array push/pop), and `renderVisualComponentRef` shares `cssMap` by passing the same `acc` through — both visible at the call site instead of smuggled through a cloned god-object.
+
+The `TemplateRenderDataContext.entryStack` carried inside `config.templateContext` is correspondingly `readonly` — the per-iteration `[...baseStack, item]` derivation is the only way to extend it.
 
 ---
 
@@ -136,9 +150,9 @@ When the walker hits a `base.visual-component-ref` node, it calls `renderVisualC
 
 1. Resolves the target Visual Component from the site's `components` table.
 2. Builds `slotInstancesByName` from the ref's `base.slot-instance` children in the consumer page tree.
-3. Calls `instantiateVCAtRef(vc, propOverrides, slotInstancesByName, ctx.page.nodes, node.id)` to materialise a flat node map where slot outlets are already filled with consumer content.
-4. Wraps the instantiated node map in a synthetic `Page` and a synthetic `RenderContext`. **The synthetic context inherits `loopData`, `mediaAssets`, `infiniteLoopIds`, `publishVersion`, and `holeNodeIds` from the outer context**, so `base.loop` nodes and image props inside the VC body resolve with data exactly as they would on a plain page. `annotateNodeIds` is **not** propagated — VC-definition node ids are not part of the agent's page read surface. Only the page-level ref node's `uid` lands on the VC root (applied in step 5 below).
-5. Renders via `renderNode(rootNodeId, syntheticCtx)`. The shared `cssMap` ensures CSS dedup across the whole page, including all inlined VC instances. After recursive rendering, the ref node's classIds and inline styles are injected onto the VC root element; when `annotateNodeIds` is set, the ref node's own `uid="<id>"` is also injected — one `uid` per element, targeting the page-tree node the agent can address.
+3. Calls `instantiateVCAtRef(vc, propOverrides, slotInstancesByName, config.page.nodes, node.id)` to materialise a flat node map where slot outlets are already filled with consumer content.
+4. Wraps the instantiated node map in a synthetic `Page` and derives a child `RenderConfig` via `{ ...config, page: syntheticPage, dynamicNodeIds: undefined, annotateNodeIds: undefined }`. **The child config inherits `loopData`, `mediaAssets`, `publishVersion`, `templateContext`, etc. from the outer config**, so `base.loop` nodes and image props inside the VC body resolve with data exactly as they would on a plain page. `dynamicNodeIds` is cleared (VC-internal holes aren't supported — the outer ref is what gets holed) and `annotateNodeIds` is cleared (VC-definition node ids are not part of the agent's page read surface). Only the page-level ref node's `uid` lands on the VC root (applied in step 5 below).
+5. Renders via `renderNode(rootNodeId, syntheticConfig, acc)`. The **same `acc` accumulators are passed through unchanged** — sharing the one `cssMap` instance is what dedups CSS across the VC boundary (a VC used three times contributes module CSS once). Because `acc` is an explicit parameter, this sharing is visible at the call site, not smuggled through a cloned context. After recursive rendering, the ref node's classIds and inline styles are injected onto the VC root element; when `annotateNodeIds` is set, the ref node's own `uid="<id>"` is also injected — one `uid` per element, targeting the page-tree node the agent can address.
 
 See [docs/features/visual-components.md](visual-components.md) for the VC modeling details.
 
@@ -148,8 +162,8 @@ When the walker hits a `base.loop` node, it calls `renderLoop`:
 
 1. Resolves the loop's entity source (a built-in source like `content.entries`, `site.pages`, `site.media`, or a plugin-registered source).
 2. Pulls items from the loop fetch result (pre-warmed by `loopPrefetch.ts` during publish).
-3. Walks the loop's child variants in round-robin, pushing each item onto the entry stack so child nodes' `dynamicBindings` resolve `currentEntry.<field>` against that item.
-4. Concatenates the rendered variant HTML and returns it.
+3. Walks the loop's child variants in round-robin. For each item it derives a fresh child `RenderConfig` whose `templateContext.entryStack` is a **new array** `[...baseStack, item]` — there is no in-place push/pop on a shared array, so child nodes' `dynamicBindings` resolve `currentEntry.<field>` against that item while a VC ref (or nested loop) in the body sees an immutable per-iteration snapshot. The outer config is never mutated, so the loop's siblings keep seeing the outer template entry.
+4. Concatenates the rendered variant HTML and returns it. If `pagination === 'infinite'`, the loop id is added to `acc.infiniteLoopIds` so `publishPage` knows to inject the loop runtime.
 
 See [docs/features/loops.md](loops.md) for sources, filters, and registration.
 
@@ -169,6 +183,8 @@ See [docs/features/loops.md](loops.md) for sources, filters, and registration.
 | 4    | `moduleId === 'base.visual-component-ref'` whose VC definition tree contains any dynamic node | The outer VC ref node is a hole; inner VC node ids are never promoted |
 
 **Rule 3.5** prevents a broken publish artifact: if a static loop rendered its body's dynamic child as a per-node hole, the loop would emit N `<instatic-hole id="X">` elements with the same id — one per iteration — all resolving to the same context-less fragment. By promoting the loop itself to a single hole, the renderer emits one placeholder and the hole endpoint re-runs the entire loop at request time with full per-item context.
+
+All five rules live in **one predicate**, `classifyNode(node, site, registry, seenVcs)`. The main per-node pass and the Rule 3.5 static-loop-body pre-pass both route every node decision through it (the pre-pass walks the loop subtree via `collectSubtreeReasons`, calling `classifyNode` on each visited node). There is exactly one definition of "is this node request-dependent?", so the two passes cannot drift — adding a future rule is a single edit in `classifyNode`, and a static loop whose body becomes dynamic by that rule is promoted automatically.
 
 VC ref subtlety (Rule 4): when a VC definition tree is dynamic, the *outer* `base.visual-component-ref` node id in the page tree goes into `dynamicPageNodeIds` — not the inner VC node ids. The hole boundary is the ref, not any inner node.
 
@@ -460,8 +476,8 @@ This is rare and requires architectural review — most "new behavior" fits with
 - Source-of-truth files:
   - `src/core/publisher/render.ts` — `publishPage`
   - `src/core/publisher/renderNode.ts` — the walker
-  - `src/core/publisher/renderContext.ts` — `RenderContext`
-  - `src/core/publisher/renderVisualComponentRef.ts` — VC inlining + context threading
+  - `src/core/publisher/renderConfig.ts` — `RenderConfig` + `RenderAccumulators` + `RenderNodeFn`
+  - `src/core/publisher/renderVisualComponentRef.ts` — VC inlining + config/accumulator threading
   - `src/core/publisher/dynamicDetection.ts` — `findDynamicNodeIds` (all detection rules)
   - `src/core/publisher/cssCollector.ts` — `CssCollector` + sanitization
   - `src/core/publisher/escapeProps.ts` — Constraint #211 enforcement

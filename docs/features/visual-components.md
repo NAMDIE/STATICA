@@ -318,20 +318,23 @@ At render time, the publisher's `renderVisualComponentRef` runs when the walker 
 ```text
 renderVisualComponentRef(refNode, ctx, renderNode):
     │
-    ├─→ vc = selectVisualComponentById(ctx.site, refNode.props.componentId)
+    ├─→ vc = selectVisualComponentById(config.site, refNode.props.componentId)
     ├─→ build slotInstancesByName from refNode's base.slot-instance children
     │     (keyed by slotName — these are the user's slot fills in the consumer page tree)
     │
-    ├─→ instantiateVCAtRef(vc, propOverrides, slotInstancesByName, ctx.page.nodes, refNode.id)
+    ├─→ instantiateVCAtRef(vc, propOverrides, slotInstancesByName, config.page.nodes, refNode.id)
     │     → flat instantiated node map with slot outlets already filled
     │
-    ├─→ wrap the instantiated map in a synthetic Page + synthetic RenderContext
-    │     The synthetic ctx inherits loopData, mediaAssets, infiniteLoopIds,
-    │     publishVersion, and holeNodeIds from the OUTER ctx so that:
+    ├─→ wrap the instantiated map in a synthetic Page + derive a child RenderConfig
+    │     { ...config, page: syntheticPage, dynamicNodeIds: undefined, annotateNodeIds: undefined }
+    │     The child config inherits loopData, mediaAssets, publishVersion,
+    │     templateContext, etc. from the OUTER config so that:
     │       • base.loop nodes inside the VC body fetch and render with data
     │       • image / media props inside the VC body resolve to full <picture> markup
     │
-    ├─→ renderNode(rootNodeId, syntheticCtx)  ← CSS dedup shared with outer page
+    ├─→ renderNode(rootNodeId, syntheticConfig, acc)
+    │     The SAME acc (cssMap) is passed through unchanged → CSS dedup shared
+    │     with the outer page, visibly, via an explicit parameter
     │
     └─→ inject refNode's classIds + inlineStyles onto the VC's root element
 ```

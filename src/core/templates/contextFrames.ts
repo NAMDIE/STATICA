@@ -1,7 +1,7 @@
 /**
  * Named context frames — the data behind every non-entry binding source.
  *
- * The publisher hands each render a `RenderContext` (defined in
+ * The publisher hands each render a `TemplateRenderDataContext` (defined in
  * `./dynamicBindings.ts`) whose entry-stack is augmented with four
  * always-present frames:
  *

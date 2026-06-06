@@ -4,11 +4,26 @@
  */
 import type { Page, PageNode, SiteDocument, Breakpoint } from '@core/page-tree'
 import type { ModuleDefinition, IModuleRegistry, AnyModuleDefinition } from '@core/module-engine'
+import type { RenderAccumulators } from '@core/publisher'
 import { SquareSolidIcon } from 'pixel-art-icons/icons/square-solid'
 import { DEFAULT_SITE_SETTINGS } from '@core/page-tree'
 
 // Re-exported because legacy publisher tests still reference it.
 export { DEFAULT_SITE_SETTINGS }
+
+// ---------------------------------------------------------------------------
+// Render accumulators — the mutable output bag every renderNode call needs.
+// Tests that don't inspect the CSS / loop / hole sets just pass a fresh one;
+// tests that DO inspect them keep a reference and read it back after rendering.
+// ---------------------------------------------------------------------------
+
+export function makeAccumulators(): RenderAccumulators {
+  return {
+    cssMap: new Map<string, string>(),
+    infiniteLoopIds: new Set<string>(),
+    holeNodeIds: new Set<string>(),
+  }
+}
 
 const DEFAULT_SITE_RUNTIME: SiteDocument['runtime'] = {
   dependencyLock: { version: 1, packages: {}, updatedAt: 0 },

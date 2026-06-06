@@ -40,11 +40,21 @@ const loopModule = makeModule('base.loop', {
   render: () => ({ html: '<!-- instatic: loop default render hit -->' }),
 })
 
+// Renders BOTH the parentEntry and currentEntry bindings in one element so a
+// single output token (`parent/current`) reveals the exact entry-stack frames
+// visible during that iteration. Used by the entry-stack isolation tests.
+const pairModule = makeModule('test.pair', {
+  render: (props) => ({
+    html: `<p>${String((props as { parent: string }).parent)}/${String((props as { current: string }).current)}</p>`,
+  }),
+})
+
 const baseRegistry = makeRegistry({
   'base.body': rootModule,
   'base.text': textModule,
   'base.container': containerModule,
   'base.loop': loopModule,
+  'test.pair': pairModule,
 })
 
 function makeItem(id: string, title: string): LoopItem {
@@ -194,6 +204,110 @@ describe('publisher loop renderer', () => {
     // Cards inside loop → parentEntry = outer (rendered N times)
     const matches = html.match(/<p>Outer Post<\/p>/g)
     expect(matches?.length).toBe(3) // header + 2 iterations
+  })
+
+  // ---------------------------------------------------------------------------
+  // Entry-stack isolation (audit findings #2 / #10): renderLoop must NOT mutate
+  // a shared entryStack in place. Each iteration renders against a fresh
+  // per-iteration snapshot, so a nested loop (or VC ref) in the body sees the
+  // correct outer frame and no state leaks between iterations.
+  // ---------------------------------------------------------------------------
+  describe('entry-stack isolation across iterations', () => {
+    // Outer loop iterates posts; its body is an INNER loop whose card binds
+    // currentEntry (the inner item) AND parentEntry (the outer item). A correct
+    // implementation pairs every outer item with every inner item; a shared
+    // mutable stack would corrupt the parentEntry frame across iterations.
+    function nestedLoopPage() {
+      return makePage({
+        root: { moduleId: 'base.body', children: ['outer'] },
+        outer: { moduleId: 'base.loop', children: ['inner'], props: { sourceId: 'outer' } },
+        inner: { moduleId: 'base.loop', children: ['card'], props: { sourceId: 'inner' } },
+        card: {
+          moduleId: 'test.pair',
+          props: { parent: '', current: '' },
+          dynamicBindings: {
+            parent: { source: 'parentEntry', field: 'title' },
+            current: { source: 'currentEntry', field: 'title' },
+          },
+        },
+      })
+    }
+
+    it('pairs every outer item with every inner item — no cross-iteration leakage', () => {
+      const outerItems = [makeItem('p1', 'P1'), makeItem('p2', 'P2')]
+      const innerItems = [makeItem('c1', 'C1'), makeItem('c2', 'C2')]
+      const html = publishPage(nestedLoopPage(), makeSite(), baseRegistry, {
+        loopData: new Map([
+          ['outer', loopData(outerItems)],
+          ['inner', loopData(innerItems)],
+        ]),
+      }).html
+
+      // Every (parent, current) combination renders exactly once, in order.
+      expect(html).toContain('<p>P1/C1</p>')
+      expect(html).toContain('<p>P1/C2</p>')
+      expect(html).toContain('<p>P2/C1</p>')
+      expect(html).toContain('<p>P2/C2</p>')
+      // The inner loop's frame never bleeds into the parent frame: there is no
+      // pairing where parent and current are both inner items (e.g. "C1/C2").
+      expect(html).not.toContain('<p>C1/')
+      expect(html).not.toContain('<p>C2/')
+    })
+
+    it('is order-independent — reversing the outer items reverses only the output order', () => {
+      const innerItems = [makeItem('c1', 'C1'), makeItem('c2', 'C2')]
+      const forward = publishPage(nestedLoopPage(), makeSite(), baseRegistry, {
+        loopData: new Map([
+          ['outer', loopData([makeItem('p1', 'P1'), makeItem('p2', 'P2')])],
+          ['inner', loopData(innerItems)],
+        ]),
+      }).html
+      const reversed = publishPage(nestedLoopPage(), makeSite(), baseRegistry, {
+        loopData: new Map([
+          ['outer', loopData([makeItem('p2', 'P2'), makeItem('p1', 'P1')])],
+          ['inner', loopData(innerItems)],
+        ]),
+      }).html
+
+      // Same set of pairings regardless of order — each iteration is independent.
+      for (const token of ['<p>P1/C1</p>', '<p>P1/C2</p>', '<p>P2/C1</p>', '<p>P2/C2</p>']) {
+        expect(forward).toContain(token)
+        expect(reversed).toContain(token)
+      }
+      // Order actually flipped: P2's block precedes P1's in the reversed render.
+      expect(reversed.indexOf('<p>P2/C1</p>')).toBeLessThan(reversed.indexOf('<p>P1/C1</p>'))
+      expect(forward.indexOf('<p>P1/C1</p>')).toBeLessThan(forward.indexOf('<p>P2/C1</p>'))
+    })
+
+    it('does not leak the loop entry to a sibling rendered after the loop', () => {
+      // A header binds currentEntry against the OUTER template frame; the loop
+      // that follows must not leave its last item on the stack for the sibling.
+      const page = makePage({
+        root: { moduleId: 'base.body', children: ['loop', 'footer'] },
+        loop: { moduleId: 'base.loop', children: ['card'], props: { sourceId: 'test' } },
+        card: {
+          moduleId: 'base.text',
+          props: { text: '' },
+          dynamicBindings: { text: { source: 'currentEntry', field: 'title' } },
+        },
+        footer: {
+          moduleId: 'base.text',
+          props: { text: '' },
+          dynamicBindings: { text: { source: 'currentEntry', field: 'title' } },
+        },
+      })
+      const html = publishPage(page, makeSite(), baseRegistry, {
+        // Outer template entry the footer should resolve against.
+        templateContext: { entryStack: [makeItem('outer', 'OUTER')] },
+        loopData: new Map([['loop', loopData([makeItem('a', 'Alpha'), makeItem('b', 'Beta')])]]),
+      }).html
+
+      expect(html).toContain('<p>Alpha</p>')
+      expect(html).toContain('<p>Beta</p>')
+      // Footer renders the OUTER entry, not the loop's last item (Beta).
+      const footerIdx = html.lastIndexOf('<p>OUTER</p>')
+      expect(footerIdx).toBeGreaterThan(html.indexOf('<p>Beta</p>'))
+    })
   })
 
   it('attaches data attrs and registers infinite mode', () => {

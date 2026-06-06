@@ -5,14 +5,25 @@ import {
   isSafeUrl,
   renderNode,
   publishPage,
-  type RenderContext,
+  type RenderConfig,
+  type RenderAccumulators,
 } from '@core/publisher'
 import type { ModuleDefinition } from '@core/module-engine'
 import {
   frameworkColorClassId,
   generateFrameworkColorUtilityClasses,
 } from '@core/framework'
-import { makeModule, makeRegistry, makePage, makeSite } from './helpers'
+import { makeModule, makeRegistry, makePage, makeSite, makeAccumulators } from './helpers'
+
+// Render a node with a throwaway accumulator bag. Tests that need to inspect
+// the accumulated CSS / hole / loop sets build their own `acc` and pass it.
+function render(
+  nodeId: string,
+  config: RenderConfig,
+  acc: RenderAccumulators = makeAccumulators(),
+): string {
+  return renderNode(nodeId, config, acc)
+}
 
 // ---------------------------------------------------------------------------
 // escapeHtml
@@ -146,9 +157,8 @@ describe('renderNode', () => {
   })
   const site = makeSite()
 
-  function ctx(page: ReturnType<typeof makePage>): RenderContext {
-    const cssMap = new Map<string, string>()
-    return { page, site, registry, breakpointId: undefined, cssMap }
+  function ctx(page: ReturnType<typeof makePage>): RenderConfig {
+    return { page, site, registry, breakpointId: undefined }
   }
 
   it('renders a leaf node', () => {
@@ -156,7 +166,7 @@ describe('renderNode', () => {
       root: { moduleId: 'base.text', props: { text: 'Hello', level: 1 } },
     })
     const c = ctx(page)
-    expect(renderNode('root', c)).toBe('<h1>Hello</h1>')
+    expect(render('root', c)).toBe('<h1>Hello</h1>')
   })
 
   it('renders nested children bottom-up', () => {
@@ -170,7 +180,7 @@ describe('renderNode', () => {
       c2: { moduleId: 'base.text', props: { text: 'B', level: 3 } },
     })
     const c = ctx(page)
-    expect(renderNode('root', c)).toBe(
+    expect(render('root', c)).toBe(
       '<div class="wrapper"><h2>A</h2><h3>B</h3></div>',
     )
   })
@@ -186,16 +196,16 @@ describe('renderNode', () => {
       h2: { moduleId: 'base.text', props: { text: 'B', level: 2 } },
       h3: { moduleId: 'base.text', props: { text: 'C', level: 3 } },
     })
-    const cssMap = new Map<string, string>()
-    renderNode('root', { page, site, registry, breakpointId: undefined, cssMap })
-    expect(cssMap.size).toBe(2) // base.text + base.container, NOT 4
-    expect(cssMap.get('base.text')).toBe('h1,h2,h3,h4,h5,h6 { font-family: sans-serif; }')
+    const acc = makeAccumulators()
+    render('root', { page, site, registry, breakpointId: undefined }, acc)
+    expect(acc.cssMap.size).toBe(2) // base.text + base.container, NOT 4
+    expect(acc.cssMap.get('base.text')).toBe('h1,h2,h3,h4,h5,h6 { font-family: sans-serif; }')
   })
 
   it('returns empty string for missing nodeId', () => {
     const page = makePage({ root: { moduleId: 'base.text', props: {} } })
     const c = ctx(page)
-    expect(renderNode('nonexistent', c)).toBe('')
+    expect(render('nonexistent', c)).toBe('')
   })
 
   it('returns empty string for a hidden node', () => {
@@ -203,7 +213,7 @@ describe('renderNode', () => {
       root: { moduleId: 'base.text', props: { text: 'Hidden', level: 1 }, hidden: true },
     })
     const c = ctx(page)
-    expect(renderNode('root', c)).toBe('')
+    expect(render('root', c)).toBe('')
   })
 
   it('does not collect CSS for a hidden node', () => {
@@ -211,8 +221,9 @@ describe('renderNode', () => {
       root: { moduleId: 'base.text', props: { text: 'Hidden', level: 1 }, hidden: true },
     })
     const c = ctx(page)
-    renderNode('root', c)
-    expect(c.cssMap.size).toBe(0)
+    const acc = makeAccumulators()
+    render('root', c, acc)
+    expect(acc.cssMap.size).toBe(0)
   })
 
   it('renders visible children while omitting hidden children', () => {
@@ -226,7 +237,7 @@ describe('renderNode', () => {
       hidden: { moduleId: 'base.text', props: { text: 'Hidden', level: 2 }, hidden: true },
     })
     const c = ctx(page)
-    expect(renderNode('root', c)).toBe('<div class="wrapper"><h2>Shown</h2></div>')
+    expect(render('root', c)).toBe('<div class="wrapper"><h2>Shown</h2></div>')
   })
 
   it('prunes a hidden parent without mutating child hidden flags', () => {
@@ -245,7 +256,7 @@ describe('renderNode', () => {
       },
     })
     const c = ctx(page)
-    expect(renderNode('root', c)).toBe('')
+    expect(render('root', c)).toBe('')
     expect(page.nodes['shown-child'].hidden).toBe(false)
     expect(page.nodes['hidden-child'].hidden).toBe(true)
   })
@@ -255,7 +266,7 @@ describe('renderNode', () => {
       root: { moduleId: 'unknown.widget', props: {} },
     })
     const c = ctx(page)
-    const html = renderNode('root', c)
+    const html = render('root', c)
     expect(html).toContain('<!-- instatic: unknown module')
     expect(html).toContain('unknown.widget')
   })
@@ -265,23 +276,21 @@ describe('renderNode', () => {
       root: { moduleId: 'unknown.widget', props: {}, hidden: true },
     })
     const c = ctx(page)
-    expect(renderNode('root', c)).toBe('')
+    expect(render('root', c)).toBe('')
   })
 
   it('does not emit a dynamic hole for a hidden dynamic node', () => {
     const page = makePage({
       root: { moduleId: 'base.text', props: { text: 'Dynamic', level: 1 }, hidden: true },
     })
-    const c = ctx(page)
-    const holeNodeIds = new Set<string>()
-    const html = renderNode('root', {
-      ...c,
-      dynamicNodeIds: new Set(['root']),
-      holeNodeIds,
-      publishVersion: 7,
-    })
+    const acc = makeAccumulators()
+    const html = render(
+      'root',
+      { ...ctx(page), dynamicNodeIds: new Set(['root']), publishVersion: 7 },
+      acc,
+    )
     expect(html).toBe('')
-    expect(holeNodeIds.size).toBe(0)
+    expect(acc.holeNodeIds.size).toBe(0)
   })
 
   // Security tests (Constraint #211)
@@ -293,7 +302,7 @@ describe('renderNode', () => {
       },
     })
     const c = ctx(page)
-    const html = renderNode('root', c)
+    const html = render('root', c)
     expect(html).not.toContain('<script>')
     expect(html).toContain('&lt;script&gt;')
   })
@@ -308,8 +317,7 @@ describe('renderNode', () => {
     const page = makePage({
       root: { moduleId: 'base.link', props: { href: 'javascript:alert(1)' } },
     })
-    const cssMap = new Map<string, string>()
-    const html = renderNode('root', { page, site, registry: reg, breakpointId: undefined, cssMap })
+    const html = render('root', { page, site, registry: reg, breakpointId: undefined })
     expect(html).not.toContain('javascript:')
     expect(html).toContain('href="#"')
   })
@@ -340,13 +348,11 @@ describe('renderNode', () => {
         breakpointOverrides: { mobile: { text: 'Mobile', level: 2 } },
       },
     })
-    const cssMap = new Map<string, string>()
-
-    const htmlDesktop = renderNode('root', {
-      page, site, registry: responsiveRegistry, breakpointId: undefined, cssMap,
+    const htmlDesktop = render('root', {
+      page, site, registry: responsiveRegistry, breakpointId: undefined,
     })
-    const htmlMobile = renderNode('root', {
-      page, site, registry: responsiveRegistry, breakpointId: 'mobile', cssMap,
+    const htmlMobile = render('root', {
+      page, site, registry: responsiveRegistry, breakpointId: 'mobile',
     })
 
     expect(htmlDesktop).toBe('<h1>Desktop</h1>')
@@ -379,11 +385,6 @@ describe('renderNode', () => {
       'base.container': bareContainerDef,
       'base.text': bareTextDef,
     })
-
-    function bareCtx(page: ReturnType<typeof makePage>): RenderContext {
-      const cssMap = new Map<string, string>()
-      return { page, site, registry: bareReg, breakpointId: undefined, cssMap }
-    }
 
     it('two-level: parent class lands on parent root, not on its classed child', () => {
       const siteDoc = makeSite({
@@ -420,9 +421,8 @@ describe('renderNode', () => {
         },
         p1: { moduleId: 'base.text', props: { text: 'Hi' }, classIds: ['tprim-id'] },
       })
-      const cssMap = new Map<string, string>()
-      const html = renderNode('root', {
-        page, site: siteDoc, registry: bareReg, breakpointId: undefined, cssMap,
+      const html = render('root', {
+        page, site: siteDoc, registry: bareReg, breakpointId: undefined,
       })
 
       expect(html).toBe('<div class="row"><p class="text-primary">Hi</p></div>')
@@ -481,9 +481,8 @@ describe('renderNode', () => {
         },
         p1: { moduleId: 'base.text', props: { text: 'Vamos a la playa' }, classIds: ['tprim-id'] },
       }, 'outer')
-      const cssMap = new Map<string, string>()
-      const html = renderNode('outer', {
-        page, site: siteDoc, registry: bareReg, breakpointId: undefined, cssMap,
+      const html = render('outer', {
+        page, site: siteDoc, registry: bareReg, breakpointId: undefined,
       })
 
       expect(html).toBe(
@@ -520,9 +519,8 @@ describe('renderNode', () => {
       const page = makePage({
         root: { moduleId: 'base.classed', classIds: ['cta-id'] },
       })
-      const cssMap = new Map<string, string>()
-      const html = renderNode('root', {
-        page, site: siteDoc, registry: reg, breakpointId: undefined, cssMap,
+      const html = render('root', {
+        page, site: siteDoc, registry: reg, breakpointId: undefined,
       })
 
       expect(html).toBe('<button class="cta instatic-btn">Click</button>')
@@ -551,9 +549,8 @@ describe('renderNode', () => {
       const page = makePage({
         root: { moduleId: 'base.wrapped', classIds: ['h-id'] },
       })
-      const cssMap = new Map<string, string>()
-      const html = renderNode('root', {
-        page, site: siteDoc, registry: reg, breakpointId: undefined, cssMap,
+      const html = render('root', {
+        page, site: siteDoc, registry: reg, breakpointId: undefined,
       })
 
       expect(html).toBe('<!-- marker --><section class="hero"><p>x</p></section>')
@@ -578,8 +575,8 @@ describe('renderNode', () => {
           inlineStyles: { backgroundImage: `url('/uploads/media/hero.png')`, color: 'red' },
         },
       })
-      const html = renderNode('root', {
-        page, site, registry: reg, breakpointId: undefined, cssMap: new Map(),
+      const html = render('root', {
+        page, site, registry: reg, breakpointId: undefined,
       })
       // Single-quotes in the url() are escaped for the double-quoted attribute.
       expect(html).toContain('style="')
@@ -594,8 +591,8 @@ describe('renderNode', () => {
           inlineStyles: { color: 'expression(alert(1))', display: 'block' },
         },
       })
-      const html = renderNode('root', {
-        page, site, registry: reg, breakpointId: undefined, cssMap: new Map(),
+      const html = render('root', {
+        page, site, registry: reg, breakpointId: undefined,
       })
       expect(html).not.toContain('expression')
       expect(html).toContain('display: block')
@@ -620,8 +617,8 @@ describe('renderNode', () => {
       const page = makePage({
         root: { moduleId: 'base.container', classIds: ['c-id'], inlineStyles: { color: 'blue' } },
       })
-      const html = renderNode('root', {
-        page, site: siteDoc, registry: reg, breakpointId: undefined, cssMap: new Map(),
+      const html = render('root', {
+        page, site: siteDoc, registry: reg, breakpointId: undefined,
       })
       expect(html).toContain('class="card"')
       expect(html).toContain('style="color: blue"')

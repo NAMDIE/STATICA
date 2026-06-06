@@ -13,8 +13,8 @@
  */
 
 import { describe, it, expect } from 'bun:test'
-import { publishPage, renderNode, type RenderContext } from '@core/publisher'
-import { makePage, makeSite, makeModule, makeRegistry } from './helpers'
+import { publishPage, renderNode, type RenderConfig } from '@core/publisher'
+import { makePage, makeSite, makeModule, makeRegistry, makeAccumulators } from './helpers'
 
 // Import REAL base modules — they self-register on import
 import { TextModule } from '@modules/base/text'
@@ -28,14 +28,19 @@ import { registry } from '@core/module-engine'
 // Confirm real modules are registered
 const REAL_REGISTRY = registry
 
-function realCtx(page: ReturnType<typeof makePage>): RenderContext {
+function realCtx(page: ReturnType<typeof makePage>): RenderConfig {
   return {
     page,
     site: makeSite(),
     registry: REAL_REGISTRY,
     breakpointId: undefined,
-    cssMap: new Map(),
   }
+}
+
+// Render with a throwaway accumulator bag — none of these tests inspect the
+// accumulated CSS / hole / loop sets.
+function render(nodeId: string, config: RenderConfig): string {
+  return renderNode(nodeId, config, makeAccumulators())
 }
 
 // ---------------------------------------------------------------------------
@@ -50,7 +55,7 @@ describe('Publisher + real modules — single-level HTML escaping (CWE-116 regre
         props: { ...TextModule.defaults, text: 'Hello & World', tag: 'h1' },
       },
     })
-    const html = renderNode('root', realCtx(page))
+    const html = render('root', realCtx(page))
     // Single escape: browser shows "Hello & World"
     expect(html).toContain('Hello &amp; World')
     // Double-escape would produce: "Hello &amp;amp; World" — browser shows "Hello &amp; World"
@@ -64,7 +69,7 @@ describe('Publisher + real modules — single-level HTML escaping (CWE-116 regre
         props: { ...TextModule.defaults, text: '<em>styled</em>', tag: 'h2' },
       },
     })
-    const html = renderNode('root', realCtx(page))
+    const html = render('root', realCtx(page))
     expect(html).toContain('&lt;em&gt;styled&lt;/em&gt;')
     expect(html).not.toContain('&amp;lt;')   // would indicate double-escaping
     expect(html).not.toContain('<em>')        // raw tag must not appear
@@ -77,7 +82,7 @@ describe('Publisher + real modules — single-level HTML escaping (CWE-116 regre
         props: { ...TextModule.defaults, text: 'Terms & Conditions', tag: 'p' },
       },
     })
-    const html = renderNode('root', realCtx(page))
+    const html = render('root', realCtx(page))
     expect(html).toContain('Terms &amp; Conditions')
     expect(html).not.toContain('&amp;amp;')
   })
@@ -89,7 +94,7 @@ describe('Publisher + real modules — single-level HTML escaping (CWE-116 regre
         props: { ...ButtonModule.defaults, href: '', label: 'Cats & Dogs' },
       },
     })
-    const html = renderNode('root', realCtx(page))
+    const html = render('root', realCtx(page))
     expect(html).toContain('Cats &amp; Dogs')
     expect(html).not.toContain('&amp;amp;')
   })
@@ -101,7 +106,7 @@ describe('Publisher + real modules — single-level HTML escaping (CWE-116 regre
         props: { ...LinkModule.defaults, href: '/about', text: 'About & Contact' },
       },
     })
-    const html = renderNode('root', realCtx(page))
+    const html = render('root', realCtx(page))
     expect(html).toContain('About &amp; Contact')
     expect(html).not.toContain('&amp;amp;')
   })
@@ -113,7 +118,7 @@ describe('Publisher + real modules — single-level HTML escaping (CWE-116 regre
         props: { ...ListModule.defaults, items: 'Cats & Dogs\nBirds & Bees' },
       },
     })
-    const html = renderNode('root', realCtx(page))
+    const html = render('root', realCtx(page))
     expect(html).toContain('Cats &amp; Dogs')
     expect(html).toContain('Birds &amp; Bees')
     expect(html).not.toContain('&amp;amp;')
@@ -132,7 +137,7 @@ describe('Publisher + real modules — XSS protection (end-to-end)', () => {
         props: { ...TextModule.defaults, text: '<script>alert(1)</script>', tag: 'h1' },
       },
     })
-    const html = renderNode('root', realCtx(page))
+    const html = render('root', realCtx(page))
     expect(html).not.toContain('<script>')
     expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;')
   })
@@ -144,7 +149,7 @@ describe('Publisher + real modules — XSS protection (end-to-end)', () => {
         props: { ...TextModule.defaults, text: '<img src=x onerror=alert(1)>', tag: 'p' },
       },
     })
-    const html = renderNode('root', realCtx(page))
+    const html = render('root', realCtx(page))
     // Must not contain a live <img> tag — only the entity-encoded representation
     expect(html).not.toContain('<img src=x')
     // The full escaped sequence must appear in the text content
@@ -158,7 +163,7 @@ describe('Publisher + real modules — XSS protection (end-to-end)', () => {
         props: { ...ButtonModule.defaults, href: 'javascript:alert(1)', label: 'Click' },
       },
     })
-    const html = renderNode('root', realCtx(page))
+    const html = render('root', realCtx(page))
     expect(html).not.toContain('javascript:')
     // Degrades to <button> (no href) since safeUrl returns '#' and href===# skips <a>
     expect(html).toContain('Click')
@@ -171,7 +176,7 @@ describe('Publisher + real modules — XSS protection (end-to-end)', () => {
         props: { ...LinkModule.defaults, href: 'javascript:alert(1)', text: 'Click' },
       },
     })
-    const html = renderNode('root', realCtx(page))
+    const html = render('root', realCtx(page))
     expect(html).not.toContain('javascript:')
     expect(html).toContain('href="#"')
   })
@@ -183,7 +188,7 @@ describe('Publisher + real modules — XSS protection (end-to-end)', () => {
         props: { ...ImageModule.defaults, src: 'javascript:alert(1)' },
       },
     })
-    const html = renderNode('root', realCtx(page))
+    const html = render('root', realCtx(page))
     // safeUrl() returns '#' for javascript: URLs — the literal scheme must never appear
     expect(html).not.toContain('javascript:')
     // '#' is truthy so the image renders with src="#" (safe placeholder)
@@ -206,7 +211,7 @@ describe('Publisher + real modules — URL edge cases', () => {
         },
       },
     })
-    const html = renderNode('root', realCtx(page))
+    const html = render('root', realCtx(page))
     // data: URI must not appear in src — safeUrl blocks it
     expect(html).not.toContain('data:text/html')
     expect(html).not.toContain('<script>')
@@ -219,7 +224,7 @@ describe('Publisher + real modules — URL edge cases', () => {
         props: { ...LinkModule.defaults, href: 'data:text/html,<h1>xss</h1>', text: 'Click' },
       },
     })
-    const html = renderNode('root', realCtx(page))
+    const html = render('root', realCtx(page))
     expect(html).not.toContain('data:text/html')
     expect(html).toContain('Click')
   })
@@ -231,7 +236,7 @@ describe('Publisher + real modules — URL edge cases', () => {
         props: { ...ButtonModule.defaults, href: '/pricing', label: 'Pricing' },
       },
     })
-    const html = renderNode('root', realCtx(page))
+    const html = render('root', realCtx(page))
     expect(html).toContain('/pricing')
     expect(html).toContain('Pricing')
   })
@@ -246,7 +251,7 @@ describe('Publisher + real modules — URL edge cases', () => {
         },
       },
     })
-    const html = renderNode('root', realCtx(page))
+    const html = render('root', realCtx(page))
     expect(html).toContain('src="https://cdn.example.com/hero.jpg"')
   })
 })
@@ -263,7 +268,7 @@ describe('Publisher + real modules — quote and multi-character escaping', () =
         props: { ...TextModule.defaults, text: 'Say "Hello"', tag: 'h3' },
       },
     })
-    const html = renderNode('root', realCtx(page))
+    const html = render('root', realCtx(page))
     expect(html).toContain('Say &quot;Hello&quot;')
     expect(html).not.toContain('&amp;quot;')
   })
@@ -280,7 +285,7 @@ describe('Publisher + real modules — quote and multi-character escaping', () =
         },
       },
     })
-    const html = renderNode('root', realCtx(page))
+    const html = render('root', realCtx(page))
     expect(html).toContain('A&amp;B')
     expect(html).toContain('&lt;tag&gt;')
     expect(html).toContain('C&gt;D')
@@ -297,7 +302,7 @@ describe('Publisher + real modules — quote and multi-character escaping', () =
         props: { ...ListModule.defaults, items: '"First"\n"Second"' },
       },
     })
-    const html = renderNode('root', realCtx(page))
+    const html = render('root', realCtx(page))
     expect(html).toContain('&quot;First&quot;')
     expect(html).toContain('&quot;Second&quot;')
     expect(html).not.toContain('&amp;quot;')
@@ -329,7 +334,7 @@ describe('Publisher + real modules — quote and multi-character escaping', () =
         },
       ],
     ])
-    const html = renderNode('root', { ...realCtx(page), mediaAssets })
+    const html = render('root', { ...realCtx(page), mediaAssets })
     expect(html).toContain('AT&amp;T')
     expect(html).toContain('&quot;Premium&quot;')
     expect(html).toContain('&lt;Pro&gt;')
@@ -360,13 +365,12 @@ describe('Publisher — richtext prop pass-through (Constraint #299)', () => {
   const richtextRegistry = makeRegistry({ 'test.richtextBlock': richtextModule })
   const richtextSite = makeSite()
 
-  function rtCtx(page: ReturnType<typeof makePage>): RenderContext {
+  function rtCtx(page: ReturnType<typeof makePage>): RenderConfig {
     return {
       page,
       site: richtextSite,
       registry: richtextRegistry,
       breakpointId: undefined,
-      cssMap: new Map(),
     }
   }
 
@@ -375,7 +379,7 @@ describe('Publisher — richtext prop pass-through (Constraint #299)', () => {
     const page = makePage({
       root: { moduleId: 'test.richtextBlock', props: { richtext: sanitizedHtml } },
     })
-    const html = renderNode('root', rtCtx(page))
+    const html = render('root', rtCtx(page))
     // HTML tags must survive the publisher pipeline intact (not entity-encoded)
     expect(html).toContain('<p><strong>Bold text</strong>')
     expect(html).not.toContain('&lt;p&gt;')     // NOT double-escaped
@@ -387,7 +391,7 @@ describe('Publisher — richtext prop pass-through (Constraint #299)', () => {
     const page = makePage({
       root: { moduleId: 'test.richtextBlock', props: { html: sanitizedHtml } },
     })
-    const html = renderNode('root', rtCtx(page))
+    const html = render('root', rtCtx(page))
     expect(html).toContain('<ul><li>Item one</li><li>Item two</li></ul>')
     expect(html).not.toContain('&lt;ul&gt;')
   })
@@ -397,7 +401,7 @@ describe('Publisher — richtext prop pass-through (Constraint #299)', () => {
     const page = makePage({
       root: { moduleId: 'test.richtextBlock', props: { bodyHtml: sanitizedHtml } },
     })
-    const html = renderNode('root', rtCtx(page))
+    const html = render('root', rtCtx(page))
     expect(html).toContain('<a href="https://example.com"')
     expect(html).not.toContain('&lt;a ')
   })
@@ -413,12 +417,11 @@ describe('Publisher — richtext prop pass-through (Constraint #299)', () => {
     const plainPage = makePage({
       root: { moduleId: 'test.plainBlock', props: { content: htmlContent } },
     })
-    const html = renderNode('root', {
+    const html = render('root', {
       page: plainPage,
       site: richtextSite,
       registry: plainRegistry,
       breakpointId: undefined,
-      cssMap: new Map(),
     })
     // "content" is a plain string prop — it MUST be HTML-escaped
     expect(html).toContain('&lt;p&gt;')

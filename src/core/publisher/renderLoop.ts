@@ -13,10 +13,11 @@
 
 import type { PageNode } from '@core/page-tree'
 import type { LoopItem } from '@core/loops/types'
+import type { TemplateRenderDataContext } from '@core/templates/dynamicBindings'
 import { resolveHtmlTag } from '@modules/base/utils/htmlTag'
 import { injectNodeClassIds, injectNodeId, injectNodeInlineStyles } from './classInjection'
 import { escapeHtml } from './utils'
-import type { RenderContext } from './renderContext'
+import type { RenderConfig, RenderAccumulators, RenderNodeFn } from './renderConfig'
 
 /**
  * Render a `base.loop` node by iterating its resolved data and round-robining
@@ -25,8 +26,13 @@ import type { RenderContext } from './renderContext'
  * For a loop with N children and M items, iteration `i` (0-indexed) renders
  * the loop's child at index `i mod N` with the loop's `entryStack` extended
  * by the iteration's item. Two children → alternating layouts; three →
- * cycle of three; etc. After each iteration the entry stack is restored
- * so the loop's siblings keep seeing the outer template entry (if any).
+ * cycle of three; etc. Each iteration renders against a FRESH child
+ * `RenderConfig` whose `templateContext.entryStack` is a new array
+ * `[...baseStack, item]` — there is no in-place push/pop on a shared array, so
+ * a VC ref (or nested loop) rendered inside the body sees an immutable
+ * per-iteration snapshot rather than a live, mutating list. The loop's
+ * siblings keep seeing the outer template entry because the outer config is
+ * never touched.
  *
  * Loops without resolved data (server pre-fetch failed, source unregistered,
  * or no data context like in editor canvas tests) render an HTML comment so
@@ -37,7 +43,7 @@ import type { RenderContext } from './renderContext'
  * Pagination:
  *   - 'none': all rendered items emitted, no extra markup.
  *   - 'infinite': items emitted, plus a `data-instatic-loop-id` sentinel and the
- *     loop's nodeId is added to `ctx.infiniteLoopIds` so the publisher can
+ *     loop's nodeId is added to `acc.infiniteLoopIds` so the publisher can
  *     inject the runtime script. The runtime fetches subsequent pages from
  *     `/_instatic/loop/<loopId>?page=N` and appends rendered HTML.
  *
@@ -46,11 +52,12 @@ import type { RenderContext } from './renderContext'
  */
 export function renderLoop(
   node: PageNode,
-  ctx: RenderContext,
-  renderNode: (nodeId: string, ctx: RenderContext) => string,
+  config: RenderConfig,
+  acc: RenderAccumulators,
+  renderNode: RenderNodeFn,
 ): string {
   const loopId = node.id
-  const data = ctx.loopData?.get(loopId)
+  const data = config.loopData?.get(loopId)
   // No pre-fetched data — most likely an editor preview or a test that did
   // not seed loopData. Emit a marker comment rather than an empty string so
   // diagnostics in the rendered output are visible.
@@ -66,23 +73,28 @@ export function renderLoop(
     return ''
   }
 
-  // Make sure entryStack exists — bindings inside the loop body resolve
-  // against this stack. Mutating in place is fine because the publisher
-  // owns the context for this single render pass.
-  if (!ctx.templateContext) {
-    ctx.templateContext = { entryStack: [] }
-  }
-  const stack = ctx.templateContext.entryStack
+  // The base template context (page/site/route frames + the outer entry stack)
+  // that loop-body bindings resolve against. Each iteration derives a CHILD
+  // config from this WITHOUT mutating it — see below.
+  const baseTemplateContext: TemplateRenderDataContext = config.templateContext ?? { entryStack: [] }
+  const baseStack = baseTemplateContext.entryStack
 
   let body = ''
   data.items.forEach((item: LoopItem, i: number) => {
     const variantId = variants[i % variants.length]
-    stack.push(item)
-    try {
-      body += renderNode(variantId, ctx)
-    } finally {
-      stack.pop()
+    // Per-iteration snapshot: a NEW entryStack array with this item appended,
+    // wrapped in a NEW templateContext and a NEW child config. Nothing the
+    // outer config owns is mutated, so iterations are independent and a VC ref
+    // (or nested loop) in the body sees a stable, item-specific stack.
+    const iterationTemplateContext: TemplateRenderDataContext = {
+      ...baseTemplateContext,
+      entryStack: [...baseStack, item],
     }
+    const iterationConfig: RenderConfig = {
+      ...config,
+      templateContext: iterationTemplateContext,
+    }
+    body += renderNode(variantId, iterationConfig, acc)
   })
 
   // Pagination signals — pagination='infinite' attaches a sentinel and
@@ -96,8 +108,7 @@ export function renderLoop(
     attrs += ` data-instatic-loop-mode="infinite"`
     attrs += ` data-instatic-loop-has-more="${data.hasMore ? 'true' : 'false'}"`
     attrs += ` data-instatic-loop-page-size="${typeof props.pageSize === 'number' ? Math.floor(props.pageSize) : 10}"`
-    if (!ctx.infiniteLoopIds) ctx.infiniteLoopIds = new Set()
-    ctx.infiniteLoopIds.add(loopId)
+    acc.infiniteLoopIds.add(loopId)
   }
 
   // Wrapper element — author-selectable via the shared htmlTag helper
@@ -107,7 +118,7 @@ export function renderLoop(
   const html = `<${tag}${attrs}>${body}</${tag}>`
 
   // Inject the loop's own classIds + inline styles onto the wrapper element.
-  const withClasses = injectNodeClassIds(html, node.classIds, ctx.site)
+  const withClasses = injectNodeClassIds(html, node.classIds, config.site)
   const withStyles = injectNodeInlineStyles(withClasses, node.inlineStyles)
-  return ctx.annotateNodeIds ? injectNodeId(withStyles, node.id) : withStyles
+  return config.annotateNodeIds ? injectNodeId(withStyles, node.id) : withStyles
 }

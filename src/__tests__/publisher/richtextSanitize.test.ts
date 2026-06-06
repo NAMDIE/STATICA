@@ -9,8 +9,8 @@
  */
 
 import { describe, it, expect } from 'bun:test'
-import { escapeProps, publishPage, type RenderContext, renderNode } from '@core/publisher'
-import { makeModule, makeRegistry, makePage, makeSite } from './helpers'
+import { escapeProps, publishPage, renderNode } from '@core/publisher'
+import { makeModule, makeRegistry, makePage, makeSite, makeAccumulators } from './helpers'
 
 // ---------------------------------------------------------------------------
 // escapeProps richtext sanitization
@@ -104,8 +104,11 @@ describe('publishPage richtext sanitization (Constraint #368)', () => {
         props: { html: '<p>ok</p><script>bad()</script>' },
       },
     })
-    const cssMap = new Map<string, string>()
-    renderNode('root', { page, site, registry: spyRegistry, breakpointId: undefined, cssMap })
+    renderNode(
+      'root',
+      { page, site, registry: spyRegistry, breakpointId: undefined },
+      makeAccumulators(),
+    )
     // The module's render() must never see the raw <script>
     expect(receivedHtml).not.toContain('<script>')
   })

@@ -11,10 +11,11 @@ export type { PublishedRuntimePackageImportmap } from './render'
 export { renderNode } from './renderNode'
 
 export type {
-  RenderContext,
+  RenderConfig,
+  RenderAccumulators,
   RenderResolvedMedia,
   ResolvedLoopRenderData,
-} from './renderContext'
+} from './renderConfig'
 
 export { escapeProps } from './escapeProps'
 

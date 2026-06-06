@@ -35,7 +35,12 @@ import { renderVisualComponentRef } from './renderVisualComponentRef'
 import { renderLoop } from './renderLoop'
 import { resolveAutoSizes } from './sizesResolver'
 import { sanitizeRichtext } from '@core/sanitize'
-import type { RenderContext, RenderResolvedMedia } from './renderContext'
+import type {
+  RenderConfig,
+  RenderAccumulators,
+  RenderNodeFn,
+  RenderResolvedMedia,
+} from './renderConfig'
 
 /**
  * Attach every resolved media asset on this node, keyed by prop key, so
@@ -57,7 +62,7 @@ import type { RenderContext, RenderResolvedMedia } from './renderContext'
  */
 function resolvePageRefProps(
   props: Record<string, unknown>,
-  pages: RenderContext['site']['pages'],
+  pages: RenderConfig['site']['pages'],
 ): Record<string, unknown> {
   let out: Record<string, unknown> | null = null
   for (const [key, value] of Object.entries(props)) {
@@ -74,7 +79,7 @@ function attachResolvedMediaByKey(
   safeProps: Record<string, unknown>,
   def: AnyModuleDefinition,
   resolvedProps: Record<string, unknown>,
-  mediaAssets: Map<string, RenderResolvedMedia> | undefined,
+  mediaAssets: ReadonlyMap<string, RenderResolvedMedia> | undefined,
 ): void {
   if (!mediaAssets || mediaAssets.size === 0) return
   const byKey: Record<string, RenderResolvedMedia> = {}
@@ -104,12 +109,12 @@ function attachResolvedAutoSizes(
   def: AnyModuleDefinition,
   node: PageNode,
   resolvedProps: Record<string, unknown>,
-  ctx: RenderContext,
+  config: RenderConfig,
 ): void {
   if (resolvedProps['sizes'] !== 'auto') return
   const hasImageProp = Object.values(def.schema).some((c) => c.type === 'image')
   if (!hasImageProp) return
-  const resolvedSizes = resolveAutoSizes(node.id, ctx.page, ctx.site)
+  const resolvedSizes = resolveAutoSizes(node.id, config.page, config.site)
   if (resolvedSizes) {
     safeProps._resolvedAutoSizes = resolvedSizes
   }
@@ -127,21 +132,26 @@ function attachResolvedAutoSizes(
 function renderStandardNode(
   node: PageNode,
   def: AnyModuleDefinition,
-  ctx: RenderContext,
+  config: RenderConfig,
+  acc: RenderAccumulators,
 ): string {
-  const renderedChildren = (node.children ?? []).map((childId) => renderNode(childId, ctx))
+  const renderedChildren = (node.children ?? []).map((childId) => renderNode(childId, config, acc))
 
   // Resolve effective props (base + breakpoint shallow-merge for
   // breakpointOverridable schema keys only — content props always publish
   // their base value because HTML is a single document) and apply dynamic
   // template bindings.
-  const effectiveProps = resolveProps(node, ctx.breakpointId, def.schema)
-  const dynamicProps = resolveDynamicProps(effectiveProps, node.dynamicBindings, ctx.templateContext)
+  const effectiveProps = resolveProps(node, config.breakpointId, def.schema)
+  const dynamicProps = resolveDynamicProps(
+    effectiveProps,
+    node.dynamicBindings,
+    config.templateContext,
+  )
 
   // Resolve internal page references (`cms:page:<id>`) to the target page's
   // CURRENT public path, so links survive slug renames. Runs before validation
   // / escaping so the resolved URL flows through the normal href pipeline.
-  const resolvedProps = resolvePageRefProps(dynamicProps, ctx.site.pages)
+  const resolvedProps = resolvePageRefProps(dynamicProps, config.site.pages)
 
   // Coerce/default-fill authored props against the module's TypeBox schema
   // (soft boundary — never throws; unknown injected keys survive the merge).
@@ -150,24 +160,24 @@ function renderStandardNode(
   // Escape all string props (Constraint #211) before calling render(), then
   // attach derived assets that survive the escape boundary unchanged.
   const safeProps = escapeProps(validatedProps)
-  attachResolvedMediaByKey(safeProps, def, validatedProps, ctx.mediaAssets)
-  attachResolvedAutoSizes(safeProps, def, node, validatedProps, ctx)
+  attachResolvedMediaByKey(safeProps, def, validatedProps, config.mediaAssets)
+  attachResolvedAutoSizes(safeProps, def, node, validatedProps, config)
 
   const output = def.render(safeProps as never, renderedChildren)
 
   // CSS dedup — one entry per moduleId. Sanitize before storage to neutralise
   // any `</style` so the HTML5 RAWTEXT tokenizer cannot escape the
   // surrounding <style> block (Constraint #228).
-  if (output.css && !ctx.cssMap.has(node.moduleId)) {
-    ctx.cssMap.set(node.moduleId, sanitizeModuleCSS(output.css))
+  if (output.css && !acc.cssMap.has(node.moduleId)) {
+    acc.cssMap.set(node.moduleId, sanitizeModuleCSS(output.css))
   }
 
   // base.body has no wrapper element — its classIds + inline styles go on
   // <body> in publishPage.
   if (node.moduleId === 'base.body') return output.html
-  const withClasses = injectNodeClassIds(output.html, node.classIds, ctx.site)
+  const withClasses = injectNodeClassIds(output.html, node.classIds, config.site)
   const withStyles = injectNodeInlineStyles(withClasses, node.inlineStyles)
-  return ctx.annotateNodeIds ? injectNodeId(withStyles, node.id) : withStyles
+  return config.annotateNodeIds ? injectNodeId(withStyles, node.id) : withStyles
 }
 
 /**
@@ -186,17 +196,18 @@ function renderStandardNode(
 function renderHolePlaceholder(
   node: PageNode,
   def: AnyModuleDefinition,
-  ctx: RenderContext,
+  config: RenderConfig,
+  acc: RenderAccumulators,
 ): string {
   // Track which nodes actually became holes so render.ts can decide whether to
   // inject the hole runtime script based on real rendered output.
-  ctx.holeNodeIds?.add(node.id)
+  acc.holeNodeIds.add(node.id)
 
   const rawPlaceholder = def.staticPlaceholder?.(node.props as never) ?? ''
   const sanitized = rawPlaceholder ? sanitizeRichtext(rawPlaceholder) : ''
 
   const safeId = escapeHtml(node.id)
-  const version = ctx.publishVersion ?? 0
+  const version = config.publishVersion ?? 0
 
   return (
     `<instatic-hole id="hole-${safeId}" data-instatic-hole="${safeId}" data-instatic-version="${version}" style="display:contents">` +
@@ -224,8 +235,9 @@ const SPECIAL_NODE_RENDERERS: ReadonlyMap<
   string,
   (
     node: PageNode,
-    ctx: RenderContext,
-    renderNode: (nodeId: string, ctx: RenderContext) => string,
+    config: RenderConfig,
+    acc: RenderAccumulators,
+    renderNode: RenderNodeFn,
   ) => string
 > = new Map([
   ['base.visual-component-ref', renderVisualComponentRef],
@@ -237,12 +249,16 @@ const SPECIAL_NODE_RENDERERS: ReadonlyMap<
  *
  * @returns HTML string for this node and all its descendants
  */
-export function renderNode(nodeId: string, ctx: RenderContext): string {
-  const node = ctx.page.nodes[nodeId]
+export function renderNode(
+  nodeId: string,
+  config: RenderConfig,
+  acc: RenderAccumulators,
+): string {
+  const node = config.page.nodes[nodeId]
   if (!node) return ''
   if (node.hidden) return ''
 
-  const def = ctx.registry.get(node.moduleId)
+  const def = config.registry.get(node.moduleId)
   if (!def) {
     // Unknown module — emit a comment so the page doesn't silently lose content
     return `<!-- instatic: unknown module "${escapeHtml(node.moduleId)}" -->`
@@ -251,12 +267,12 @@ export function renderNode(nodeId: string, ctx: RenderContext): string {
   // Layer C: when this node id is in the dynamic set, emit a <instatic-hole>
   // placeholder and do NOT recurse into the subtree. The hole runtime will
   // fetch the full rendered fragment at request time via /_instatic/hole/<nodeId>.
-  if (ctx.dynamicNodeIds?.has(nodeId)) {
-    return renderHolePlaceholder(node, def, ctx)
+  if (config.dynamicNodeIds?.has(nodeId)) {
+    return renderHolePlaceholder(node, def, config, acc)
   }
 
   const specialRenderer = SPECIAL_NODE_RENDERERS.get(node.moduleId)
-  if (specialRenderer) return specialRenderer(node, ctx, renderNode)
+  if (specialRenderer) return specialRenderer(node, config, acc, renderNode)
 
-  return renderStandardNode(node, def, ctx)
+  return renderStandardNode(node, def, config, acc)
 }

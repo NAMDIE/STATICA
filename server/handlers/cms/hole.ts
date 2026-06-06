@@ -22,7 +22,7 @@
  * mismatch returns a lightweight stale sentinel so the next page load picks up
  * the new version.
  *
- * Inside the hole endpoint the RenderContext has no `dynamicNodeIds` — the node
+ * Inside the hole endpoint the RenderConfig has no `dynamicNodeIds` — the node
  * subtree is rendered fully (it is already the request-time dynamic part).
  *
  * Known v1 limitation: a hole that sits inside a per-entry content-template
@@ -35,7 +35,7 @@ import type { Page, PageNode, SiteDocument } from '@core/page-tree'
 import type { SourceRequestContext } from '@core/loops/types'
 import { registry } from '@core/module-engine'
 import { loopSourceRegistry } from '@core/loops/registry'
-import { renderNode, type RenderContext } from '@core/publisher'
+import { renderNode, type RenderConfig, type RenderAccumulators } from '@core/publisher'
 import { buildPageFrame, buildRouteFrame, buildSiteFrame } from '@core/templates/contextFrames'
 import { getLatestPublishedSiteSnapshot } from '../../repositories/publish'
 import { prefetchLoopData } from '../../publish/loopPrefetch'
@@ -176,12 +176,11 @@ async function renderHoleFragment(
     request,
     rootNodeId: nodeId,
   })
-  const renderCtx: RenderContext = {
+  const config: RenderConfig = {
     page,
     site,
     registry,
     breakpointId: undefined,
-    cssMap: new Map(),
     loopData,
     templateContext: {
       entryStack: [],
@@ -191,7 +190,12 @@ async function renderHoleFragment(
     },
     // No dynamicNodeIds: inside a hole endpoint we render the full subtree.
   }
-  return renderNode(nodeId, renderCtx)
+  const acc: RenderAccumulators = {
+    cssMap: new Map(),
+    infiniteLoopIds: new Set(),
+    holeNodeIds: new Set(),
+  }
+  return renderNode(nodeId, config, acc)
 }
 
 /**

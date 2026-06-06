@@ -20,8 +20,8 @@
  * threading another ternary through 150 lines.
  *
  * Re-exports: `escapeHtml` / `isSafeUrl` from `./utils`, `escapeProps` from
- * `./escapeProps`, `renderNode` from `./renderNode`, and the render-context
- * types from `./renderContext` — kept importable from this module's path
+ * `./escapeProps`, `renderNode` from `./renderNode`, and the render-config
+ * types from `./renderConfig` — kept importable from this module's path
  * so existing callers (modules, server, tests) don't need to retarget.
  */
 
@@ -42,23 +42,25 @@ import { hasPublishedRuntimeScripts, scriptTagsForRuntimeAssets } from '@core/si
 import { renderNode } from './renderNode'
 import { findDynamicNodeIds } from './dynamicDetection'
 import type {
-  RenderContext,
+  RenderConfig,
+  RenderAccumulators,
   RenderResolvedMedia,
   ResolvedLoopRenderData,
-} from './renderContext'
+} from './renderConfig'
 
 // Re-export canonical utilities so existing imports from this file keep working
 // (render.test.ts imports escapeHtml / isSafeUrl from here; modules import
-// RenderResolvedMedia; server/handlers import renderNode + RenderContext +
-// ResolvedLoopRenderData; tests import escapeProps).
+// RenderResolvedMedia; server/handlers import renderNode + RenderConfig +
+// RenderAccumulators + ResolvedLoopRenderData; tests import escapeProps).
 export { escapeHtml, isSafeUrl } from './utils'
 export { escapeProps } from './escapeProps'
 export { renderNode } from './renderNode'
 export type {
-  RenderContext,
+  RenderConfig,
+  RenderAccumulators,
   RenderResolvedMedia,
   ResolvedLoopRenderData,
-} from './renderContext'
+} from './renderConfig'
 
 interface PublishedPage {
   /** Filename for this page in the ZIP archive, e.g. "index.html", "about-us.html" */
@@ -337,7 +339,7 @@ interface RuntimeAssetsBlock {
 
 function buildRuntimeAssetsBlock(
   options: PublishPageOptions,
-  ctx: RenderContext,
+  acc: RenderAccumulators,
 ): RuntimeAssetsBlock {
   const { runtimeAssets } = options
   const headRuntimeScripts = scriptTagsForRuntimeAssets(runtimeAssets, 'head')
@@ -348,7 +350,7 @@ function buildRuntimeAssetsBlock(
   // path; only injected when at least one loop on the page uses
   // pagination='infinite'. This keeps the "no JS by default" line for
   // pages that don't need it.
-  const hasInfiniteLoops = (ctx.infiniteLoopIds?.size ?? 0) > 0
+  const hasInfiniteLoops = acc.infiniteLoopIds.size > 0
   const loopEndpointBaseUrl = options.loopEndpointBaseUrl ?? '/_instatic/loop/'
   const loopRuntimeScript = hasInfiniteLoops
     ? `  <script type="module" src="/_instatic/assets/loop-runtime.js" data-instatic-loop-endpoint="${escapeHtml(loopEndpointBaseUrl)}" defer></script>`
@@ -356,14 +358,14 @@ function buildRuntimeAssetsBlock(
 
   // Hole runtime — injected into <head> (not body-end) so IntersectionObserver
   // registration runs as early as possible. Only emitted when at least one hole
-  // was actually rendered during the walk (tracked via ctx.holeNodeIds) — no
+  // was actually rendered during the walk (tracked via acc.holeNodeIds) — no
   // idle JS for fully-static pages.
-  const hasHoles = (ctx.holeNodeIds?.size ?? 0) > 0
+  const hasHoles = acc.holeNodeIds.size > 0
   // Version the runtime URL with publishVersion so a CMS update busts the
   // browser cache (the asset is served `max-age=3600`); the runtime endpoint
   // ignores the query string.
   const holeRuntimeScript = hasHoles
-    ? `  <script type="module" src="/_instatic/hole-runtime.js?v=${ctx.publishVersion ?? 0}" defer></script>`
+    ? `  <script type="module" src="/_instatic/hole-runtime.js?v=${options.publishVersion ?? 0}" defer></script>`
     : ''
 
   // Site-dependency importmap. When present we emit a `<script type="importmap">`
@@ -480,42 +482,55 @@ export function publishPage(
   options: PublishPageOptions = {},
 ): PublishedPage {
   // Layer C: classify every node as static or dynamic before walking the tree.
-  // Dynamic node ids are threaded into the RenderContext so renderNode can
+  // Dynamic node ids are threaded into the RenderConfig so renderNode can
   // emit <instatic-hole> placeholders instead of recursing.
   const dynamicNodeIds = findDynamicNodeIds(page, site, registry)
 
-  const cssMap = new Map<string, string>()
-  const ctx: RenderContext = {
+  // Read-only inputs of this render pass. A renderer that needs a different
+  // page (VC ref) or template frame (loop iteration) derives a child config —
+  // it never mutates this one.
+  const config: RenderConfig = {
     page,
     site,
     registry,
     breakpointId: options.breakpointId,
     templateContext: composeTemplateContext(page, site, options.templateContext),
-    cssMap,
     loopData: options.loopData,
     mediaAssets: options.mediaAssets,
-    infiniteLoopIds: undefined,
     dynamicNodeIds: dynamicNodeIds.size > 0 ? dynamicNodeIds : undefined,
     publishVersion: options.publishVersion ?? 0,
-    // Mutable set populated by renderHolePlaceholder during the tree walk.
-    // After rendering, buildRuntimeAssetsBlock reads .size > 0 to decide
-    // whether to inject the /_instatic/hole-runtime.js <script> tag.
-    holeNodeIds: new Set<string>(),
     annotateNodeIds: options.annotateNodeIds,
   }
 
+  // Mutable outputs, owned here and threaded by reference through the whole
+  // walk. All three are initialised up-front (no lazy undefined): the walk
+  // appends module CSS to `cssMap`, infinite-loop ids to `infiniteLoopIds`,
+  // and the ids of nodes that actually emitted a `<instatic-hole>` to
+  // `holeNodeIds`. After the walk, the head builders read their `.size`.
+  const acc: RenderAccumulators = {
+    cssMap: new Map<string, string>(),
+    infiniteLoopIds: new Set<string>(),
+    holeNodeIds: new Set<string>(),
+  }
+
   // Render entire tree from root. The walker also accumulates module CSS
-  // into `cssMap`; in external mode that result is discarded because the
+  // into `acc.cssMap`; in external mode that result is discarded because the
   // same data is already in the pre-built `framework.css` bundle.
-  const bodyHtml = renderNode(page.rootNodeId, ctx)
+  const bodyHtml = renderNode(page.rootNodeId, config, acc)
 
   // Cascade order (both inline/external): reset → framework (tokens +
   // generated utilities + module CSS) → user class CSS. User classes load
   // last so they win specificity ties on identically-specific selectors.
-  const styleHeadHtml = buildStyleHead(options.cssEmission ?? 'inline', options, site, page, cssMap)
+  const styleHeadHtml = buildStyleHead(
+    options.cssEmission ?? 'inline',
+    options,
+    site,
+    page,
+    acc.cssMap,
+  )
 
   const meta = buildDocumentMetaTags(site, page)
-  const runtime = buildRuntimeAssetsBlock(options, ctx)
+  const runtime = buildRuntimeAssetsBlock(options, acc)
   const csp = buildContentSecurityPolicy(runtime.anyScriptTag, runtime.importmap)
 
   const html = assembleHtmlDocument({

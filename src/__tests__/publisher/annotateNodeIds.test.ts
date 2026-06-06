@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test'
-import { renderNode, publishPage, type RenderContext } from '@core/publisher'
+import { renderNode, publishPage, type RenderConfig } from '@core/publisher'
 import type { ModuleDefinition } from '@core/module-engine'
-import { makeModule, makeRegistry, makePage, makeSite } from './helpers'
+import { makeModule, makeRegistry, makePage, makeSite, makeAccumulators } from './helpers'
 
 // ---------------------------------------------------------------------------
 // annotateNodeIds — editor-only uid injection (agent read-surface)
@@ -30,8 +30,8 @@ const registry = makeRegistry({
 })
 const site = makeSite()
 
-function ctx(page: ReturnType<typeof makePage>, annotateNodeIds?: boolean): RenderContext {
-  return { page, site, registry, breakpointId: undefined, cssMap: new Map(), annotateNodeIds }
+function ctx(page: ReturnType<typeof makePage>, annotateNodeIds?: boolean): RenderConfig {
+  return { page, site, registry, breakpointId: undefined, annotateNodeIds }
 }
 
 const nestedPage = () =>
@@ -44,8 +44,8 @@ const nestedPage = () =>
 describe('renderNode — annotateNodeIds off (default)', () => {
   it('emits clean, id-less HTML byte-identical to a no-flag render', () => {
     const page = nestedPage()
-    const off = renderNode('root', ctx(page))
-    const undef = renderNode('root', ctx(page, undefined))
+    const off = renderNode('root', ctx(page), makeAccumulators())
+    const undef = renderNode('root', ctx(page, undefined), makeAccumulators())
     expect(off).toBe('<div class="wrapper"><h2>A</h2><h3>B</h3></div>')
     expect(off).toBe(undef)
     expect(off).not.toContain('uid=')
@@ -61,7 +61,7 @@ describe('renderNode — annotateNodeIds off (default)', () => {
 describe('renderNode — annotateNodeIds on', () => {
   it('annotates every node\'s outermost element with its uid', () => {
     const page = nestedPage()
-    const html = renderNode('root', ctx(page, true))
+    const html = renderNode('root', ctx(page, true), makeAccumulators())
     expect(html).toBe(
       '<div uid="root" class="wrapper">' +
         '<h2 uid="c1">A</h2>' +
@@ -72,12 +72,12 @@ describe('renderNode — annotateNodeIds on', () => {
 
   it('inserts uid as the first attribute, preserving existing attrs', () => {
     const page = makePage({ root: { moduleId: 'base.text', props: { text: 'Hi', level: 1 } } })
-    expect(renderNode('root', ctx(page, true))).toBe('<h1 uid="root">Hi</h1>')
+    expect(renderNode('root', ctx(page, true), makeAccumulators())).toBe('<h1 uid="root">Hi</h1>')
   })
 
   it('leaves a node that emits no element tag unannotated (unannotatable)', () => {
     const page = makePage({ root: { moduleId: 'test.comment', props: {} } })
-    const html = renderNode('root', ctx(page, true))
+    const html = renderNode('root', ctx(page, true), makeAccumulators())
     expect(html).toBe('<!-- no element here -->')
     expect(html).not.toContain('uid=')
   })

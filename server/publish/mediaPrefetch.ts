@@ -25,7 +25,7 @@ import type { DbClient } from '../db/client'
 import { isoDate, isoDateOrNull } from '@core/utils/isoDate'
 import { materializeAssetMapForClient } from './mediaPresentation'
 
-// Re-export under the client-shared type name so RenderContext can type
+// Re-export under the client-shared type name so RenderConfig can type
 // the map without crossing the server boundary. The repo's `MediaAsset`
 // shape is structurally identical.
 type MediaAsset = CmsMediaAsset
