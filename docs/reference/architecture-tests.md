@@ -129,16 +129,17 @@ See [docs/features/spotlight.md](../features/spotlight.md).
 
 | Test                                          | What it enforces                                                                 |
 |-----------------------------------------------|----------------------------------------------------------------------------------|
+| `plugin-rpc-target-registry.test.ts`          | Three-part lock on the RPC registry: (1) every `ApiCallSchemas` target has exactly one handler in `apiDispatch.ts`; (2) every key in `TARGET_PERMISSIONS` is a real api-call target; (3) the full target→permission table is frozen to the signed security contract — changing any pairing is a deliberate, visible security decision. |
 | `plugin-bootstrap-fresh.test.ts`              | Generated bootstrap artifacts in `bootstrap/generated/` match a fresh bundle of `bootstrap/src/`. Fails if `bun run bootstrap:sync` is needed. |
-| `plugin-sandbox-invariants.test.ts`           | No `node:`, `bun:`, `require(`, `process.binding` in plugin bundles. Sandbox-safe assertions.|
+| `plugin-sandbox-invariants.test.ts`           | No `node:`, `bun:`, `require(`, `process.binding` in plugin bundles; network permission gate is centralized in `apiDispatch.ts` and driven by `TARGET_PERMISSIONS`. |
 | `plugin-boot-resilience.test.ts`              | One bad plugin doesn't bring the server down. Crashes are isolated.              |
 | `plugin-cms-content-surface.test.ts`          | All five `cms.content.*` permissions are wired across all sync-points (permission values, capability matrix, permission alias builder, SDK type surface, host-side dispatch). |
-| `plugin-content-access-enforced.test.ts`      | Every plugin content handler calls `assertHostPluginPermission` (permission grant check) and, for per-table operations, `assertContentTableAccess` (manifest `contentAccess[]` allowlist). |
+| `plugin-content-access-enforced.test.ts`      | `cms.content.*` permission grant is enforced centrally in `apiDispatch.ts` (driven by `TARGET_PERMISSIONS`); per-table handlers additionally call `assertContentTableAccess` (manifest `contentAccess[]` allowlist). |
 | `plugin-content-tree-via-engine.test.ts`      | Plugin content handlers reach page-tree mutations through `applyTreeOperation` from `@core/page-tree`, not by deep-importing `mutations.ts` directly. |
 | `plugin-host-import-boundaries.test.ts`       | Worker transport (`server/plugins/host/`) does not import `apiDispatch` — prevents circular dependency between the pool and the dispatch layer. |
 | `plugin-host-ui-runtime-parity.test.ts`       | Plugin host UI surfaces match the SDK's declared shape.                          |
-| `plugin-schedule-invariants.test.ts`          | Scheduled job cadence + overlap policy validate at registration.                 |
-| `sandbox-crypto-bridge.test.ts`               | Plugin sandbox's crypto surface is bridged correctly (`subtle.digest`, etc.).    |
+| `plugin-schedule-invariants.test.ts`          | Scheduled job cadence + overlap policy validate at registration; `cms.schedule.*` targets are centrally gated by the `cms.schedule` permission in `TARGET_PERMISSIONS`. |
+| `sandbox-crypto-bridge.test.ts`               | Plugin sandbox's crypto surface is bridged correctly (`subtle.digest`, `subtle.sign`); crypto targets carry no permission gate (pure computation, no I/O). |
 | `no-plugin-tab-shells.test.ts`                | Plugin-mounted admin pages render in the canvas-style admin layout, not separate tabs. |
 
 See [docs/features/plugin-system.md](../features/plugin-system.md).

@@ -546,9 +546,13 @@ independent layers that agree on that single authority:
 
 | Layer | Check | Where |
 |-------|-------|-------|
-| VM (sandbox) | `assertPermission` against `__plugin_meta.grantedPermissions` | `server/plugins/quickjs/bootstrap/src/pluginRuntime.ts` |
-| Host (dispatch) | `assertHostPluginPermission` against `manifest.grantedPermissions` | `server/plugins/host/registry.ts` |
+| VM (sandbox) | `assertTargetPermission` looks up the required permission in `TARGET_PERMISSIONS` from `server/plugins/protocol/targets.ts` and throws synchronously if it is not granted | `server/plugins/quickjs/bootstrap/src/buildApi.ts` |
+| Host (dispatch) | Centralized `assertHostPluginPermission` in `apiDispatch.ts` — looks up `TARGET_PERMISSIONS[target]` and asserts before the handler runs; individual handlers only add the conditional checks a static map cannot express | `server/plugins/host/apiDispatch.ts` |
 | Editor (SDK) | `assertPluginPermission` against `manifest.grantedPermissions` | `src/core/plugins/runtime.ts` |
+
+Both the VM layer and the host layer drive from the same `TARGET_PERMISSIONS` map in `server/plugins/protocol/targets.ts`. This single table is the source of truth for which permission each RPC target requires — the VM and host can never silently assert different permissions for the same target.
+
+Targets intentionally absent from `TARGET_PERMISSIONS` require no permission and are explicitly ungated: `cms.settings.replace` (any active plugin may update its own settings), `network.abort` (no active id without `network.outbound`), `crypto.digest` and `crypto.signHmac` (pure computation, no I/O — same model as `Math`/`JSON`). Two conditional checks that a static map cannot express remain in their handlers: `cms.routes.register` with `access.kind === 'public'` additionally requires `cms.routes.public`, and every `cms.content.*` handler additionally calls `assertContentTableAccess` for the per-table manifest allowlist.
 
 The VM-side check throws **synchronously** inside the sandbox, so a plugin that
 declares a permission it was denied is rejected before any host dispatch is even
@@ -720,6 +724,7 @@ Manifest:
   - `server/handlers/cms/plugins/events.ts` — `GET /admin/api/cms/plugins/events` SSE endpoint
   - `src/admin/pages/plugins/utils/pluginEventStream.ts` — client-side lazy EventSource subscriber (validates frames)
   - `src/admin/pages/plugins/hooks/usePluginEventBridge.ts` — admin shell hook (toasts, badge, list resync)
+  - `server/plugins/protocol/targets.ts` — `TARGET_PERMISSIONS` map (SSOT for RPC target→permission pairs; consumed by both the host dispatcher and VM bootstrap)
   - `server/plugins/quickjs/vm.ts` — server entrypoint sandbox (QuickJS VM factory)
   - `server/plugins/quickjs/bootstrap/src/` — bootstrap TypeScript source (authored, typed, lintable)
   - `server/plugins/quickjs/bootstrap/generated/` — committed bootstrap artifacts (regenerate with `bun run bootstrap:sync`)
@@ -732,6 +737,7 @@ Manifest:
   - `server/handlers/cms/runtime.ts` — plugin HTTP route bridge
   - `examples/plugins/template/` — example plugin
 - Gate tests:
+  - `src/__tests__/architecture/plugin-rpc-target-registry.test.ts` — every schema target has a handler; every `TARGET_PERMISSIONS` key is a real target; the full target→permission table is locked to the security contract
   - `src/__tests__/architecture/plugin-sandbox-invariants.test.ts`
   - `src/__tests__/architecture/plugin-boot-resilience.test.ts`
   - `src/__tests__/architecture/plugin-cms-content-surface.test.ts`
