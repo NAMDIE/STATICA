@@ -144,29 +144,31 @@ Media data lives in dedicated tables (not in `data_tables` — they predate the 
 
 ### `media_assets`
 
-| Column            | Type (PG)     | Type (SQLite) | Notes                                                          |
-|-------------------|---------------|---------------|----------------------------------------------------------------|
-| `id`              | `text` PK     | `text` PK     |                                                                |
-| `filename`        | `text`        | `text`        | Original upload filename                                       |
-| `public_path`     | `text`        | `text`        | URL path: `/uploads/...` or `/_instatic/media/<adapter>/<path>`      |
-| `mime_type`       | `text`        | `text`        |                                                                |
-| `size_bytes`      | `bigint`      | `integer`     |                                                                |
-| `width`           | `integer`     | `integer`     | Nullable, populated on image upload                            |
-| `height`          | `integer`     | `integer`     | Nullable                                                       |
-| `duration_ms`     | `integer`     | `integer`     | Nullable, for video / audio                                    |
-| `alt_text`        | `text`        | `text`        | Required for accessibility                                     |
-| `caption`         | `text`        | `text`        | Optional                                                       |
-| `title`           | `text`        | `text`        | Optional; falls back to filename                               |
-| `tags_json`       | `jsonb`       | `text`        | `string[]`, sorted lowercase                                   |
-| `dominant_color`  | `text`        | `text`        | Nullable, `#rrggbb`. Computed server-side on upload            |
-| `blurhash`        | `text`        | `text`        | Nullable. Used for skeleton placeholders                       |
-| `variants_json`   | `jsonb`       | `text`        | Per-variant URL + dimensions                                   |
-| `storage_adapter` | `text`        | `text`        | Adapter id (`local-disk` or plugin-registered)                 |
-| `storage_path`    | `text`        | `text`        | Path inside the adapter                                        |
-| `deleted_at`      | `timestamptz` | `text`        | Nullable. Non-null = soft-deleted (in Trash)                   |
-| `replaced_at`     | `timestamptz` | `text`        | Nullable. Set when binary is swapped via "Replace file"        |
-| `created_at`      | `timestamptz` | `text`        |                                                                |
-| `updated_at`      | `timestamptz` | `text`        |                                                                |
+| Column                | Type (PG)     | Type (SQLite)   | Notes                                                                                           |
+|-----------------------|---------------|-----------------|-------------------------------------------------------------------------------------------------|
+| `id`                  | `text` PK     | `text` PK       |                                                                                                 |
+| `filename`            | `text`        | `text`          | Original upload filename                                                                        |
+| `public_path`         | `text`        | `text`          | URL the browser uses: `/uploads/...` for local-disk; `/_instatic/media/<adapterId>/<storagePath>` for non-public-url adapters |
+| `mime_type`           | `text`        | `text`          |                                                                                                 |
+| `size_bytes`          | `bigint`      | `integer`       |                                                                                                 |
+| `storage_path`        | `text`        | `text`          | Adapter-internal handle (local basename or S3 key). Never exposed to the browser.              |
+| `storage_adapter_id`  | `text`        | `text`          | Id of the adapter that wrote this asset. Empty string = built-in local-disk.                   |
+| `externally_hosted`   | `boolean`     | `integer` (0/1) | True when bytes live outside the host's `uploads/` dir (`'public-url'` adapters).              |
+| `uploaded_by_user_id` | `text`        | `text`          | Nullable FK to `users`.                                                                         |
+| `alt_text`            | `text`        | `text`          | Required for accessibility                                                                      |
+| `caption`             | `text`        | `text`          | Optional                                                                                        |
+| `title`               | `text`        | `text`          | Optional; falls back to filename                                                                |
+| `tags_json`           | `jsonb`       | `text`          | `string[]`, sorted lowercase                                                                    |
+| `width`               | `integer`     | `integer`       | Nullable, populated on image upload                                                             |
+| `height`              | `integer`     | `integer`       | Nullable                                                                                        |
+| `duration_ms`         | `integer`     | `integer`       | Nullable, for video / audio                                                                     |
+| `dominant_color`      | `text`        | `text`          | Nullable, `#rrggbb`. Computed server-side on upload                                             |
+| `blur_hash`           | `text`        | `text`          | Nullable. Used for skeleton placeholders                                                        |
+| `variants_json`       | `jsonb`       | `text`          | `MediaVariant[]` — each entry carries `width`, `height`, `format`, `path`, `sizeBytes`, `storagePath`, `storageAdapterId` |
+| `poster_path`         | `text`        | `text`          | Nullable. URL for video poster frame                                                            |
+| `deleted_at`          | `timestamptz` | `text`          | Nullable. Non-null = soft-deleted (in Trash)                                                    |
+| `replaced_at`         | `timestamptz` | `text`          | Nullable. Set when binary is swapped via "Replace file"                                         |
+| `created_at`          | `timestamptz` | `text`          |                                                                                                 |
 
 ### `media_folders`
 
@@ -218,12 +220,13 @@ Folder routes (`/admin/api/cms/media/folders/...`) are matched **before** asset 
 
 ### Repositories
 
-| File                                          | Owns                                            |
-|-----------------------------------------------|-------------------------------------------------|
-| `server/repositories/media.ts`                | `media_assets` CRUD + queries                   |
-| `server/repositories/mediaFolders.ts`         | `media_folders` + `media_asset_folders`         |
-| `server/repositories/mediaMigration.ts`       | Migrating assets between storage adapters       |
-| `server/repositories/mediaStorageAdapters.ts` | Adapter registry persistence                    |
+| File                                              | Owns                                                                           |
+|---------------------------------------------------|--------------------------------------------------------------------------------|
+| `server/repositories/mediaAssetMapping.ts`        | Single source of truth for the `media_assets` DB projection: `MEDIA_ASSET_COLUMNS`, `MEDIA_ASSET_INSERT_COLUMNS`, `MediaAssetRow`, `mapMediaAssetRow()`, `parseVariants()`, `parseTags()`. Shared by both the admin repository and the publisher's prefetch — ensures both layers see an identical asset shape. |
+| `server/repositories/media.ts`                    | `MediaAsset` + `MediaVariant` domain types; all `media_assets` CRUD queries   |
+| `server/repositories/mediaFolders.ts`             | `media_folders` + `media_asset_folders`                                        |
+| `server/repositories/mediaMigration.ts`           | Migrating assets between storage adapters                                      |
+| `server/repositories/mediaStorageAdapters.ts`     | Adapter registry persistence                                                   |
 
 ### Upload pipeline
 
@@ -284,9 +287,14 @@ The redirect handler is `tryServeMediaRedirect` in `server/router.ts`. The redir
 
 1. Add the column to both `server/db/migrations-pg.ts` and `migrations-sqlite.ts` with the same migration ID.
 2. JSON column → name ends in `_json`.
-3. Extend the asset TypeBox schema in `src/core/persistence/cmsMedia.ts`.
-4. Add a setter handler in `server/handlers/cms/media.ts`.
-5. Expose it in the asset viewer (`MediaViewerWindow`) and bulk-edit window (`BulkEditWindow`) if appropriate.
+3. In `server/repositories/mediaAssetMapping.ts`:
+   - Add the column to `MEDIA_ASSET_COLUMNS`.
+   - Add it to `MediaAssetRow`.
+   - Map it in `mapMediaAssetRow()`.
+   If it's also written at create time, add it to `MEDIA_ASSET_INSERT_COLUMNS` and the `CreateMediaAssetInput` in `server/repositories/media.ts`.
+4. If the column is client-visible, extend the wire schema in `src/core/persistence/cmsMedia.ts` (`CmsMediaAssetWire`) and add the field to `normalizeCmsMediaAsset()`.
+5. Add a setter handler in `server/handlers/cms/media.ts` if the field is user-editable.
+6. Expose it in the asset viewer (`MediaViewerWindow`) and bulk-edit window (`BulkEditWindow`) if appropriate.
 
 ### Add a new floating window
 
@@ -332,12 +340,15 @@ See [docs/features/plugin-system.md](plugin-system.md). The plugin SDK's `api.cm
   - `src/admin/pages/media/hooks/useMediaWorkspace.ts` — orchestrator
   - `src/admin/pages/media/hooks/useUploadQueue.ts` — upload pipeline
   - `src/admin/pages/media/utils/smartFolders.ts` — smart folder IDs + predicates
-  - `src/core/persistence/cmsMedia.ts` — client-side schema + API
+  - `src/core/persistence/cmsMedia.ts` — client-facing wire schema + API (`CmsMediaAsset`, `CmsMediaVariant`)
+  - `server/repositories/mediaAssetMapping.ts` — canonical `media_assets` projection + row mapper (shared by repo and publisher)
+  - `server/repositories/media.ts` — `MediaAsset` / `MediaVariant` domain types + CRUD
   - `server/handlers/cms/media*.ts` — handlers
-  - `server/repositories/media*.ts` — repositories
+  - `server/repositories/mediaFolders.ts`, `mediaMigration.ts`, `mediaStorageAdapters.ts` — folder / migration / adapter repos
   - `server/publish/mediaPresentation.ts`, `mediaPrefetch.ts` — publisher integration
   - `@core/plugins/mediaStorageRegistry` — storage adapter registry
 - Gate tests:
+  - `src/__tests__/server/mediaAssetMapping.test.ts` — repo and publisher map the same row to the same `MediaAsset`; INSERT arity lockstep
   - `src/__tests__/architecture/media-migration-invariants.test.ts`
   - `src/__tests__/architecture/media-presentation-pipeline.test.ts`
   - `src/__tests__/architecture/media-signed-redirect-serving.test.ts`
