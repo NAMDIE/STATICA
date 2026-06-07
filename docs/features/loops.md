@@ -20,12 +20,13 @@ Loop sources are pluggable: built-in sources (`content.entries`, `site.pages`, `
 
 ```text
 src/core/loops/
+├── index.ts                 — public barrel: types + pageToLoopItem + filterPagesForLoop
 ├── types.ts                 — LoopItem, LoopEntitySource, LoopSourceField, LoopFetchResult, ...
 ├── registry.ts              — LoopSourceRegistry singleton (`loopSourceRegistry`)
 └── sources/
     ├── index.ts             — register the three built-ins at boot
     ├── dataRows.ts          — content.entries (any data_table)
-    ├── sitePages.ts         — site.pages
+    ├── sitePages.ts         — site.pages (+ shared helpers re-exported via barrel)
     └── siteMedia.ts         — site.media
 
 src/modules/base/loop/        — the base.loop module definition
@@ -125,7 +126,14 @@ Iterates pages in the site. Filters by template inclusion/exclusion.
 
 Used by sitemaps, "All pages" indexes.
 
-The source's runtime `LoopItem.fields` map includes internal fields used by code paths that need stable identity, but its author-facing `fields` list exposes only title, slug, and permalink. The binding picker must not offer page ids or template flags as front-end content.
+The source exports two helpers through the `@core/loops` barrel:
+
+- **`pageToLoopItem(page)`** — projects a `Page` to a `LoopItem`. Normalizes the slug to a leading-slash permalink (`/index` → `/`). Exposes `title`, `slug`, `permalink`, `isTemplate`, and `templateTableSlug`.
+- **`filterPagesForLoop(pages, filters)`** — applies `templateOnly` / `excludeTemplates` filtering.
+
+Both the publisher (`SitePagesSource.fetch` / `.preview`) and the editor canvas hook (`useLoopPreviewItems`) import these from `@core/loops` — they never re-implement the logic. Parity is gated by `src/__tests__/loops/sitePagesLoopItemParity.test.ts`.
+
+The author-facing `fields` list exposes only `title`, `slug`, and `permalink`. Internal fields (`id`, `isTemplate`, `templateTableSlug`) are present in `LoopItem.fields` for code paths that need them but are not offered in the binding picker.
 
 ### `site.media`
 
@@ -261,12 +269,16 @@ The map is passed into `RenderConfig.loopData`. The walker reads from it; no asy
 
 ## Editor canvas preview
 
-In the editor, the canvas needs the loop to render meaningfully. Two paths:
+In the editor, `useLoopPreviewItems` (`src/admin/pages/site/canvas/useLoopPreviewItems.ts`) provides loop iteration data for the canvas. It dispatches per source:
 
-1. **Live fetch** — the canvas POSTs `/admin/api/cms/loop` with the loop's `sourceId` + `filter`, gets results back, renders. The default for built-in sources backed by the user's DB.
-2. **Preview** — the source's optional `preview(ctx)` returns synthesized items (e.g. 3 fake products). Used by sources that can't be live-queried in the editor (plugin sources that hit external APIs).
+| Source | Canvas path |
+|---|---|
+| `data.rows` | GETs `/data/tables/:id/loop-preview` — same projection as the publisher. Falls back to synthetic items from the table's field definitions when no published rows exist yet. |
+| `site.pages` | Reads pages from the in-memory site document. Applies `filterPagesForLoop` + `pageToLoopItem` imported from `@core/loops` — identical to the publisher path. |
+| `site.media` | Fetches via `listCmsMediaAssets()`, filters by MIME prefix, sorts + slices client-side. |
+| Plugin sources | Calls `source.preview(ctx)` synchronously. |
 
-The canvas dispatches based on whether `source.preview` exists.
+The canvas caps preview results at 6 items (`CANVAS_MAX_ITEMS`) regardless of the loop's configured `limit`. Published pages render the full set.
 
 ---
 
@@ -391,6 +403,7 @@ For static multi-page navigation (no JS required):
 - [docs/features/content-storage.md](content-storage.md) — `data_tables` + `data_rows` is the source for `content.entries`
 - [docs/features/plugin-system.md](plugin-system.md) — plugin loop sources
 - Source-of-truth files:
+  - `src/core/loops/index.ts` — public barrel (`pageToLoopItem`, `filterPagesForLoop`, types)
   - `src/core/loops/types.ts` — `LoopEntitySource`, `LoopItem`, `LoopFetchResult`
   - `src/core/loops/registry.ts` — registry singleton
   - `src/core/loops/sources/dataRows.ts`, `sitePages.ts`, `siteMedia.ts` — built-in sources
@@ -401,3 +414,4 @@ For static multi-page navigation (no JS required):
 - Gate tests:
   - `src/__tests__/architecture/loop-source-id-format.test.ts`
   - `src/__tests__/architecture/loop-source-sql-safety.test.ts`
+  - `src/__tests__/loops/sitePagesLoopItemParity.test.ts` — canvas preview ↔ publisher parity for `site.pages`
