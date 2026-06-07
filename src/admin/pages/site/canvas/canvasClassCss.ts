@@ -15,7 +15,7 @@ import type {
   FrameworkPreferencesSettings,
   FrameworkSpacingSettings,
   FrameworkTypographySettings,
-} from '@core/framework'
+} from '@core/framework-schema'
 
 export function generateCanvasClassCSS(
   classes: Record<string, StyleRule>,

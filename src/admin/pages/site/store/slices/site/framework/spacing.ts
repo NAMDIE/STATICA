@@ -9,7 +9,7 @@
  */
 
 import type { SiteDocument } from '@core/page-tree'
-import type { FrameworkSpacingGroup } from '@core/framework'
+import type { FrameworkSpacingGroup } from '@core/framework-schema'
 import {
   buildDefaultSpacingGroup,
   makeFreshSpacingGroup,

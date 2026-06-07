@@ -3,11 +3,8 @@
  */
 
 import { nanoid } from 'nanoid'
-import type {
-  FrameworkColorToken,
-  SiteDocument,
-  SiteSettings,
-} from '@core/page-tree'
+import type { FrameworkColorToken } from '@core/framework-schema'
+import type { SiteDocument, SiteSettings } from '@core/page-tree'
 import {
   generateDefaultDarkColor,
   normalizeFrameworkColorSlug,

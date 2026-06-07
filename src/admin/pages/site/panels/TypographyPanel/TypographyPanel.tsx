@@ -14,7 +14,7 @@ import { TYPE_RATIO_OPTIONS } from '@core/framework'
 import type {
   FrameworkTypographyClassGenerator,
   FrameworkTypographyGroup,
-} from '@core/framework'
+} from '@core/framework-schema'
 import { TextStartTIcon } from 'pixel-art-icons/icons/text-start-t'
 import { TextColumsIcon } from 'pixel-art-icons/icons/text-colums'
 import {

@@ -4,7 +4,7 @@ import {
   buildDefaultTypographySettings,
   describeFrameworkTokens,
 } from '@core/framework'
-import type { FrameworkColorSettings } from '@core/framework'
+import type { FrameworkColorSettings } from '@core/framework-schema'
 
 const colors: FrameworkColorSettings = {
   tokens: [

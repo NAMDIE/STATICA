@@ -3,7 +3,7 @@ import {
   generateFrameworkColorVariableSets,
   normalizeFrameworkColorSlug,
 } from '@core/framework'
-import type { FrameworkColorToken } from '@core/framework'
+import type { FrameworkColorToken } from '@core/framework-schema'
 import type { UpdateFrameworkColorTokenPatch } from '@site/store/slices/site/types'
 import { Input } from '@ui/components/Input'
 import { CategoryComboBox } from './CategoryComboBox'

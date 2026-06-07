@@ -9,7 +9,7 @@
  */
 
 import type { SiteDocument } from '@core/page-tree'
-import type { FrameworkTypographyGroup } from '@core/framework'
+import type { FrameworkTypographyGroup } from '@core/framework-schema'
 import {
   buildDefaultTypographyGroup,
   makeFreshTypographyGroup,

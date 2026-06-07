@@ -32,7 +32,7 @@ import { SPACING_RATIO_OPTIONS } from '@core/framework'
 import type {
   FrameworkSpacingClassGenerator,
   FrameworkSpacingGroup,
-} from '@core/framework'
+} from '@core/framework-schema'
 import { cn } from "@ui/cn";
 import { MonitorSolidIcon } from "pixel-art-icons/icons/monitor-solid";
 import { RulerDimensionSolidIcon } from "pixel-art-icons/icons/ruler-dimension-solid";

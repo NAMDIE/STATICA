@@ -21,7 +21,7 @@ import { useEditorStore } from '@site/store/store'
 import type {
   FrameworkSpacingGroup,
   FrameworkTypographyGroup,
-} from '@core/framework'
+} from '@core/framework-schema'
 import { getVariableName } from '@core/framework'
 
 // ---------------------------------------------------------------------------
