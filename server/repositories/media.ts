@@ -1,5 +1,17 @@
-import type { DbClient } from '../db/client'
-import { isoDate, isoDateOrNull } from '@core/utils/isoDate'
+import { type DbClient, placeholder } from '../db/client'
+import {
+  MEDIA_ASSET_COLUMNS,
+  MEDIA_ASSET_INSERT_COLUMNS,
+  mapMediaAssetRow,
+  parseVariants,
+  type MediaAssetRow,
+} from './mediaAssetMapping'
+
+// The row ↔ asset mapping unit (column constants, `MediaAssetRow`,
+// `mapMediaAssetRow`, and the JSON parsers) lives in `./mediaAssetMapping` so it
+// can be shared verbatim with the publisher's render-time prefetch without
+// duplication. This module owns the asset domain types (`MediaAsset`,
+// `MediaVariant`) and every CRUD query.
 
 export interface MediaVariant {
   width: number
@@ -82,123 +94,8 @@ export interface UpdateMediaAssetMetadataInput {
   tags?: string[]
 }
 
-interface MediaAssetRow {
-  id: string
-  filename: string
-  mime_type: string
-  size_bytes: number | string
-  public_path: string
-  uploaded_by_user_id: string | null
-  created_at: Date | string
-  alt_text: string | null
-  caption: string | null
-  title: string | null
-  tags_json: unknown
-  width: number | null
-  height: number | null
-  duration_ms: number | string | null
-  dominant_color: string | null
-  deleted_at: Date | string | null
-  replaced_at: Date | string | null
-  blur_hash: string | null
-  variants_json: unknown
-  poster_path: string | null
-  storage_adapter_id: string
-  /** PG: boolean; SQLite: integer 0/1. Read via Boolean(row.externally_hosted). */
-  externally_hosted: boolean | number
-}
-
 interface DeletedMediaAssetRow {
   storage_path: string
-}
-
-function parseTags(value: unknown): string[] {
-  if (Array.isArray(value)) return value.filter((tag): tag is string => typeof tag === 'string')
-  if (typeof value !== 'string') return []
-  try {
-    const parsed: unknown = JSON.parse(value)
-    return Array.isArray(parsed) ? parsed.filter((tag): tag is string => typeof tag === 'string') : []
-  } catch {
-    return []
-  }
-}
-
-function parseVariants(value: unknown): MediaVariant[] {
-  // Variants are written by the upload pipeline as a fully-validated array
-  // already; the runtime check here is defense against a hand-edited row.
-  // Anything that isn't a well-shaped variant gets dropped silently — the
-  // asset still serves its original file, just without the responsive ladder.
-  //
-  // `storagePath` / `storageAdapterId` were added when the media subsystem
-  // grew pluggable storage adapters. Older rows without them are derived:
-  // `storagePath` from `path` (stripping `/uploads/`), `storageAdapterId`
-  // to `''` (local-disk). This is the canonical derivation — not a band-aid
-  // — because old rows were always written by the local-disk adapter and
-  // their storagePath is structurally `path.slice('/uploads/'.length)`.
-  const raw: unknown = Array.isArray(value)
-    ? value
-    : typeof value === 'string'
-      ? (() => { try { return JSON.parse(value) } catch { return [] } })()
-      : []
-  if (!Array.isArray(raw)) return []
-  const result: MediaVariant[] = []
-  for (const entry of raw) {
-    if (!entry || typeof entry !== 'object') continue
-    const e = entry as Record<string, unknown>
-    if (typeof e.width !== 'number' || typeof e.height !== 'number') continue
-    if (typeof e.path !== 'string' || typeof e.sizeBytes !== 'number') continue
-    if (e.format !== 'webp' && e.format !== 'jpeg' && e.format !== 'png' && e.format !== 'avif') continue
-    const storagePath = typeof e.storagePath === 'string' && e.storagePath
-      ? e.storagePath
-      : e.path.startsWith('/uploads/')
-        ? e.path.slice('/uploads/'.length)
-        : e.path
-    const storageAdapterId = typeof e.storageAdapterId === 'string' ? e.storageAdapterId : ''
-    result.push({
-      width: e.width,
-      height: e.height,
-      format: e.format,
-      path: e.path,
-      sizeBytes: e.sizeBytes,
-      storagePath,
-      storageAdapterId,
-    })
-  }
-  return result
-}
-
-function numberOrNull(value: number | string | null | undefined): number | null {
-  if (value == null) return null
-  const n = typeof value === 'number' ? value : Number(value)
-  return Number.isFinite(n) ? n : null
-}
-
-function mapMediaAsset(row: MediaAssetRow, folderIds: string[] = []): MediaAsset {
-  return {
-    id: row.id,
-    filename: row.filename,
-    mimeType: row.mime_type,
-    sizeBytes: Number(row.size_bytes),
-    publicPath: row.public_path,
-    uploadedByUserId: row.uploaded_by_user_id ?? null,
-    createdAt: isoDate(row.created_at),
-    altText: row.alt_text ?? '',
-    caption: row.caption ?? '',
-    title: row.title ?? '',
-    tags: parseTags(row.tags_json),
-    width: numberOrNull(row.width),
-    height: numberOrNull(row.height),
-    durationMs: numberOrNull(row.duration_ms),
-    dominantColor: row.dominant_color ?? null,
-    deletedAt: isoDateOrNull(row.deleted_at),
-    replacedAt: isoDateOrNull(row.replaced_at),
-    folderIds,
-    blurHash: row.blur_hash ?? null,
-    variants: parseVariants(row.variants_json),
-    posterPath: row.poster_path ?? null,
-    storageAdapterId: row.storage_adapter_id ?? '',
-    externallyHosted: Boolean(row.externally_hosted),
-  }
 }
 
 /**
@@ -234,55 +131,54 @@ async function hydrateAssets(
   rows: MediaAssetRow[],
 ): Promise<MediaAsset[]> {
   const folderMap = await loadFolderIdsForAssets(db, rows.map((r) => r.id))
-  return rows.map((row) => mapMediaAsset(row, folderMap.get(row.id) ?? []))
+  return rows.map((row) => mapMediaAssetRow(row, folderMap.get(row.id) ?? []))
 }
 
 export async function createMediaAsset(
   db: DbClient,
   input: CreateMediaAssetInput,
 ): Promise<MediaAsset> {
-  // SQLite cross-dialect note: boolean values pass through Bun's tagged
-  // template as `true`/`false` for Postgres but need 1/0 for SQLite. The
-  // SQLite adapter (`server/db/sqlite.ts`) handles this coercion centrally
-  // — passing a JS boolean here works against both engines.
-  const { rows } = await db<MediaAssetRow>`
-    insert into media_assets (
-      id, filename, mime_type, size_bytes, storage_path, public_path,
-      uploaded_by_user_id, storage_adapter_id, externally_hosted
-    )
-    values (
-      ${input.id},
-      ${input.filename},
-      ${input.mimeType},
-      ${input.sizeBytes},
-      ${input.storagePath},
-      ${input.publicPath},
-      ${input.uploadedByUserId},
-      ${input.storageAdapterId},
-      ${input.externallyHosted}
-    )
-    returning id, filename, mime_type, size_bytes, public_path, uploaded_by_user_id, created_at,
-             alt_text, caption, title, tags_json, width, height, duration_ms,
-             dominant_color, deleted_at, replaced_at,
-             blur_hash, variants_json, poster_path,
-             storage_adapter_id, externally_hosted
-  `
-  return mapMediaAsset(rows[0])
+  // SQLite cross-dialect note: boolean values bind as `true`/`false` for
+  // Postgres but need 1/0 for SQLite. Both the tagged-template and the
+  // `db.unsafe` paths route params through the SQLite adapter's `toBindable`
+  // coercion (`server/db/sqlite.ts`), so passing a JS boolean works against
+  // both engines.
+  //
+  // Values are keyed by column name and read back in `MEDIA_ASSET_INSERT_COLUMNS`
+  // order, so the tuple and the placeholders share one source of truth and
+  // cannot desync.
+  const valuesByColumn: Record<(typeof MEDIA_ASSET_INSERT_COLUMNS)[number], unknown> = {
+    id: input.id,
+    filename: input.filename,
+    mime_type: input.mimeType,
+    size_bytes: input.sizeBytes,
+    storage_path: input.storagePath,
+    public_path: input.publicPath,
+    uploaded_by_user_id: input.uploadedByUserId,
+    storage_adapter_id: input.storageAdapterId,
+    externally_hosted: input.externallyHosted,
+  }
+  const params = MEDIA_ASSET_INSERT_COLUMNS.map((column) => valuesByColumn[column])
+  const placeholders = MEDIA_ASSET_INSERT_COLUMNS.map((_, i) => placeholder(db.dialect, i + 1)).join(', ')
+  const { rows } = await db.unsafe<MediaAssetRow>(
+    `insert into media_assets (${MEDIA_ASSET_INSERT_COLUMNS.join(', ')})
+     values (${placeholders})
+     returning ${MEDIA_ASSET_COLUMNS}`,
+    params,
+  )
+  return mapMediaAssetRow(rows[0])
 }
 
 export async function getMediaAsset(
   db: DbClient,
   id: string,
 ): Promise<MediaAsset | null> {
-  const { rows } = await db<MediaAssetRow>`
-    select id, filename, mime_type, size_bytes, public_path, uploaded_by_user_id, created_at,
-           alt_text, caption, title, tags_json, width, height, duration_ms,
-           dominant_color, deleted_at, replaced_at,
-           blur_hash, variants_json, poster_path,
-           storage_adapter_id, externally_hosted
-    from media_assets
-    where id = ${id}
-  `
+  const { rows } = await db.unsafe<MediaAssetRow>(
+    `select ${MEDIA_ASSET_COLUMNS}
+     from media_assets
+     where id = ${placeholder(db.dialect, 1)}`,
+    [id],
+  )
   if (rows.length === 0) return null
   const assets = await hydrateAssets(db, rows)
   return assets[0] ?? null
@@ -305,26 +201,18 @@ export async function listMediaAssets(
   // tagged templates require literal SQL text — `includeDeleted` is the
   // only branch.
   const { rows } = options.includeDeleted
-    ? await db<MediaAssetRow>`
-        select id, filename, mime_type, size_bytes, public_path, uploaded_by_user_id, created_at,
-               alt_text, caption, title, tags_json, width, height, duration_ms,
-               dominant_color, deleted_at, replaced_at,
-               blur_hash, variants_json, poster_path,
-               storage_adapter_id, externally_hosted
-        from media_assets
-        where deleted_at is not null
-        order by deleted_at desc
-      `
-    : await db<MediaAssetRow>`
-        select id, filename, mime_type, size_bytes, public_path, uploaded_by_user_id, created_at,
-               alt_text, caption, title, tags_json, width, height, duration_ms,
-               dominant_color, deleted_at, replaced_at,
-               blur_hash, variants_json, poster_path,
-               storage_adapter_id, externally_hosted
-        from media_assets
-        where deleted_at is null
-        order by created_at desc
-      `
+    ? await db.unsafe<MediaAssetRow>(
+        `select ${MEDIA_ASSET_COLUMNS}
+         from media_assets
+         where deleted_at is not null
+         order by deleted_at desc`,
+      )
+    : await db.unsafe<MediaAssetRow>(
+        `select ${MEDIA_ASSET_COLUMNS}
+         from media_assets
+         where deleted_at is null
+         order by created_at desc`,
+      )
   return hydrateAssets(db, rows)
 }
 
@@ -333,15 +221,12 @@ export async function renameMediaAsset(
   id: string,
   filename: string,
 ): Promise<MediaAsset | null> {
-  const { rows } = await db<MediaAssetRow>`
-    update media_assets set filename = ${filename}
-    where id = ${id}
-    returning id, filename, mime_type, size_bytes, public_path, uploaded_by_user_id, created_at,
-             alt_text, caption, title, tags_json, width, height, duration_ms,
-             dominant_color, deleted_at, replaced_at,
-             blur_hash, variants_json, poster_path,
-             storage_adapter_id, externally_hosted
-  `
+  const { rows } = await db.unsafe<MediaAssetRow>(
+    `update media_assets set filename = ${placeholder(db.dialect, 1)}
+     where id = ${placeholder(db.dialect, 2)}
+     returning ${MEDIA_ASSET_COLUMNS}`,
+    [filename, id],
+  )
   if (rows.length === 0) return null
   const assets = await hydrateAssets(db, rows)
   return assets[0] ?? null
@@ -369,20 +254,18 @@ export async function updateMediaAssetMetadata(
   const caption = input.caption ?? null
   const title = input.title ?? null
 
-  const { rows } = await db<MediaAssetRow>`
-    update media_assets set
-      filename = coalesce(${filename}, filename),
-      alt_text = coalesce(${altText}, alt_text),
-      caption = coalesce(${caption}, caption),
-      title = coalesce(${title}, title),
-      tags_json = coalesce(${tags}, tags_json)
-    where id = ${id}
-    returning id, filename, mime_type, size_bytes, public_path, uploaded_by_user_id, created_at,
-             alt_text, caption, title, tags_json, width, height, duration_ms,
-             dominant_color, deleted_at, replaced_at,
-             blur_hash, variants_json, poster_path,
-             storage_adapter_id, externally_hosted
-  `
+  const p = (n: number) => placeholder(db.dialect, n)
+  const { rows } = await db.unsafe<MediaAssetRow>(
+    `update media_assets set
+       filename = coalesce(${p(1)}, filename),
+       alt_text = coalesce(${p(2)}, alt_text),
+       caption = coalesce(${p(3)}, caption),
+       title = coalesce(${p(4)}, title),
+       tags_json = coalesce(${p(5)}, tags_json)
+     where id = ${p(6)}
+     returning ${MEDIA_ASSET_COLUMNS}`,
+    [filename, altText, caption, title, tags, id],
+  )
   if (rows.length === 0) return null
   const assets = await hydrateAssets(db, rows)
   return assets[0] ?? null
@@ -410,19 +293,17 @@ export async function setMediaAssetVariants(
     variants: MediaVariant[]
   },
 ): Promise<MediaAsset | null> {
-  const { rows } = await db<MediaAssetRow>`
-    update media_assets set
-      width = ${input.width},
-      height = ${input.height},
-      blur_hash = ${input.blurHash},
-      variants_json = ${input.variants}
-    where id = ${id}
-    returning id, filename, mime_type, size_bytes, public_path, uploaded_by_user_id, created_at,
-             alt_text, caption, title, tags_json, width, height, duration_ms,
-             dominant_color, deleted_at, replaced_at,
-             blur_hash, variants_json, poster_path,
-             storage_adapter_id, externally_hosted
-  `
+  const p = (n: number) => placeholder(db.dialect, n)
+  const { rows } = await db.unsafe<MediaAssetRow>(
+    `update media_assets set
+       width = ${p(1)},
+       height = ${p(2)},
+       blur_hash = ${p(3)},
+       variants_json = ${p(4)}
+     where id = ${p(5)}
+     returning ${MEDIA_ASSET_COLUMNS}`,
+    [input.width, input.height, input.blurHash, input.variants, id],
+  )
   if (rows.length === 0) return null
   const assets = await hydrateAssets(db, rows)
   return assets[0] ?? null
@@ -437,15 +318,12 @@ export async function softDeleteMediaAsset(
   id: string,
 ): Promise<MediaAsset | null> {
   const nowIso = new Date().toISOString()
-  const { rows } = await db<MediaAssetRow>`
-    update media_assets set deleted_at = ${nowIso}
-    where id = ${id} and deleted_at is null
-    returning id, filename, mime_type, size_bytes, public_path, uploaded_by_user_id, created_at,
-             alt_text, caption, title, tags_json, width, height, duration_ms,
-             dominant_color, deleted_at, replaced_at,
-             blur_hash, variants_json, poster_path,
-             storage_adapter_id, externally_hosted
-  `
+  const { rows } = await db.unsafe<MediaAssetRow>(
+    `update media_assets set deleted_at = ${placeholder(db.dialect, 1)}
+     where id = ${placeholder(db.dialect, 2)} and deleted_at is null
+     returning ${MEDIA_ASSET_COLUMNS}`,
+    [nowIso, id],
+  )
   if (rows.length === 0) return getMediaAsset(db, id)
   const assets = await hydrateAssets(db, rows)
   return assets[0] ?? null
@@ -455,15 +333,12 @@ export async function restoreMediaAsset(
   db: DbClient,
   id: string,
 ): Promise<MediaAsset | null> {
-  const { rows } = await db<MediaAssetRow>`
-    update media_assets set deleted_at = null
-    where id = ${id}
-    returning id, filename, mime_type, size_bytes, public_path, uploaded_by_user_id, created_at,
-             alt_text, caption, title, tags_json, width, height, duration_ms,
-             dominant_color, deleted_at, replaced_at,
-             blur_hash, variants_json, poster_path,
-             storage_adapter_id, externally_hosted
-  `
+  const { rows } = await db.unsafe<MediaAssetRow>(
+    `update media_assets set deleted_at = null
+     where id = ${placeholder(db.dialect, 1)}
+     returning ${MEDIA_ASSET_COLUMNS}`,
+    [id],
+  )
   if (rows.length === 0) return null
   const assets = await hydrateAssets(db, rows)
   return assets[0] ?? null
@@ -511,23 +386,31 @@ export async function replaceMediaAssetBinary(
   },
 ): Promise<MediaAsset | null> {
   const nowIso = new Date().toISOString()
-  const { rows } = await db<MediaAssetRow>`
-    update media_assets set
-      filename = ${input.filename},
-      mime_type = ${input.mimeType},
-      size_bytes = ${input.sizeBytes},
-      storage_path = ${input.storagePath},
-      public_path = ${input.publicPath},
-      storage_adapter_id = ${input.storageAdapterId},
-      externally_hosted = ${input.externallyHosted},
-      replaced_at = ${nowIso}
-    where id = ${id}
-    returning id, filename, mime_type, size_bytes, public_path, uploaded_by_user_id, created_at,
-             alt_text, caption, title, tags_json, width, height, duration_ms,
-             dominant_color, deleted_at, replaced_at,
-             blur_hash, variants_json, poster_path,
-             storage_adapter_id, externally_hosted
-  `
+  const p = (n: number) => placeholder(db.dialect, n)
+  const { rows } = await db.unsafe<MediaAssetRow>(
+    `update media_assets set
+       filename = ${p(1)},
+       mime_type = ${p(2)},
+       size_bytes = ${p(3)},
+       storage_path = ${p(4)},
+       public_path = ${p(5)},
+       storage_adapter_id = ${p(6)},
+       externally_hosted = ${p(7)},
+       replaced_at = ${p(8)}
+     where id = ${p(9)}
+     returning ${MEDIA_ASSET_COLUMNS}`,
+    [
+      input.filename,
+      input.mimeType,
+      input.sizeBytes,
+      input.storagePath,
+      input.publicPath,
+      input.storageAdapterId,
+      input.externallyHosted,
+      nowIso,
+      id,
+    ],
+  )
   if (rows.length === 0) return null
   const assets = await hydrateAssets(db, rows)
   return assets[0] ?? null
@@ -610,19 +493,15 @@ interface MediaAssetExportRow extends MediaAssetRow {
  * because the public read paths never need to expose it.
  */
 export async function listMediaAssetsForExport(db: DbClient): Promise<Array<MediaAsset & { storagePath: string }>> {
-  const { rows } = await db<MediaAssetExportRow>`
-    select id, filename, mime_type, size_bytes, public_path, uploaded_by_user_id, created_at,
-           alt_text, caption, title, tags_json, width, height, duration_ms,
-           dominant_color, deleted_at, replaced_at,
-           blur_hash, variants_json, poster_path,
-           storage_adapter_id, externally_hosted, storage_path
-    from media_assets
-    where deleted_at is null
-    order by created_at asc
-  `
+  const { rows } = await db.unsafe<MediaAssetExportRow>(
+    `select ${MEDIA_ASSET_COLUMNS}, storage_path
+     from media_assets
+     where deleted_at is null
+     order by created_at asc`,
+  )
   const folderMap = await loadFolderIdsForAssets(db, rows.map((r) => r.id))
   return rows.map((row) => ({
-    ...mapMediaAsset(row, folderMap.get(row.id) ?? []),
+    ...mapMediaAssetRow(row, folderMap.get(row.id) ?? []),
     storagePath: row.storage_path,
   }))
 }

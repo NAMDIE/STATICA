@@ -24,6 +24,20 @@ export interface CmsMediaVariant {
   sizeBytes: number
 }
 
+/**
+ * Client-facing media-asset shape. Intentionally a NARROWER projection of the
+ * server repository's `MediaAsset` (`server/repositories/media.ts`): the
+ * storage-internal fields — `storageAdapterId`, `externallyHosted`, and each
+ * variant's `storagePath` / `storageAdapterId` — are deliberately omitted so
+ * adapter internals never cross the wire to the browser.
+ *
+ * Because of that omission the two types are NOT interchangeable, so neither is
+ * aliased to the other. The server type is the superset and is the single
+ * source of truth for the hydrated row (one mapper, `mapMediaAssetRow`).
+ * Folding both into one schema would mean a shared TypeBox schema in
+ * `responseSchemas.ts` (the wire boundary) — flagged for CTO review rather than
+ * forced here, since it crosses the server/client layer boundary.
+ */
 export interface CmsMediaAsset {
   id: string
   filename: string

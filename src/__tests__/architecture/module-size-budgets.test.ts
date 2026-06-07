@@ -96,14 +96,17 @@ const GRANDFATHERED: Record<string, number> = {
   'src/admin/pages/site/canvas/IframeFrameSurface.tsx': 811,
   'src/admin/pages/site/agent/executor.ts': 729,
   'src/admin/pages/site/store/slices/visualComponentsSlice.ts': 924,
-  'server/repositories/media.ts': 704,
+  // server/repositories/media.ts graduated: the row ↔ asset mapping unit was
+  // extracted into server/repositories/mediaAssetMapping.ts, dropping media.ts
+  // to 583 lines — under CEILING, so it's now held by the normal ceiling rule.
   'server/handlers/cms/auth.ts': 854,
   'src/core/loops/sources/dataRows.ts': 903,
-  // Raised 882 → 940: the O(1) parentId pointer is a denormalised cache that
-  // every parentage-changing primitive (insert/move/duplicate/wrap/paste) must
-  // maintain inline — the maintenance is intrinsic to each mutation and has no
-  // separate module to extract to. See docs/reference/page-tree.md (parentId).
-  'src/core/page-tree/mutations.ts': 940,
+  // The O(1) parentId pointer is a denormalised cache that every
+  // parentage-changing primitive (insert/move/duplicate/wrap/paste) maintains
+  // inline. The node deep-clone primitive lives in its own module
+  // (cloneNode.ts) so the three duplicate/paste/duplicatePage callers share one
+  // clone. See docs/reference/page-tree.md (parentId).
+  'src/core/page-tree/mutations.ts': 880,
   'server/plugins/host/handlers/content.ts': 786,
   'src/core/siteImport/cssToStyleRules.ts': 829,
   'src/admin/pages/site/panels/TypographyPanel/FontsSection/AddGoogleFontDialog.tsx': 750,

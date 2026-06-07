@@ -20,41 +20,17 @@
 import type { Page, SiteDocument } from '@core/page-tree'
 import type { IModuleRegistry } from '@core/module-engine'
 import { walkRenderTree } from './renderTreeWalk'
-import type { CmsMediaAsset } from '@core/persistence/cmsMedia'
 import type { DbClient } from '../db/client'
-import { isoDate, isoDateOrNull } from '@core/utils/isoDate'
+import type { MediaAsset } from '../repositories/media'
+import {
+  MEDIA_ASSET_COLUMNS,
+  mapMediaAssetRow,
+  type MediaAssetRow,
+} from '../repositories/mediaAssetMapping'
 import { materializeAssetMapForClient } from './mediaPresentation'
-
-// Re-export under the client-shared type name so RenderConfig can type
-// the map without crossing the server boundary. The repo's `MediaAsset`
-// shape is structurally identical.
-type MediaAsset = CmsMediaAsset
 
 /** Map keyed by the asset's `public_path` for O(1) lookup at render time. */
 export type MediaAssetMap = Map<string, MediaAsset>
-
-interface PrefetchedAssetRow {
-  id: string
-  filename: string
-  mime_type: string
-  size_bytes: number | string
-  public_path: string
-  uploaded_by_user_id: string | null
-  created_at: Date | string
-  alt_text: string | null
-  caption: string | null
-  title: string | null
-  tags_json: unknown
-  width: number | null
-  height: number | null
-  duration_ms: number | string | null
-  dominant_color: string | null
-  deleted_at: Date | string | null
-  replaced_at: Date | string | null
-  blur_hash: string | null
-  variants_json: unknown
-  poster_path: string | null
-}
 
 /**
  * Collect every `/uploads/...` path referenced by an image/media-typed prop
@@ -79,78 +55,6 @@ export function collectMediaPaths(page: Page, site: SiteDocument, registry: IMod
   return paths
 }
 
-function parseTags(value: unknown): string[] {
-  if (Array.isArray(value)) return value.filter((tag): tag is string => typeof tag === 'string')
-  if (typeof value !== 'string') return []
-  try {
-    const parsed: unknown = JSON.parse(value)
-    return Array.isArray(parsed) ? parsed.filter((tag): tag is string => typeof tag === 'string') : []
-  } catch {
-    return []
-  }
-}
-
-function parseVariants(value: unknown): MediaAsset['variants'] {
-  // Mirrors `parseVariants` in `repositories/media.ts` — defensive against
-  // hand-edited rows. Kept inline (vs. importing) so this file's only
-  // cross-module dep is the row TypeScript shape.
-  const raw: unknown = Array.isArray(value)
-    ? value
-    : typeof value === 'string'
-      ? (() => { try { return JSON.parse(value) } catch { return [] } })()
-      : []
-  if (!Array.isArray(raw)) return []
-  const out: MediaAsset['variants'] = []
-  for (const entry of raw) {
-    if (!entry || typeof entry !== 'object') continue
-    const e = entry as Record<string, unknown>
-    if (typeof e.width !== 'number' || typeof e.height !== 'number') continue
-    if (typeof e.path !== 'string' || typeof e.sizeBytes !== 'number') continue
-    if (e.format !== 'webp' && e.format !== 'jpeg' && e.format !== 'png' && e.format !== 'avif') continue
-    out.push({
-      width: e.width,
-      height: e.height,
-      format: e.format,
-      path: e.path,
-      sizeBytes: e.sizeBytes,
-    })
-  }
-  return out
-}
-
-function numberOrNull(value: number | string | null | undefined): number | null {
-  if (value == null) return null
-  const n = typeof value === 'number' ? value : Number(value)
-  return Number.isFinite(n) ? n : null
-}
-
-function mapRow(row: PrefetchedAssetRow): MediaAsset {
-  return {
-    id: row.id,
-    filename: row.filename,
-    mimeType: row.mime_type,
-    sizeBytes: Number(row.size_bytes),
-    publicPath: row.public_path,
-    uploadedByUserId: row.uploaded_by_user_id ?? null,
-    createdAt: isoDate(row.created_at),
-    altText: row.alt_text ?? '',
-    caption: row.caption ?? '',
-    title: row.title ?? '',
-    tags: parseTags(row.tags_json),
-    width: numberOrNull(row.width),
-    height: numberOrNull(row.height),
-    durationMs: numberOrNull(row.duration_ms),
-    dominantColor: row.dominant_color ?? null,
-    deletedAt: isoDateOrNull(row.deleted_at),
-    replacedAt: isoDateOrNull(row.replaced_at),
-    folderIds: [],  // Not needed at render time; left empty to skip the per-asset
-                    // join roundtrip the regular repo path would do.
-    blurHash: row.blur_hash ?? null,
-    variants: parseVariants(row.variants_json),
-    posterPath: row.poster_path ?? null,
-  }
-}
-
 /**
  * Fetch every media asset referenced by image / media props in the page
  * tree. Returns an empty map for pages that reference no local uploads
@@ -168,15 +72,19 @@ export async function prefetchMediaAssets(
   const paths = collectMediaPaths(page, site, registry)
   if (paths.size === 0) return map
 
-  const pathsToFetch = [...paths].filter(p => !map.has(p))
+  // `collectMediaPaths` already returns a Set, so the paths are unique.
+  const pathsToFetch = [...paths]
   const placeholders = pathsToFetch.map((_, i) =>
     db.dialect === 'postgres' ? `$${i + 1}` : '?'
   ).join(', ')
-  const { rows } = await db.unsafe<PrefetchedAssetRow>(
-    `select id, filename, mime_type, size_bytes, public_path, uploaded_by_user_id, created_at,
-            alt_text, caption, title, tags_json, width, height, duration_ms,
-            dominant_color, deleted_at, replaced_at,
-            blur_hash, variants_json, poster_path
+  // Bespoke batched-by-`public_path` SELECT (the render path resolves by stored
+  // URL, not asset id, and legitimately skips the folder-id join). It maps
+  // through the SAME canonical `mapMediaAssetRow` as the repository, so the
+  // published page and the admin see one identical asset shape — including
+  // storageAdapterId, externallyHosted, and the variants' storagePath /
+  // storageAdapterId derivation.
+  const { rows } = await db.unsafe<MediaAssetRow>(
+    `select ${MEDIA_ASSET_COLUMNS}
      from media_assets
      where public_path in (${placeholders}) and deleted_at is null`,
     pathsToFetch,
@@ -184,7 +92,7 @@ export async function prefetchMediaAssets(
   const byPath = new Map(rows.map(r => [r.public_path, r]))
   for (const path of pathsToFetch) {
     const row = byPath.get(path)
-    if (row) map.set(path, mapRow(row))
+    if (row) map.set(path, mapMediaAssetRow(row))
   }
   // Apply the `media.url.transform` filter chain to every asset's URLs
   // (publicPath + variants[*].path). The map KEY stays the page tree's
