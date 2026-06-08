@@ -21,75 +21,77 @@
  * infinite-mode loop exists on the page.
  */
 
-export const LOOP_RUNTIME_JS = `(()=>{
-  const scriptEl = document.currentScript;
-  const endpointBase = (scriptEl && scriptEl.getAttribute('data-instatic-loop-endpoint')) || '/_instatic/loop/';
-  const pagePath = location.pathname;
+export function runInstaticLoopRuntime(): void {
+  const scriptEl = document.currentScript
+  const endpointBase =
+    (scriptEl && scriptEl.getAttribute('data-instatic-loop-endpoint')) || '/_instatic/loop/'
+  const pagePath = location.pathname
 
-  function attach(loopEl) {
-    let pageNumber = parseInt(loopEl.getAttribute('data-instatic-loop-page') || '1', 10);
-    let hasMore = loopEl.getAttribute('data-instatic-loop-has-more') === 'true';
-    if (!hasMore) return;
+  function attach(loopEl: Element): void {
+    let pageNumber = parseInt(loopEl.getAttribute('data-instatic-loop-page') || '1', 10)
+    let hasMore = loopEl.getAttribute('data-instatic-loop-has-more') === 'true'
+    if (!hasMore) return
 
-    const loopId = loopEl.getAttribute('data-instatic-loop');
-    if (!loopId) return;
+    const loopId = loopEl.getAttribute('data-instatic-loop')
+    if (!loopId) return
 
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'instatic-loop-load-more';
-    button.textContent = 'Load more';
-    button.setAttribute('data-instatic-loop-load-more', loopId);
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'instatic-loop-load-more'
+    button.textContent = 'Load more'
+    button.setAttribute('data-instatic-loop-load-more', loopId)
 
-    let busy = false;
+    let busy = false
     button.addEventListener('click', async () => {
-      if (busy || !hasMore) return;
-      busy = true;
-      button.disabled = true;
-      const prev = button.textContent;
-      button.textContent = 'Loading…';
+      if (busy || !hasMore) return
+      busy = true
+      button.disabled = true
+      const prev = button.textContent
+      button.textContent = 'Loading…'
       try {
         const params = new URLSearchParams({
           page: String(pageNumber + 1),
           pagePath: pagePath,
-        });
+        })
         const res = await fetch(endpointBase + encodeURIComponent(loopId) + '?' + params.toString(), {
           headers: { accept: 'application/json' },
           credentials: 'same-origin',
-        });
-        if (!res.ok) throw new Error('Loop fetch failed: ' + res.status);
-        const body = await res.json();
+        })
+        if (!res.ok) throw new Error('Loop fetch failed: ' + res.status)
+        const body = await res.json()
         if (typeof body.html === 'string' && body.html.length > 0) {
           // Insert before the button so the button stays at the end.
-          button.insertAdjacentHTML('beforebegin', body.html);
+          button.insertAdjacentHTML('beforebegin', body.html)
         }
-        pageNumber += 1;
-        hasMore = body.hasMore === true;
-        loopEl.setAttribute('data-instatic-loop-page', String(pageNumber));
-        loopEl.setAttribute('data-instatic-loop-has-more', hasMore ? 'true' : 'false');
+        pageNumber += 1
+        hasMore = body.hasMore === true
+        loopEl.setAttribute('data-instatic-loop-page', String(pageNumber))
+        loopEl.setAttribute('data-instatic-loop-has-more', hasMore ? 'true' : 'false')
         if (!hasMore) {
-          button.remove();
+          button.remove()
         }
       } catch (err) {
-        console.error('[instatic-loop]', err);
-        button.textContent = 'Try again';
+        console.error('[instatic-loop]', err)
+        button.textContent = 'Try again'
       } finally {
-        busy = false;
-        button.disabled = false;
-        if (button.textContent === 'Loading…') button.textContent = prev;
+        busy = false
+        button.disabled = false
+        if (button.textContent === 'Loading…') button.textContent = prev
       }
-    });
+    })
 
-    loopEl.appendChild(button);
+    loopEl.appendChild(button)
   }
 
-  function init() {
-    document.querySelectorAll('[data-instatic-loop][data-instatic-loop-mode="infinite"]').forEach(attach);
+  function init(): void {
+    document.querySelectorAll('[data-instatic-loop][data-instatic-loop-mode="infinite"]').forEach(attach)
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init, { once: true });
+    document.addEventListener('DOMContentLoaded', init, { once: true })
   } else {
-    init();
+    init()
   }
-})();
-`
+}
+
+export const LOOP_RUNTIME_JS = `(${runInstaticLoopRuntime.toString()})();`

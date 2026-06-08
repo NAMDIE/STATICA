@@ -15,8 +15,9 @@
  */
 import type { DbClient } from '../../../db/client'
 import type { AuditAction } from '../../../repositories/audit'
+import { isoDateOrNull } from '@core/utils/isoDate'
 import { computeGravatarHash } from '../../../repositories/users'
-import { buildRowPath, toIsoOrNull } from './shared'
+import { buildRowPath } from './shared'
 import type { RecentActivityActor, RecentActivityEntry, RecentActivityStats } from './types'
 
 const WIDGET_LIMIT = 10
@@ -136,7 +137,7 @@ function projectActivityRow(
     actor: buildActor(row),
     targetCode: target.code,
     targetText: target.text,
-    createdAt: toIsoOrNull(row.created_at) ?? '',
+    createdAt: isoDateOrNull(row.created_at) ?? '',
   }
 }
 

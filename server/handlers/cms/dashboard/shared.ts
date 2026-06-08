@@ -107,13 +107,3 @@ export function buildRowPath(routeBase: string | null, tableId: string, slug: st
   const trimmedBase = normalizedBase.endsWith('/') ? normalizedBase.slice(0, -1) : normalizedBase
   return `${trimmedBase}/${safeSlug}`
 }
-
-/**
- * Coerce a `datetime` column into an ISO string. Postgres returns these
- * as JS `Date`; SQLite hands back the raw ISO string. Centralising the
- * branch here means handlers can always emit a string downstream.
- */
-export function toIsoOrNull(value: string | Date | null): string | null {
-  if (value === null) return null
-  return typeof value === 'string' ? value : value.toISOString()
-}

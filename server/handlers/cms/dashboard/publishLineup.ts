@@ -2,8 +2,9 @@
  * Publish lineup widget reader — three slices joined by status:
  * upcoming scheduled, recently published, drafts in progress.
  */
+import { isoDateOrNull } from '@core/utils/isoDate'
 import type { DbClient } from '../../../db/client'
-import { buildRowPath, toIsoOrNull } from './shared'
+import { buildRowPath } from './shared'
 import type { PublishLineupRow, PublishLineupStats } from './types'
 
 const SCHEDULED_LIMIT = 3
@@ -49,13 +50,13 @@ export async function readPublishLineup(db: DbClient): Promise<PublishLineupStat
       id: r.id,
       path: buildRowPath(r.route_base, r.table_id, r.slug),
       status: 'scheduled',
-      at: toIsoOrNull(r.scheduled_publish_at),
+      at: isoDateOrNull(r.scheduled_publish_at),
     })),
     ...published.map((r): PublishLineupRow => ({
       id: r.id,
       path: buildRowPath(r.route_base, r.table_id, r.slug),
       status: 'published',
-      at: toIsoOrNull(r.published_at),
+      at: isoDateOrNull(r.published_at),
     })),
     ...drafts.map((r): PublishLineupRow => ({
       id: r.id,
