@@ -35,7 +35,7 @@ type SiteExplorerOrganization = Record<SiteExplorerSectionId, {
 
 That model stores folders and item placements for all five sections. It is correct for non-routable concepts, but it gives Pages, Styles, and Scripts a second hierarchy that can disagree with public URLs and file paths.
 
-Slash-delimited page slugs are already supported by `src/core/page-tree/slugs.ts`. Site import derives nested HTML routes in `src/core/siteImport/htmlPagePlan.ts`, so the import pipeline can produce paths that the Explorer should present as nested folders.
+Slash-delimited page slugs are already supported by `src/core/page-tree/slugs.ts`. Site import derives nested HTML routes in `src/core/siteImport/htmlPagePlan.ts`, so the import pipeline can produce paths that the Explorer presents as nested folders.
 
 ## Section Ownership
 
@@ -61,10 +61,17 @@ Replace the all-sections organization model with one shape that separates struct
 type StructuralExplorerSectionId = 'pages' | 'styles' | 'scripts'
 type DecorativeExplorerSectionId = 'templates' | 'components'
 
+type StructuralExplorerRowOrder = {
+  kind: 'folder' | 'item'
+  id: string        // folder path when kind is 'folder', item id when kind is 'item'
+  parentPath?: string
+  order: number
+}
+
 type StructuralExplorerSection = {
   expandedFolders: string[]
   emptyFolders: string[]
-  order: SiteExplorerItemPlacement[]
+  rowOrder: StructuralExplorerRowOrder[]
 }
 
 type DecorativeExplorerSection = {
@@ -85,11 +92,11 @@ type SiteExplorerOrganization = {
 
 `emptyFolders` stores full folder paths that have no descendant item yet. This supports an explicit New folder action without inventing item membership. Empty folders are not published and do not create pages or files. Once an item exists under the same path, the folder is still identified by that path and no separate folder id is needed.
 
-`order` stores optional row ordering within a derived parent folder. It never decides membership. If an item no longer belongs to the parent path implied by a placement, reconciliation drops that placement.
+`rowOrder` stores optional row ordering within a derived parent folder. It never decides membership. If a folder or item no longer belongs to the `parentPath` implied by an order entry, reconciliation drops that entry.
 
 The parser in `src/core/page-tree/siteExplorer.ts` stays tolerant:
 
-- Missing structural sections become empty `expandedFolders`, `emptyFolders`, and `order`.
+- Missing structural sections become empty `expandedFolders`, `emptyFolders`, and `rowOrder`.
 - Invalid folder paths are dropped.
 - Empty folder paths that collide with an item file path or page slug are dropped.
 - Decorative sections parse the existing folder/item model.
@@ -106,7 +113,7 @@ The model consumes:
 - `site.files` for Styles and Scripts.
 - `site.explorer[section].emptyFolders`.
 - `site.explorer[section].expandedFolders`.
-- `site.explorer[section].order`.
+- `site.explorer[section].rowOrder`.
 
 The model emits recursive rows:
 
@@ -292,7 +299,7 @@ For Pages:
 - any target slug fails `pageSlugError` from `src/core/page-tree/slugs.ts`
 - any target slug collides with an unaffected page
 - two changed pages target the same slug
-- the operation would move or delete the homepage `index` without using the existing homepage action
+- the operation moves or deletes the homepage `index` without using the existing homepage action
 
 For Styles and Scripts:
 
@@ -315,7 +322,7 @@ Warnings include:
 
 Use `extractRuntimeImportSpecifiers` from `src/core/site-runtime/importAnalysis.ts` to detect relative script specifiers. The first implementation warns; it does not rewrite script source text.
 
-Moving a whole script folder preserves relative imports between files that both move together, but imports between moved and unmoved files can still change. The warning text should name the affected script paths.
+Moving a whole script folder preserves relative imports between files that both move together, but imports between moved and unmoved files can still change. The warning text names the affected script paths.
 
 ## Store Commit Rules
 
@@ -422,7 +429,7 @@ Store tests:
 - structural page folder delete deletes descendants
 - structural script folder rename rewrites descendant paths exactly
 - structural script folder delete removes runtime config
-- same-parent item reorder changes only structural order metadata
+- same-parent item/folder reorder changes only structural `rowOrder` metadata
 - decorative template/component folders still use existing placement behavior
 
 Panel tests:
