@@ -43,6 +43,10 @@ const ALLOWLIST: ReadonlyMap<string, string> = new Map([
   // Dispatcher / index — composes the per-resource handlers and runs
   // the CSRF Origin check. Per-handler files apply the actual auth gates.
   ['index.ts', 'Top-level dispatcher; per-handler files own the auth gates.'],
+  // Shared route dispatcher — matches (method, path) → handler and owns the
+  // one 404-vs-405 rule. Pure dispatch infra; the per-route handlers it
+  // invokes own the actual auth/capability gates.
+  ['routeTable.ts', 'Shared route dispatcher; per-route handlers own the auth gates.'],
   // Shared utilities — body parsers, audit context helpers, schema
   // exports. No request handlers live here.
   ['shared.ts', 'Shared request helpers; no handlers.'],
