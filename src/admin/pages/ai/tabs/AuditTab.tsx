@@ -24,6 +24,7 @@ import {
   type AiUsageByUserRow,
 } from '../../../ai/api'
 import { UsageTablePanel } from './UsageTablePanel'
+import { formatCost, formatNumber } from './usageFormat'
 import styles from '../AiPage.module.css'
 
 type Range = 'today' | '7d' | '30d' | 'all'
@@ -59,16 +60,6 @@ function rangeToSinceIso(range: Range): string {
   return start.toISOString()
 }
 
-export function formatNumber(value: number): string {
-  return value.toLocaleString(undefined, { maximumFractionDigits: 0 })
-}
-
-export function formatCost(usd: number): string {
-  if (usd === 0) return '$0.00'
-  if (usd < 0.01) return `< $0.01`
-  if (usd < 1) return `$${usd.toFixed(2)}`
-  return `$${usd.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
-}
 
 export function AuditTab() {
   const [range, setRange] = useState<Range>('30d')
