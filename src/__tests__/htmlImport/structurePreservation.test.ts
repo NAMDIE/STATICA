@@ -26,7 +26,9 @@ describe('<br> inside a heading is preserved', () => {
     expect(root.props.customTag).toBe('h2')
     const tags = kids.map((k) => k.props.customTag ?? k.moduleId)
     expect(tags).toContain('br') // the line break survives as a node
-    const texts = kids.filter((k) => k.moduleId === 'base.text').map((k) => k.props.text)
+    const texts = kids
+      .filter((k) => k.moduleId === 'base.text' && k.props.tag === 'none')
+      .map((k) => k.props.text)
     expect(texts).toContain('Get the')
     expect(texts).toContain('file-based CMS.')
   })

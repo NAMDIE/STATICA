@@ -222,6 +222,22 @@ describe('buildAssetPlan — CSS url() normalisation', () => {
     expect(mobileBg).toContain(`url('images/hero.png')`)
     expect(assets.some((a) => a.sourcePath === 'images/hero.png')).toBe(true)
   })
+
+  it('normalises url() inside raw keyframes CSS and records the asset', () => {
+    const css = `@keyframes reveal { 100% { mask-image: url('../images/mask.png') } }`
+    const fileMap = makeFileMap({
+      'styles/main.css': { bytes: txt(css), mimeType: 'text/css' },
+      'images/mask.png': { bytes: MINIMAL_PNG, mimeType: 'image/png' },
+    })
+    const { rules, assetRefs } = cssToStyleRules(css)
+    const { normalizedStyleRules, assets } = buildAssetPlan(
+      [],
+      [{ cssPath: 'styles/main.css', rules, assetRefs }],
+      fileMap,
+    )
+    expect(normalizedStyleRules[0].rawCss).toContain(`url('images/mask.png')`)
+    expect(assets.some((a) => a.sourcePath === 'images/mask.png')).toBe(true)
+  })
 })
 
 // ---------------------------------------------------------------------------

@@ -256,7 +256,19 @@ function normalizeFragment(
     }
   }
 
-  return { nodes: normalizedNodes, rootIds: fragment.rootIds }
+  const body = fragment.body
+    ? {
+        ...fragment.body,
+        props: fragment.body.props
+          ? normalizeNodeProps(fragment.body.props, htmlFilePath, fileMap, assetMap)
+          : undefined,
+        inlineStyles: fragment.body.inlineStyles
+          ? normalizeCssBag(fragment.body.inlineStyles, htmlFilePath, fileMap, assetMap)
+          : undefined,
+      }
+    : undefined
+
+  return { nodes: normalizedNodes, rootIds: fragment.rootIds, ...(body ? { body } : {}) }
 }
 
 /**
@@ -370,6 +382,7 @@ function normalizeRules(
     if (!refs || refs.length === 0) return rule
 
     const newStyles = { ...rule.styles } as Record<string, unknown>
+    let newRawCss = rule.rawCss
     // Clone every per-context override bag so url() rewrites don't mutate the
     // source plan. Both viewport contexts and custom conditions live here.
     const newContextStyles: Record<string, Record<string, unknown>> = {}
@@ -381,7 +394,11 @@ function normalizeRules(
       const fileMapKey = resolveAndRecord(ref.rawUrl, cssFilePath, fileMap, assetMap)
       if (fileMapKey === null) continue // external or not in FileMap
 
-      if (ref.contextId === undefined) {
+      if (ref.rawCss === true) {
+        if (typeof newRawCss === 'string') {
+          newRawCss = replaceRawUrlInValue(newRawCss, ref.rawUrl, fileMapKey)
+        }
+      } else if (ref.contextId === undefined) {
         const val = newStyles[ref.property]
         if (typeof val === 'string') {
           newStyles[ref.property] = replaceRawUrlInValue(val, ref.rawUrl, fileMapKey)
@@ -401,6 +418,7 @@ function normalizeRules(
       ...rule,
       styles: newStyles,
       contextStyles: newContextStyles,
+      ...(newRawCss !== undefined ? { rawCss: newRawCss } : {}),
     }
   })
 

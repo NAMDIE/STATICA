@@ -44,6 +44,29 @@ function imported(html: string) {
   return importHtml(html)
 }
 
+describe('body element metadata', () => {
+  it('preserves body class, id, safe data attributes, and inline styles outside child rootIds', () => {
+    const result = imported(`
+      <!doctype html>
+      <html>
+        <body id="page-root" class="body-bg theme-dark" data-bg-src="./hero.png" style="background-image: url('./hero.png'); color: white">
+          <main class="content">Hello</main>
+        </body>
+      </html>
+    `)
+
+    expect(result.rootIds).toHaveLength(1)
+    expect(result.nodes[result.rootIds[0]!]!.classIds).toEqual(['content'])
+    expect(result.body?.classIds).toEqual(['body-bg', 'theme-dark'])
+    expect(result.body?.props?.htmlId).toBe('page-root')
+    expect(result.body?.props?.dataAttributes).toEqual({ 'data-bg-src': './hero.png' })
+    expect(result.body?.inlineStyles).toEqual({
+      backgroundImage: "url('./hero.png')",
+      color: 'white',
+    })
+  })
+})
+
 // ---------------------------------------------------------------------------
 // 1. Heading / paragraph / inline phrasing → base.text
 // ---------------------------------------------------------------------------
@@ -93,7 +116,7 @@ describe('base.text — headings h1-h6', () => {
     const h2 = result.nodes[result.rootIds[0]!]!
     const texts = h2.children
       .map((id) => result.nodes[id]!)
-      .filter((n) => n.moduleId === 'base.text')
+      .filter((n) => n.moduleId === 'base.text' && n.props.tag === 'none')
       .map((n) => n.props.text)
     // "Bold " (trailing space kept) and " here" (leading space kept) so the
     // rendered heading reads "Bold word here", not "Boldwordhere".
@@ -1070,16 +1093,16 @@ describe('nested structure — parent/child IDs in document order', () => {
 })
 
 // ---------------------------------------------------------------------------
-// 11b. Direct text inside recursing containers → synthesized base.text child
+// 11b. Direct text inside recursing containers → synthesized no-wrapper base.text child
 //
 // Regression guard: containers used to walk only ELEMENT children, so direct
 // text (e.g. `<div class="num">98%</div>`) was dropped and the container
 // imported empty. The walker now preserves significant text as a base.text
-// child in document order.
+// child with tag "none" in document order.
 // ---------------------------------------------------------------------------
 
-describe('direct text in containers → synthesized base.text', () => {
-  it('text-only div → container with one base.text(span) child carrying the text', () => {
+describe('direct text in containers → synthesized no-wrapper base.text', () => {
+  it('text-only div → container with one no-wrapper text child carrying the text', () => {
     const result = imported('<div class="metricNum">98%</div>')
     const divNode = result.nodes[result.rootIds[0]!]!
     expect(divNode.moduleId).toBe('base.container')
@@ -1087,11 +1110,11 @@ describe('direct text in containers → synthesized base.text', () => {
 
     const textNode = result.nodes[divNode.children[0]!]!
     expect(textNode.moduleId).toBe('base.text')
-    expect(textNode.props.tag).toBe('span')
+    expect(textNode.props.tag).toBe('none')
     expect(textNode.props.text).toBe('98%')
   })
 
-  it('text-only <li> → container with a base.text child (no longer empty)', () => {
+  it('text-only <li> → container with a no-wrapper text child (no longer empty)', () => {
     const result = imported('<ul><li>Buy milk</li></ul>')
     const ulNode = result.nodes[result.rootIds[0]!]!
     const liNode = result.nodes[ulNode.children[0]!]!
@@ -1107,13 +1130,34 @@ describe('direct text in containers → synthesized base.text', () => {
 
     const [first, second, third] = divNode.children.map((id) => result.nodes[id]!)
     expect(first.moduleId).toBe('base.text')
+    expect(first.props.tag).toBe('none')
     // The space between "Intro" and the inline <a> is significant and kept, so
     // the rendered output reads "Intro link outro" rather than "Introlinkoutro".
     expect(first.props.text).toBe('Intro ')
     expect(second.moduleId).toBe('base.link')
     expect(second.props.href).toBe('/x')
     expect(third.moduleId).toBe('base.text')
+    expect(third.props.tag).toBe('none')
     expect(third.props.text).toBe(' outro')
+  })
+
+  it('mixed content after a leading element keeps boundary spaces', () => {
+    const result = imported(`
+      <h1>
+        <span>Revolutionize</span>
+        customer interplay
+        for AI <span>chatbots</span>
+      </h1>
+    `)
+    const h1Node = result.nodes[result.rootIds[0]!]!
+    const [first, second, third] = h1Node.children.map((id) => result.nodes[id]!)
+    expect(first.moduleId).toBe('base.text')
+    expect(first.props.text).toBe('Revolutionize')
+    expect(second.moduleId).toBe('base.text')
+    expect(second.props.tag).toBe('none')
+    expect(second.props.text).toBe(' customer interplay for AI ')
+    expect(third.moduleId).toBe('base.text')
+    expect(third.props.text).toBe('chatbots')
   })
 
   it('whitespace-only text between elements is ignored (no spurious text nodes)', () => {
@@ -1134,14 +1178,17 @@ describe('direct text in containers → synthesized base.text', () => {
   it('internal whitespace runs collapse to single spaces', () => {
     const result = imported('<div>hello\n\n   world</div>')
     const textNode = result.nodes[result.nodes[result.rootIds[0]!]!.children[0]!]!
+    expect(textNode.moduleId).toBe('base.text')
+    expect(textNode.props.tag).toBe('none')
     expect(textNode.props.text).toBe('hello world')
   })
 
-  it('top-level bare text becomes a root base.text node', () => {
+  it('top-level bare text becomes a root no-wrapper text node', () => {
     const result = imported('Just some text')
     expect(result.rootIds).toHaveLength(1)
     const node = result.nodes[result.rootIds[0]!]!
     expect(node.moduleId).toBe('base.text')
+    expect(node.props.tag).toBe('none')
     expect(node.props.text).toBe('Just some text')
   })
 })

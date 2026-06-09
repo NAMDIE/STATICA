@@ -41,6 +41,7 @@ import { isEmittableProperty } from '@core/publisher'
 import type { StyleRuleKind, Condition, ConditionDef } from '@core/page-tree'
 import { conditionId, makeConditionDef } from '@core/page-tree'
 import { formatVariant } from '@core/fonts'
+import { processKeyframesRule } from './keyframesToStyleRule'
 import { matchMediaQueryToViewport } from './mediaQueryMatch'
 import type {
   ImportWarning,
@@ -101,6 +102,7 @@ const MEDIA_RULE_TYPE = 4   // CSSMediaRule
 const FONT_FACE_RULE_TYPE = 5  // CSSFontFaceRule
 const PAGE_RULE_TYPE = 6    // CSSPageRule
 const KEYFRAMES_RULE_TYPE = 7  // CSSKeyframesRule
+const KEYFRAME_RULE_TYPE = 8   // CSSKeyframeRule
 const NAMESPACE_RULE_TYPE = 10 // CSSNamespaceRule
 const SUPPORTS_RULE_TYPE = 12  // CSSSupportsRule
 
@@ -317,6 +319,7 @@ function collectAssetRefsFromDecls(
   ruleIndex: number,
   contextId: string | undefined,
   assetRefs: AssetRef[],
+  rawCss = false,
 ): void {
   for (const [property, value] of Object.entries(decls)) {
     if (typeof value !== 'string') continue
@@ -324,6 +327,7 @@ function collectAssetRefsFromDecls(
       assetRefs.push({
         ruleIndex,
         ...(contextId !== undefined ? { contextId } : {}),
+        ...(rawCss ? { rawCss: true } : {}),
         property,
         rawUrl,
       })
@@ -340,6 +344,7 @@ function atRuleName(type: number): string {
     case FONT_FACE_RULE_TYPE: return '@font-face'
     case PAGE_RULE_TYPE:     return '@page'
     case KEYFRAMES_RULE_TYPE: return '@keyframes'
+    case KEYFRAME_RULE_TYPE:  return '@keyframe'
     case NAMESPACE_RULE_TYPE: return '@namespace'
     case SUPPORTS_RULE_TYPE: return '@supports'
     default:                 return `CSS at-rule (type ${type})`
@@ -510,6 +515,16 @@ function processTopLevelRule(
       collectFontFace(rule as CSSFontFaceRule, assetRefs, rules.length, fontFaces)
       return
 
+    case KEYFRAMES_RULE_TYPE:
+      // Keyframes are stylesheet-level definitions that selector rules refer to
+      // by `animation-name`. They must publish globally or animation-start
+      // states like `opacity: 0` never resolve to their final frame.
+      processKeyframesRule(rule as CSSKeyframesRule, rules, warnings, assetRefs, {
+        parseDeclarations,
+        collectAssetRefsFromDecls,
+      })
+      return
+
     default: {
       // @container has no stable legacy `rule.type` (it's a newer CSSOM
       // addition; browsers report 0). Detect it structurally: a grouping rule
@@ -539,8 +554,8 @@ function processTopLevelRule(
         }
       }
 
-      // Genuinely unsupported at-rules: @keyframes, @import, @page,
-      // @namespace, @layer, and anything else. (@import is usually silently
+      // Genuinely unsupported at-rules: @import, @page, @namespace, @layer,
+      // and anything else. (@import is usually silently
       // dropped by replaceSync; this handles the rare surfaced case.)
       warnings.push({
         kind: 'dropped-at-rule',

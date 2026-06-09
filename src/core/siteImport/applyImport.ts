@@ -31,7 +31,7 @@ import { extractRootFontTokens } from './fontTokens'
 import { classifyFiles } from './classifyFiles'
 import { makeHtmlPagePlan } from './htmlPagePlan'
 import { buildAssetPlan, type CssFileResult } from './assetPlan'
-import { scopeCollidingClasses } from './scopeClasses'
+import { isSharedUtilityClassName, scopeCollidingClasses } from './scopeClasses'
 import { rewriteInternalLinks } from './linkRewrite'
 import { nanoid } from 'nanoid'
 import { applyAssetRewrites } from './applyAssetRewrites'
@@ -235,14 +235,19 @@ export function buildImportPlan({ fileMap, currentSite, options }: BuildImportPl
   //     single global registry, so naive merging lets one page's class clobber
   //     another's. `scopeCollidingClasses` keeps each page faithful to its own
   //     stylesheet by giving divergent definitions distinct names and rewriting
-  //     the affected selectors + node class tokens. Identical defs stay shared.
+  //     the affected selectors + node class tokens. Identical defs stay shared,
+  //     as do Bootstrap-like utility names whose grid contract spans rules.
   const scoped = scopeCollidingClasses(rawPagePlans, cssFileResults)
   warnings.push(...summariseScopeRenames(scoped.renames))
+  const publishableCssFileResults = preserveGloballyMatchedClassRules(
+    scoped.pagePlans,
+    scoped.cssFileResults,
+  )
 
   // 5. Build asset plan — normalises URLs in node props and CSS values,
   //    resolves @font-face blocks into custom fonts, collects assets to upload
   const { normalizedPagePlans, normalizedStyleRules, styleRuleSources, fonts, assets, warnings: assetWarnings } =
-    buildAssetPlan(scoped.pagePlans, scoped.cssFileResults, fileMap)
+    buildAssetPlan(scoped.pagePlans, publishableCssFileResults, fileMap)
   warnings.push(...assetWarnings)
 
   // 6. Detect conflicts against the current site — pages, class rules, and
@@ -581,6 +586,44 @@ function decodeUtf8(bytes: Uint8Array): string {
 function decodeExternalScript(fileMap: FileMap, path: string): string | null {
   const file = fileMap.files[path]
   return file ? decodeUtf8(file.bytes) : null
+}
+
+function preserveGloballyMatchedClassRules(
+  pagePlans: ImportPlan['pages'],
+  cssFileResults: CssFileResult[],
+): CssFileResult[] {
+  // Class-kind rules are tree-shaken by the publisher unless a node owns their
+  // class id. Runtime-only classes and shared utility fragments must instead
+  // remain ambient selectors: scripts may add the former later, and utilities
+  // like `.row` need every source rule even though nodes only link one token.
+  const usedClassNames = collectImportedNodeClassNames(pagePlans)
+  return cssFileResults.map((file) => {
+    let changed = false
+    const rules = file.rules.map((rule) => {
+      if (rule.kind !== 'class') return rule
+      if (isSharedUtilityClassName(rule.name) || !usedClassNames.has(rule.name)) {
+        changed = true
+        return {
+          ...rule,
+          kind: 'ambient' as const,
+          name: rule.selector,
+        }
+      }
+      return rule
+    })
+    return changed ? { ...file, rules } : file
+  })
+}
+
+function collectImportedNodeClassNames(pagePlans: ImportPlan['pages']): Set<string> {
+  const names = new Set<string>()
+  for (const page of pagePlans) {
+    for (const className of page.nodeFragment.body?.classIds ?? []) names.add(className)
+    for (const node of Object.values(page.nodeFragment.nodes)) {
+      for (const className of node.classIds ?? []) names.add(className)
+    }
+  }
+  return names
 }
 
 /**

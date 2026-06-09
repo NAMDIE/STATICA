@@ -90,7 +90,7 @@ function rewriteFragment(
     // Inline background `url('key')` values on `node.inlineStyles` rewrite to
     // their uploaded media URL just like CSS-rule background values.
     const newInlineStyles = node.inlineStyles
-      ? rewriteStylesBag(node.inlineStyles as Record<string, unknown>, rewriteMap)
+      ? rewriteStylesBag(node.inlineStyles, rewriteMap)
       : undefined
     rewrittenNodes[id] = {
       ...node,
@@ -99,7 +99,17 @@ function rewriteFragment(
     }
   }
 
-  return { nodes: rewrittenNodes, rootIds: fragment.rootIds }
+  const body = fragment.body
+    ? {
+        ...fragment.body,
+        props: fragment.body.props ? rewriteProps(fragment.body.props, rewriteMap) : undefined,
+        inlineStyles: fragment.body.inlineStyles
+          ? rewriteStringStylesBag(fragment.body.inlineStyles, rewriteMap)
+          : undefined,
+      }
+    : undefined
+
+  return { nodes: rewrittenNodes, rootIds: fragment.rootIds, ...(body ? { body } : {}) }
 }
 
 function rewriteProps(
@@ -158,6 +168,9 @@ function rewriteRule(rule: NewStyleRule, rewriteMap: Record<string, string>): Ne
     rule.styles as Record<string, unknown>,
     rewriteMap,
   )
+  const newRawCss = typeof rule.rawCss === 'string'
+    ? rewriteUrlsInCssValue(rule.rawCss, rewriteMap)
+    : rule.rawCss
 
   // Every per-context override (viewport contexts AND custom conditions) lives
   // in one map now and can carry url() backgrounds — rewrite each bag to the
@@ -174,6 +187,7 @@ function rewriteRule(rule: NewStyleRule, rewriteMap: Record<string, string>): Ne
     ...rule,
     styles: newStyles,
     contextStyles: newContextStyles,
+    ...(newRawCss !== undefined ? { rawCss: newRawCss } : {}),
   }
 }
 
@@ -189,6 +203,20 @@ function rewriteStylesBag(
 
   for (const [prop, val] of Object.entries(result)) {
     if (typeof val !== 'string') continue
+    const rewritten = rewriteUrlsInCssValue(val, rewriteMap)
+    if (rewritten !== val) result[prop] = rewritten
+  }
+
+  return result
+}
+
+function rewriteStringStylesBag(
+  bag: Record<string, string>,
+  rewriteMap: Record<string, string>,
+): Record<string, string> {
+  const result: Record<string, string> = { ...bag }
+
+  for (const [prop, val] of Object.entries(result)) {
     const rewritten = rewriteUrlsInCssValue(val, rewriteMap)
     if (rewritten !== val) result[prop] = rewritten
   }

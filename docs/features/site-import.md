@@ -13,10 +13,10 @@ The static-site pipeline has two parts: a pure analysis function (`buildImportPl
 - `commitImportPlan(plan, adapter)` — uploads assets, then wraps all store writes in a single `adapter.commit` call → one Cmd+Z reverts the whole import.
 - Static imports load the current CMS draft into the editor store on demand when launched outside `/admin/site`; if no draft exists, the modal creates an empty site before analysis.
 - Conflict resolution: rename with a numeric suffix (default), overwrite, skip, or custom-rename — per page slug, per class name, and per design token (colour / font CSS variable), with category-level bulk actions for rename / skip / overwrite. Token renames rewrite `var(--x)` references so imports stay faithful.
-- What imports: pages, `kind:'class'` and `kind:'ambient'` style rules, images/fonts/binaries, root CSS color tokens, root CSS font tokens, `@font-face` families, known external font stylesheet imports, ordinary HTML IDs and safe `data-*` attributes on base modules, and HTML-linked JS files as page-scoped runtime scripts.
+- What imports: pages, `kind:'class'` and `kind:'ambient'` style rules, `@keyframes`, uploadable media/font files, root CSS color tokens, root CSS font tokens, `@font-face` families, known external font stylesheet imports, ordinary HTML IDs and safe `data-*` attributes on base modules, body-level classes/ID/data/style metadata, bare DOM text nodes in mixed content, and executable HTML scripts as page-scoped runtime scripts.
 - CMS bundle import preserves exported tables, rows, optional site shell, and embedded media using the same merge strategies as site transfer (`replace`, `merge-add`, `merge-overwrite`).
 - HTML forms import through the shared HTML importer as first-class form primitives (`base.form`, controls, labels, submit buttons), not as custom containers.
-- What cannot be modeled: `@keyframes`, `@layer`, and arbitrary/local `@import` — surfaced as warnings when the CSS engine exposes them, never silently dropped.
+- What cannot be modeled: `@layer` and arbitrary/local `@import` — surfaced as warnings when the CSS engine exposes them, never silently dropped.
 - Headless: `src/core/siteImport/` carries no admin, React, or server imports (gated by `siteImport-headless.test.ts`).
 
 ---
@@ -29,15 +29,15 @@ src/core/siteImport/
 ├── types.ts             — all shared types: FileMap, ImportPlan, ImportResult, ImportWarning, error classes
 ├── ingestInput.ts       — normalize input(s) → FileMap (loose files / folder / .zip)
 ├── classifyFiles.ts     — extension/MIME → FileRole: html | css | js | image | font | binary | meta
-├── htmlPagePlan.ts      — per-HTML-file plan: parse body via importHtml, derive title + slug, resolve <link> and <script src> references
-├── cssToStyleRules.ts   — single-file CSS → StyleRule[] + AssetRef[] + warnings
+├── htmlPagePlan.ts      — per-HTML-file plan: parse body via importHtml, derive title + slug, resolve <link> refs, and preserve executable scripts
+├── cssToStyleRules.ts   — single-file CSS → StyleRule[] / @keyframes raw rules + AssetRef[] + warnings
 ├── colorTokens.ts       — extract root custom-property color tokens from :root/html/body rules
 ├── fontTokens.ts        — extract root --font-* custom properties as ImportFontToken[] from :root/html/body rules
 ├── fontImports.ts       — resolve trusted Google CSS2 @import rules into installed-font requests
 ├── scopeClasses.ts      — scope colliding class names across per-page stylesheets
 ├── mimeTypes.ts         — extension → MIME fallback for FileMap entries that carry no MIME type (e.g. ZIP)
-├── assetPlan.ts         — normalise URL props/data attributes in node fragments + CSS url(); resolve @font-face; collect assets
-├── applyAssetRewrites.ts — patch fragment props + CSS url() with new media URLs (post-upload)
+├── assetPlan.ts         — normalise URL props/data attributes in node fragments + CSS/@keyframes url(); resolve @font-face; collect assets
+├── applyAssetRewrites.ts — patch fragment props + CSS/@keyframes url() with new media URLs (post-upload)
 ├── linkRewrite.ts       — rewrite intra-site <a href> to cms:page:<id> refs
 ├── conflicts.ts         — detect page-slug + class-name + design-token collisions; apply resolutions (incl. var(--x) rewrites)
 ├── adapter.ts           — SiteImportAdapter + SiteImportTransaction interfaces
@@ -81,7 +81,7 @@ User drops files / folder / .zip / CMS bundle JSON
             ▼
     ┌── per HTML file ──────────────────────────────────────────────┐
     │   makeHtmlPagePlan(path, html, fileMap)                       │
-    │   → PagePlan { source, title, slug, linkedCssPaths,          │
+    │   → PagePlan { source, title, slug, linkedCssPaths, scripts, │
     │               nodeFragment (via @core/htmlImport) }           │
     └───────────────────────────────────────────────────────────────┘
             │
@@ -103,7 +103,7 @@ User drops files / folder / .zip / CMS bundle JSON
             │  renames divergent same-named classes per stylesheet
             ▼
     buildAssetPlan(pagePlans, cssFileResults, fileMap)
-            │  normalizes url() in node props, data attributes, and CSS values to FileMap keys
+            │  normalizes url() in node props, data attributes, CSS values, and raw @keyframes CSS to FileMap keys
             │  resolves @font-face → ImportFontFamily[]
             │  collects deduplicated asset list
             ▼
@@ -149,7 +149,7 @@ interface ImportPlan {
 }
 ```
 
-All URL-shaped values inside `pages[].nodeFragment` props, hidden imported `data-*` attribute bags, and style rule `styles`/`contextStyles` are normalised to FileMap keys before the plan is returned — `applyAssetRewrites` does exact-string replacement after upload.
+All URL-shaped values inside `pages[].nodeFragment` props, hidden imported `data-*` attribute bags, style rule `styles`/`contextStyles`, and supported raw style-rule blocks such as `@keyframes` are normalised to FileMap keys before the plan is returned — `applyAssetRewrites` does exact-string replacement after upload.
 
 ---
 
@@ -160,12 +160,12 @@ All URL-shaped values inside `pages[].nodeFragment` props, hidden imported `data
 | **Pages** | One `PagePlan` per `.html` file | `makeHtmlPagePlan` parses the body via `@core/htmlImport`; slug derived from the relative file path (`documentation/index.html` → `documentation`, `guides/install.html` → `guides/install`) |
 | **HTML IDs** | `id="…"` on ordinary elements | The HTML importer stores IDs as `props.htmlId` on base container/text/link/button/image modules so imported CSS selectors, anchors, and classic scripts can target the published DOM |
 | **Data attributes** | Safe `data-*` attributes on ordinary elements | Stored as hidden `props.dataAttributes` on base container/text/link/button/image modules so template runtime hooks such as `data-bg-src`, `data-aos`, and `data-bs-*` survive import. Reserved Instatic/editor `data-*` names are not imported. Local asset URLs inside these attributes are uploaded and rewritten. |
-| **Style rules** | All rules from linked CSS files | `cssToStyleRules` maps each declaration block to a `NewStyleRule` (class or ambient kind) |
-| **Media** | Images, fonts, binaries — and any unreferenced files in the bundle | `buildAssetPlan` collects them; unreferenced files are swept up even if nothing in the HTML/CSS references them |
+| **Style rules** | All rules from linked CSS files | `cssToStyleRules` maps selector declaration blocks to `NewStyleRule` entries (class or ambient kind) and stores supported stylesheet-level rules such as `@keyframes` as ambient raw CSS rules |
+| **Media** | Uploadable images, videos, and fonts — including unreferenced files in the bundle | `buildAssetPlan` collects referenced assets and sweeps uploadable unreferenced files. Source companions such as `.scss`, sourcemaps, PHP mailers, `desktop.ini`, and README files are excluded before upload. |
 | **Color tokens** | CSS custom properties on `:root` / `html` / `body` that look like colours | `extractRootColorTokens` pulls them into `ImportColorToken[]`; they become framework palette tokens. A `--<slug>` that collides with an existing colour token surfaces as a `TokenConflict` (rename / skip / overwrite) |
 | **Fonts** | Self-hosted `@font-face` families with at least one bundled file, plus trusted Google CSS2 imports | `buildFontFamilies` in `assetPlan.ts` picks the best bundled format (woff2 → woff → ttf → otf); `extractGoogleFontImports` turns Google CSS2 `@import` rules into install requests. Commit uploads custom files via `tx.addFonts`, installs Google families through the CMS Google-font installer, then merges those returned `FontEntry` records via `tx.addInstalledFonts` |
 | **Font tokens** | Root `--font-*` variables with font-family stacks | `extractRootFontTokens` pulls them into `ImportFontToken[]`; committed via `tx.addFontTokens` after fonts so matching imported families can be assigned. A `--font-*` that collides with an existing font token surfaces as a `TokenConflict` (rename / skip / overwrite) |
-| **Scripts** | JS files linked by imported HTML via `<script src>` | Decoded as UTF-8; committed via `tx.addScripts` with page scope from the source HTML. Classic scripts remain plain `<script>` assets and bypass bundling; `type="module"` scripts keep module semantics. |
+| **Scripts** | Executable inline scripts and JS files linked by imported HTML | Preserved in source order and committed via `tx.addScripts` with page scope from the source HTML. Classic scripts remain plain `<script>` assets and bypass bundling; `type="module"` scripts keep module semantics. Non-executable script data such as `application/json`, import maps, and templates is skipped. |
 
 ---
 
@@ -179,7 +179,8 @@ All URL-shaped values inside `pages[].nodeFragment` props, hidden imported `data
 | `h1`, `body`, `a:hover`, `.hero .title` | `StyleRule{ kind:'ambient', selector: verbatim }` |
 | `@media ... { … }` | Merged into a matching viewport context's `contextStyles` when it matches a configured media query (or an older/default max-width threshold); otherwise preserved as a reusable media condition |
 | Trusted Google CSS2 `@import` | Parsed into `ImportGoogleFont` install requests and committed as self-hosted installed font entries |
-| Arbitrary/local `@import`, `@keyframes`, `@layer` | Dropped; source text added to `droppedAtRules`; a `dropped-at-rule` warning emitted when surfaced by the CSS engine |
+| `@keyframes` | Stored as a supported ambient raw CSS rule and emitted globally by the publisher after its raw-keyframes safety gate |
+| Arbitrary/local `@import`, `@layer` | Dropped; source text added to `droppedAtRules`; a `dropped-at-rule` warning emitted when surfaced by the CSS engine |
 | `@font-face` | Captured as `ParsedFontFace`; resolved into `ImportFontFamily` by `buildAssetPlan` |
 
 ---
@@ -192,8 +193,11 @@ A multi-page site typically links one stylesheet per page, and those stylesheets
 
 - **One distinct definition** across all stylesheets → bare name kept; the class is shared.
 - **N distinct definitions** → first keeps the bare name; the rest get a numeric suffix (`btn`, `btn-2`, …). Definitions that are identical share a name.
+- **Bootstrap-like shared utility names** (`row`, `col-xl-3`, `d-flex`, `align-items-stretch`, spacing/gutter utilities, etc.) stay unscoped even when their declaration bags differ. Those classes are framework vocabulary rather than component classes: their behaviour is often assembled from multiple rules and selectors such as `.row`, `.row > *`, and `.col-*`. Splitting them would break the grid contract.
 
 The rename is applied consistently: the `kind:'class'` rule's `name` + `selector`, every ambient selector in that stylesheet that references the class as a token, and the `classIds` tokens on every node of every page linked to that stylesheet. A `scoped-class` warning is emitted per scoped name.
+
+After scoping, two groups of single-class rules are converted to `kind:'ambient'`: classes that no imported node actually uses, and the shared Bootstrap-like utility names above. Static templates often create or toggle unused classes from JavaScript (`.mt-cursor`, `.is-open`, `.show`, etc.); leaving those as editable class rules would let publisher class tree-shaking drop them because no imported node owns their `classIds`. Shared utilities are ambient for a different reason: nodes keep the plain class token, while every source rule for that token remains publishable in cascade order.
 
 Pure element / attribute selectors (`body`, `h1`, `a:hover`) carry no class token and cannot be scoped — they remain global, last cascade order wins.
 
@@ -267,7 +271,7 @@ On success the same step switches to its **complete** state — a success mark, 
 
 | Kind | When emitted |
 |---|---|
-| `dropped-at-rule` | An unsupported at-rule such as `@keyframes`, `@layer`, or arbitrary/local `@import` was present but cannot be modelled |
+| `dropped-at-rule` | An unsupported at-rule such as `@layer` or arbitrary/local `@import` was present but cannot be modelled |
 | `unmatched-media-query` | Legacy warning kind retained for old import reports; current imports preserve unmatched `@media` blocks as reusable conditions |
 | `invalid-rule` | A CSS rule caused `replaceSync` to throw (sheet-level parse error) |
 | `blocked-property` | A CSS property name is on the security denylist (`behavior`, `-moz-binding`, …) — declaration dropped |

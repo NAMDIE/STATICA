@@ -181,13 +181,33 @@ describe('cssToStyleRules — unmatched @media → faithful condition context', 
 // ---------------------------------------------------------------------------
 
 describe('cssToStyleRules — dropped @-rules', () => {
-  it('@keyframes → no rule, 1 dropped-at-rule warning', () => {
+  it('@keyframes → ambient raw CSS rule, no dropped-at-rule warning', () => {
     const { rules, warnings } = cssToStyleRules(
-      '@keyframes pulse { from { opacity: 0 } to { opacity: 1 } }',
+      '@keyframes pulse { from { opacity: 0 } 50% { transform: translateX(10px) } to { opacity: 1 } }',
     )
-    expect(rules).toHaveLength(0)
-    expect(warnings).toHaveLength(1)
-    expect(warnings[0].kind).toBe('dropped-at-rule')
+    expect(rules).toHaveLength(1)
+    expect(rules[0].kind).toBe('ambient')
+    expect(rules[0].selector).toBe('@keyframes pulse')
+    expect(rules[0].styles).toEqual({})
+    expect(rules[0].rawCss).toContain('@keyframes pulse')
+    expect(rules[0].rawCss).toContain('0%')
+    expect(rules[0].rawCss).toContain('transform: translateX(10px);')
+    expect(rules[0].rawCss).toContain('100%')
+    expect(warnings.filter((w) => w.kind === 'dropped-at-rule')).toHaveLength(0)
+  })
+
+  it('@keyframes url() references are captured against the raw CSS rule', () => {
+    const { rules, assetRefs } = cssToStyleRules(
+      "@keyframes mask { to { mask-image: url('../img/noise.png') } }",
+    )
+    expect(rules).toHaveLength(1)
+    expect(assetRefs).toHaveLength(1)
+    expect(assetRefs[0]).toMatchObject({
+      ruleIndex: 0,
+      rawCss: true,
+      property: 'maskImage',
+      rawUrl: '../img/noise.png',
+    })
   })
 
   it('@font-face → captured as a font (no rule, no dropped warning), url captured as assetRef', () => {

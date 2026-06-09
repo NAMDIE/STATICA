@@ -31,7 +31,8 @@ export type NewStyleRule = Omit<StyleRule, 'id' | 'createdAt' | 'updatedAt'>
  *
  * Phase 1 (CSS parser) kinds:
  * - `dropped-at-rule`: an @-rule that the engine can't model was silently
- *   dropped (@keyframes, @font-face, @supports, @container, @layer, etc.).
+ *   dropped (@page, @namespace, @layer, etc.). `@keyframes`, `@font-face`,
+ *   `@supports`, and `@container` are imported through dedicated paths.
  * - `unmatched-media-query`: an @media query that could not be matched to any
  *   defined viewport context. Inner declarations are still imported under a
  *   reusable media condition so nothing is silently lost.
@@ -145,9 +146,9 @@ export interface BreakpointHint {
  * Phase 2 (`applyImport.ts`) rewrites the URLs once assets have been uploaded
  * and their final media-library paths are known.
  *
- * NOTE: Only references inside *emitted* rules are recorded. A `url()` inside
- * a dropped @-rule (e.g. `@font-face { src: url(foo.woff) }`) does NOT appear
- * in `assetRefs` — because the rule was never emitted.
+ * NOTE: Only references inside emitted or captured rules are recorded. A
+ * `url()` inside a dropped @-rule does not appear in `assetRefs` because the
+ * rule was never emitted.
  */
 export interface AssetRef {
   /** Zero-based index into `CssToStyleRulesResult.rules`. */
@@ -159,6 +160,8 @@ export interface AssetRef {
    * target that context's override bag rather than base.
    */
   contextId?: string
+  /** True when the reference lives inside a rule's `rawCss` block. */
+  rawCss?: boolean
   /** camelCase CSS property name (e.g. `backgroundImage`). */
   property: string
   /**

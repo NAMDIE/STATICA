@@ -267,6 +267,12 @@ export function generateClassCSS(
   })
 
   for (const cls of orderedClasses) {
+    if (typeof cls.rawCss === 'string') {
+      const rawCss = sanitizeRawKeyframesCss(cls.rawCss)
+      if (rawCss) blocks.push(rawCss)
+      continue
+    }
+
     const selector = styleRuleSelector(cls)
     const baseDecls = bagToCSS(cls.styles)
     if (baseDecls) {
@@ -309,6 +315,26 @@ export function generateClassCSS(
   }
 
   return blocks.join('\n\n')
+}
+
+const RAW_KEYFRAMES_RE =
+  /^@(?:-webkit-)?keyframes\s+-?[_a-zA-Z][\w-]*\s*\{[\s\S]*\}\s*$/i
+
+/**
+ * Raw style rules are intentionally narrow: today only imported @keyframes are
+ * represented this way. Normal declarations still flow through `bagToCSS`.
+ */
+function sanitizeRawKeyframesCss(rawCss: string): string | null {
+  const text = rawCss.trim()
+  if (!RAW_KEYFRAMES_RE.test(text)) return null
+  if (/<\//.test(text)) return null
+  if (/expression\s*\(/i.test(text)) return null
+  if (/javascript\s*:/i.test(text)) return null
+  if (/behavior\s*:/i.test(text)) return null
+  if (/-moz-binding/i.test(text)) return null
+  if (/data\s*:\s*text/i.test(text)) return null
+  if (/@import\b/i.test(text)) return null
+  return text
 }
 
 /**

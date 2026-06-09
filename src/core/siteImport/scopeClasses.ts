@@ -39,6 +39,13 @@
  * token, so they cannot be scoped — they remain global and the last definition
  * in cascade order wins on every page. Class-based selectors (the overwhelming
  * majority of a design system's surface) are fully scoped.
+ *
+ * Bootstrap-like scaffold / utility names (`row`, `col-xl-3`, `d-flex`,
+ * `align-items-stretch`, …) are the exception. Their behaviour is intentionally
+ * assembled from many small rules and combinators (`.row`, `.row > *`,
+ * `.col-*`) across one or more stylesheets. Splitting those names by content
+ * makes the HTML point at one fragment while the layout declarations land on
+ * another. Those shared utility names stay global.
  */
 
 import { classKindSelector } from '@core/page-tree'
@@ -50,6 +57,45 @@ export interface ScopeClassesResult {
   cssFileResults: CssFileResult[]
   /** Class names that were scoped (renamed) to preserve per-page fidelity. */
   renames: Array<{ originalName: string; scopedName: string; cssPath: string }>
+}
+
+const BOOTSTRAP_BREAKPOINT_RE = '(?:sm|md|lg|xl|xxl)'
+const BOOTSTRAP_SIZE_RE = '(?:0|1|2|3|4|5|auto)'
+const BOOTSTRAP_GRID_SPAN_RE = '(?:auto|[1-9]|1[0-2])'
+const BOOTSTRAP_SIDE_RE = '(?:t|b|s|e|x|y)'
+
+const SHARED_UTILITY_CLASS_PATTERNS = [
+  /^container(?:-(?:sm|md|lg|xl|xxl|fluid))?$/,
+  /^row(?:-cols(?:-(?:sm|md|lg|xl|xxl))?-(?:auto|[1-6]))?$/,
+  new RegExp(`^col(?:-${BOOTSTRAP_GRID_SPAN_RE}|-${BOOTSTRAP_BREAKPOINT_RE}(?:-${BOOTSTRAP_GRID_SPAN_RE})?)?$`),
+  new RegExp(`^offset(?:-${BOOTSTRAP_BREAKPOINT_RE})?-(?:[0-9]|1[0-1])$`),
+  new RegExp(`^order(?:-${BOOTSTRAP_BREAKPOINT_RE})?-(?:first|last|[0-5])$`),
+  new RegExp(`^(?:g|gx|gy)(?:-${BOOTSTRAP_BREAKPOINT_RE})?-${BOOTSTRAP_SIZE_RE}$`),
+  new RegExp(`^(?:m|p)${BOOTSTRAP_SIDE_RE}?(?:-${BOOTSTRAP_BREAKPOINT_RE})?-${BOOTSTRAP_SIZE_RE}$`),
+  new RegExp('^d(?:-(?:sm|md|lg|xl|xxl))?-(?:none|inline|inline-block|block|grid|table|table-row|table-cell|flex|inline-flex)$'),
+  new RegExp('^flex(?:-(?:sm|md|lg|xl|xxl))?-(?:row|column|row-reverse|column-reverse|wrap|nowrap|wrap-reverse|fill|grow-0|grow-1|shrink-0|shrink-1)$'),
+  new RegExp('^justify-content(?:-(?:sm|md|lg|xl|xxl))?-(?:start|end|center|between|around|evenly)$'),
+  new RegExp('^align-(?:items|content|self)(?:-(?:sm|md|lg|xl|xxl))?-(?:start|end|center|baseline|stretch)$'),
+  /^position-(?:static|relative|absolute|fixed|sticky)$/,
+  /^(?:top|bottom|start|end)-(?:0|50|100)$/,
+  /^translate-middle(?:-[xy])?$/,
+  /^[wh]-(?:25|50|75|100|auto)$/,
+  /^mw-100$/,
+  /^mh-100$/,
+  /^min-vw-100$/,
+  /^min-vh-100$/,
+  /^vw-100$/,
+  /^vh-100$/,
+]
+
+/**
+ * Class names from Bootstrap's shared layout / utility vocabulary must remain
+ * global. They are not component classes: their intended behaviour often spans
+ * multiple rules and selectors, so per-stylesheet scoping can split a single
+ * grid contract into unrelated names (`row-3`, `row-4`, …).
+ */
+export function isSharedUtilityClassName(name: string): boolean {
+  return SHARED_UTILITY_CLASS_PATTERNS.some((pattern) => pattern.test(name))
 }
 
 /**
@@ -88,6 +134,11 @@ export function scopeCollidingClasses(
 
   for (const [name, defs] of defsByName) {
     const keyToFinal = new Map<string, string>()
+    if (isSharedUtilityClassName(name)) {
+      for (const { contentKey: key } of defs) keyToFinal.set(key, name)
+      finalNameByNameAndKey.set(name, keyToFinal)
+      continue
+    }
     for (const { contentKey: key } of defs) {
       if (keyToFinal.has(key)) continue
       if (keyToFinal.size === 0) {
@@ -218,8 +269,18 @@ function rewritePageTokens(
     nodes[id] = { ...node, classIds: rewritten }
   }
 
+  const bodyClassIds = plan.nodeFragment.body?.classIds
+  let body = plan.nodeFragment.body
+  if (bodyClassIds?.length) {
+    const rewritten = dedupe(bodyClassIds.map(resolve))
+    if (!sameOrder(rewritten, bodyClassIds)) {
+      touched = true
+      body = { ...body, classIds: rewritten }
+    }
+  }
+
   if (!touched) return plan
-  return { ...plan, nodeFragment: { ...plan.nodeFragment, nodes } }
+  return { ...plan, nodeFragment: { ...plan.nodeFragment, nodes, ...(body ? { body } : {}) } }
 }
 
 // ---------------------------------------------------------------------------

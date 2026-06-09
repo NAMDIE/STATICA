@@ -8,7 +8,7 @@ The module has two consumers: the paste-HTML UI and the AI agent's `insertHtml` 
 
 ## TL;DR
 
-- Single entry point: `importHtml(source)` → `{ nodes, rootIds, stripped, styleCss }`.
+- Single entry point: `importHtml(source)` → `{ nodes, rootIds, body?, stripped, styleCss }`.
 - Pipeline: `parseHtml` → `harvestInlineStyles` + `collectStyleCss` → `stripUnsafe` → `walkAndMap`.
 - Mapping is rule-driven (`HTML_TO_MODULE_RULES`). The catch-all `*` rule guarantees every element produces a node — nothing falls through.
 - Every produced node is a real `PageNode`: selectable, draggable, deletable, and re-styleable in the canvas.
@@ -58,7 +58,7 @@ importHtml(source: string)
   4. walkAndMap(doc, inlineStyles)— maps doc.body element children to PageNodes,
                                     attaching each harvested inline bag to its
                                     node's `inlineStyles`. Returns { nodes, rootIds }
-→ { nodes, rootIds, stripped, styleCss }   (ImportResult)
+→ { nodes, rootIds, body?, stripped, styleCss }   (ImportResult)
 ```
 
 ### Return type
@@ -70,6 +70,12 @@ interface ImportResult {
   nodes: Record<string, PageNode>
   /** IDs of the top-level nodes (direct children of doc.body), in document order. */
   rootIds: string[]
+  /** Source <body> classes, id/data props, and inline styles, kept off rootIds. */
+  body?: {
+    classIds?: string[]
+    props?: Record<string, unknown>
+    inlineStyles?: Record<string, string>
+  }
   /** Counts of constructs removed by stripUnsafe (scripts, inline handlers). */
   stripped: StripReport
   /** Raw concatenated CSS from <style> blocks. Empty when the source had none. */
@@ -77,7 +83,7 @@ interface ImportResult {
 }
 ```
 
-Callers splice the fragment into the page tree via `insertImportedNodes(parentId, fragment, opts?)` in the editor store — one `mutateActiveTreeAndSite` call, one undo step. Any `node.inlineStyles` set during the walk rides along on the node verbatim (it is a first-class node field), so the publisher emits it as a `style="…"` attribute and the editor's inline-style layer (and `BackgroundImageControl`) shows it.
+Callers splice the fragment into the page tree via `insertImportedNodes(parentId, fragment, opts?)` in the editor store — one `mutateActiveTreeAndSite` call, one undo step. Any `node.inlineStyles` set during the walk rides along on the node verbatim (it is a first-class node field), so the publisher emits it as a `style="…"` attribute and the editor's inline-style layer (and `BackgroundImageControl`) shows it. Whole-site import applies `fragment.body` to the page's `base.body` root so body-level classes, id/data attributes, and inline styles preserve template-wide styling hooks without creating a fake child node.
 
 **`<style>` blocks → Selectors panel.** `importHtml` does NOT parse CSS itself (that would couple `@core/htmlImport` to `@core/siteImport` and lose the site's breakpoint context). Instead it returns the raw `styleCss`; each consumer parses it with `cssToStyleRules(styleCss, { breakpoints })` and passes the resulting `{ styleRules, conditions }` to `insertImportedNodes(parentId, fragment, { styleRules, conditions })`. Class rules whose name matches a node's `class=` token bind to that node (the merge runs before class-name linking); ambient rules (`body`, `a:hover`, …) register globally. All appear in the Selectors panel. The whole-site Super Import path folds each page's `<style>` CSS in as a synthetic per-page source (`<htmlPath>::inline`) so it scopes, resolves `url(…)` assets, and detects conflicts exactly like a linked stylesheet.
 
@@ -110,8 +116,9 @@ Callers splice the fragment into the page tree via `insertImportedNodes(parentId
 **Key details:**
 
 - **`<instatic-outlet>` → `base.outlet`.** The custom element marks where matched content flows in a CMS template. It maps to a childless `base.outlet` node (any inner markup is ignored — the composer fills it). This rule lets the AI agent and hand-authored template HTML place the single content outlet inline via the normal import path. See [templates.md](templates.md) and [agent.md](agent.md).
-- `base.text` uses `tag` (not a separate `level` or heading prop) — the tag name is passed through directly.
-- **Direct text inside a recursing container is preserved.** The walker iterates `childNodes` (not just `children`): element children route through the rules, and each significant text node becomes a synthesized `base.text(tag:'span')` child in document order. So `<div class="num">98%</div>` and `<li>Buy milk</li>` import as a container holding their text — not an empty container. Whitespace-only text (indentation between tags) is skipped; internal whitespace runs collapse to single spaces.
+- `base.text` uses `tag` (not a separate `level` or heading prop) — the tag name is passed through directly. Imported bare DOM text uses `tag: 'none'`, which publishes text without an element wrapper.
+- **Direct text inside a recursing container is preserved.** The walker iterates `childNodes` (not just `children`): element children route through the rules, and each significant text node becomes a synthesized `base.text` child with `tag: 'none'` in document order. That no-wrapper text mode publishes back to bare text, so `<div class="num">98%</div>` and `<li>Buy milk</li>` import as containers holding their original text without adding selector-visible wrapper elements. Whitespace-only text (indentation between tags) is skipped; internal whitespace runs collapse to single spaces, and boundary spaces are kept when the text run sits between element siblings.
+- **`<body>` metadata is preserved separately.** Classes, `id`, safe `data-*`, and harvested inline styles on `<body>` are returned as `fragment.body` rather than inserted into `rootIds`. Full-site import applies them to `base.body`; paste-style HTML import can ignore them without changing the fragment structure.
 - `base.link` uses the prop `text` (not `label`). `base.button` uses `label` (not `text`). These match the module source.
 - `base.image` captures `src` only. `alt` is not a per-instance prop — it comes from the media library asset.
 - **Form elements import as form primitives.** Third-party `<form>` elements default to `base.form` in `custom` mode, so they do not become CMS submission endpoints until an author binds them to a data table. Published CMS-native forms can round-trip their `data-instatic-*` form metadata. Plain labels become `base.label`; labels that wrap controls become a `base.container` with `customTag:'label'` so nested inputs are not dropped.
@@ -147,7 +154,7 @@ The importer is "approximate by construction". Several inputs do not survive the
 |---|---|---|
 | `alt=""` on `<img>` | Dropped | `base.image` has no `alt` prop — alt text is stored on the media library asset |
 | HTML attributes not modeled by the matched module (`id`, `data-*`, ARIA attrs, etc.) | Dropped — except `class` names, which become real registry classes linked by id (see [Class linking](#class-linking-name--id)) | The module schema is the source of truth for props |
-| Exact inline whitespace around mixed content (`<div>Hello <em>world</em></div>`) | Approximated | Each text run becomes a `base.text(span)` child with whitespace collapsed to single spaces and the ends trimmed; the text itself is **preserved**, only exact spacing is normalized |
+| Exact inline whitespace around mixed content (`<div>Hello <em>world</em></div>`) | Approximated | Each text run becomes a `base.text` child with `tag: 'none'` and whitespace collapsed to single spaces. True parent-edge indentation is trimmed, but a single boundary space is preserved around element siblings so `Hello <em>world</em>` does not become `Helloworld`. The text itself is **preserved** and publishes without an extra wrapper. |
 | Whitespace-only text (newlines/indentation between tags) | Dropped | It carries no content — collapsing it would add empty text nodes to every pretty-printed snippet |
 | Void elements (`<br>`, `<hr>`, etc.) | Imported as a childless `base.container` node with `tag:'custom'` and the real tag name as `customTag`. No children, no empty-container placeholder. `<input>` imports as a form primitive instead. | React throws if children are rendered inside void element tags; the dedicated void-element rule (before the catch-all) sets `recurse:false` and the canvas renderer skips children entirely for void tags. |
 

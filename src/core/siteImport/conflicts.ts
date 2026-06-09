@@ -422,7 +422,32 @@ function remapFragment(
     if (next !== node) changed = true
     nodes[id] = next
   }
-  return changed ? { nodes, rootIds: fragment.rootIds } : fragment
+
+  let body = fragment.body
+  if (body) {
+    let nextBody = body
+    const bodyClassIds = body.classIds
+    if (classRenames.size > 0 && bodyClassIds?.length) {
+      const classIds = bodyClassIds.map((name) => classRenames.get(name) ?? name)
+      if (classIds.some((name, i) => name !== bodyClassIds[i])) {
+        nextBody = { ...nextBody, classIds }
+      }
+    }
+    if (
+      varRenames.size > 0 &&
+      body.inlineStyles &&
+      Object.keys(body.inlineStyles).length > 0
+    ) {
+      const inlineStyles = rewriteStyleBagVarRefs(body.inlineStyles, varRenames)
+      if (inlineStyles !== body.inlineStyles) nextBody = { ...nextBody, inlineStyles }
+    }
+    if (nextBody !== body) {
+      changed = true
+      body = nextBody
+    }
+  }
+
+  return changed ? { nodes, rootIds: fragment.rootIds, ...(body ? { body } : {}) } : fragment
 }
 
 /**
@@ -432,6 +457,9 @@ function remapFragment(
  */
 function rewriteRuleVarRefs(rule: NewStyleRule, renames: Map<string, string>): NewStyleRule {
   const styles = rewriteStyleBagVarRefs(rule.styles, renames)
+  const rawCss = typeof rule.rawCss === 'string'
+    ? rewriteCssVarRefs(rule.rawCss, renames)
+    : rule.rawCss
   let contextStyles = rule.contextStyles
   if (contextStyles && Object.keys(contextStyles).length > 0) {
     let ctxChanged = false
@@ -443,9 +471,14 @@ function rewriteRuleVarRefs(rule: NewStyleRule, renames: Map<string, string>): N
     }
     if (ctxChanged) contextStyles = nextCtx as NewStyleRule['contextStyles']
   }
-  return styles === rule.styles && contextStyles === rule.contextStyles
+  return styles === rule.styles && contextStyles === rule.contextStyles && rawCss === rule.rawCss
     ? rule
-    : { ...rule, styles: styles as NewStyleRule['styles'], contextStyles }
+    : {
+        ...rule,
+        styles: styles as NewStyleRule['styles'],
+        contextStyles,
+        ...(rawCss !== undefined ? { rawCss } : {}),
+      }
 }
 
 /**

@@ -37,8 +37,7 @@ src/core/module-engine/
 src/modules/base/
 ├── body/                — base.body (root container)
 ├── container/           — base.container (flex/grid container)
-├── text/                — base.text (tags.ts — tag coercion leaf)
-├── textNode/            — base.text-node (bare imported DOM text nodes)
+├── text/                — base.text (tags.ts — tag coercion leaf; tag:'none' emits no wrapper)
 ├── outlet/              — base.outlet (Content Outlet — template content slot)
 ├── button/              — base.button (anchor.ts — element-decision leaf)
 ├── link/                — base.link (content.ts — children/text fallback leaf)

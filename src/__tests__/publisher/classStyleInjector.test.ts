@@ -444,6 +444,45 @@ describe('generateClassCSS', () => {
     expect(css).toContain('color: blue;')
   })
 
+  it('emits supported raw @keyframes rules', () => {
+    const classes: Record<string, StyleRule> = {
+      pulse: {
+        id: 'pulse',
+        name: '@keyframes pulse',
+        kind: 'ambient',
+        selector: '@keyframes pulse',
+        order: 0,
+        styles: {},
+        contextStyles: {},
+        rawCss: '@keyframes pulse {\n  0% {\n    opacity: 0;\n  }\n  100% {\n    opacity: 1;\n  }\n}',
+        createdAt: 0,
+        updatedAt: 0,
+      },
+    }
+    const css = generateClassCSS(classes, BREAKPOINTS)
+    expect(css).toContain('@keyframes pulse')
+    expect(css).toContain('opacity: 1;')
+  })
+
+  it('drops unsupported raw CSS rules', () => {
+    const classes: Record<string, StyleRule> = {
+      bad: {
+        id: 'bad',
+        name: '@media bad',
+        kind: 'ambient',
+        selector: '@media bad',
+        order: 0,
+        styles: {},
+        contextStyles: {},
+        rawCss: '@media screen { .bad { color: red; } }',
+        createdAt: 0,
+        updatedAt: 0,
+      },
+    }
+    const css = generateClassCSS(classes, BREAKPOINTS)
+    expect(css).toBe('')
+  })
+
   it('returns empty string for an empty class registry', () => {
     const css = generateClassCSS({}, BREAKPOINTS)
     expect(css).toBe('')

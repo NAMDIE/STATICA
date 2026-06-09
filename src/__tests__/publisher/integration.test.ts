@@ -87,6 +87,27 @@ describe('Publisher + real modules — single-level HTML escaping (CWE-116 regre
     expect(html).not.toContain('&amp;amp;')
   })
 
+  it('base.text tag none publishes bare escaped text without a synthetic span wrapper', () => {
+    const page = makePage({
+      root: {
+        moduleId: 'base.container',
+        props: { ...ContainerModule.defaults, tag: 'custom', customTag: 'h2' },
+        children: ['raw', 'span'],
+      },
+      raw: {
+        moduleId: 'base.text',
+        props: { ...TextModule.defaults, text: 'Explore & build ', tag: 'none' },
+      },
+      span: {
+        moduleId: 'base.text',
+        props: { ...TextModule.defaults, text: 'with AI', tag: 'span' },
+      },
+    })
+
+    const html = render('root', realCtx(page))
+    expect(html).toBe('<h2>Explore &amp; build <span>with AI</span></h2>')
+  })
+
   it('button: label with & renders as single &amp;', () => {
     const page = makePage({
       root: {

@@ -22,6 +22,7 @@ const TextPropsSchema = Type.Object({
   tag: Type.Union(
     [
       Type.Literal('p'),
+      Type.Literal('none'),
       Type.Literal('h1'),
       Type.Literal('h2'),
       Type.Literal('h3'),
@@ -63,6 +64,7 @@ export const TextModule: ModuleDefinition<TextStoredProps> = {
       category: 'content',
       options: [
         { label: 'Paragraph', value: 'p' },
+        { label: 'None', value: 'none' },
         { label: 'Heading 1', value: 'h1' },
         { label: 'Heading 2', value: 'h2' },
         { label: 'Heading 3', value: 'h3' },
@@ -86,10 +88,16 @@ export const TextModule: ModuleDefinition<TextStoredProps> = {
 
   component: TextEditor,
 
-  htmlTag: (props) => normalizeTag(props.tag),
+  htmlTag: (props) => {
+    const tag = normalizeTag(props.tag)
+    return tag === 'none' ? null : tag
+  },
 
   render: (props) => {
     const tag = normalizeTag(props.tag)
+    if (tag === 'none') {
+      return { html: String(props.text) }
+    }
     const idAttr = htmlIdAttr(props.htmlId)
     const dataAttrs = dataAttributesAttr(props.dataAttributes)
     return {

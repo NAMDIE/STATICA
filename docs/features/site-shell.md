@@ -164,6 +164,7 @@ type StyleRule = {
   scope?:       { nodeId: string } // optional: a scope-anchored rule (one node only)
   styles:       CSSPropertyBag     // base property map
   contextStyles: Record<string, CSSPropertyBag> // viewport/context overrides
+  rawCss?:      string             // supported raw at-rules, currently imported @keyframes
   generated?:   { ... }
 }
 ```
@@ -173,6 +174,7 @@ See [docs/reference/css-class-registry.md](../reference/css-class-registry.md) f
 - A rule compiled to CSS via `classCss.ts` in the publisher.
 - A node references class-kind rules via its `classIds: string[]`.
 - Ambient rules (`kind: 'ambient'`) attach by CSS selector matching — not via `classIds`.
+- `rawCss` is reserved for supported stylesheet-level imports such as `@keyframes`; arbitrary selector CSS stays structured in `styles` / `contextStyles`.
 - Scoped rules (`scope.nodeId`) generate uniquely-prefixed CSS so they don't affect other nodes.
 
 ### Site files — `SiteFile[]`

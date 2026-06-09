@@ -5,7 +5,7 @@ The site's style rule registry — `Record<string, StyleRule>` stored on the sit
 Two kinds of rules:
 
 1. **Author-facing class rules** (`kind: 'class'`) — the user picks a name (`hero-button`, `card-meta`) and the editor applies them via `node.classIds`. Selector is `.<name>`.
-2. **Ambient rules** (`kind: 'ambient'`) — attach by CSS selector matching, not by node assignment (e.g. `h1`, `.hero .title`, `a:hover`). The publisher emits the rule but never writes to `class=` attributes.
+2. **Ambient rules** (`kind: 'ambient'`) — attach by CSS selector matching, not by node assignment (e.g. `h1`, `.hero .title`, `a:hover`). The publisher emits the rule but never writes to `class=` attributes. Supported stylesheet-level imports such as `@keyframes` are stored as ambient rules with `rawCss`.
 3. **Scoped classes** — generated class-kind rules owned by a single node (for "set this property only on this element"). The scope object pins the rule to its node.
 
 ---
@@ -41,6 +41,7 @@ interface StyleRule {
   }
   styles:           Record<string, unknown>          // base CSS properties (CSSPropertyBag-shaped at write time)
   contextStyles:     Record<string, Record<string, unknown>>  // per-context overrides, keyed by context id
+  rawCss?:          string                            // supported raw at-rule CSS, currently imported @keyframes
   generated?:    GeneratedClassMetadata               // framework-generated flags
   createdAt?:   number
   updatedAt?:   number
@@ -55,6 +56,8 @@ interface StyleRule {
 `parseStyleRule` reads only the current `contextStyles` shape. Obsolete per-rule context fields are ignored rather than migrated.
 
 `styles` and `contextStyles` are typed `Record<string, unknown>` at the persistence boundary — narrowing happens at the publisher's `bagToCSS` (`classCss.ts`). The WRITE API (class slice, framework generators) uses the typed `CSSPropertyBag` shape from `src/core/page-tree/cssPropertyBag.ts`.
+
+`rawCss` is intentionally narrow. The importer uses it for sanitised `@keyframes` blocks that cannot be represented as selector declarations; the publisher emits only supported raw keyframes after its own safety gate. General arbitrary CSS strings still belong in structured `styles` / `contextStyles` entries.
 
 ---
 

@@ -15,7 +15,6 @@
  */
 
 import { importHtml } from '@core/htmlImport'
-import type { ImportFragment } from '@core/htmlImport'
 import { normalizePageSlug } from '@core/page-tree'
 import type { FileMap, ImportWarning, PagePlan, PageScript } from './types'
 import type { SiteScriptFormat } from '@core/site-runtime'
@@ -98,8 +97,7 @@ export function makeHtmlPagePlan(
   const slug = deriveSlug(htmlPath)
 
   // --- Step 5: parse body nodes (+ harvest inline styles and <style> CSS) ---
-  const { nodes, rootIds, styleCss } = importHtml(htmlSource)
-  const nodeFragment: ImportFragment = { nodes, rootIds }
+  const { styleCss, stripped: _stripped, ...nodeFragment } = importHtml(htmlSource)
 
   const pagePlan: PagePlan = {
     source: htmlPath,

@@ -24,7 +24,19 @@ export const TextEditor: React.FC<ModuleComponentProps<TextStoredProps>> = ({
   mcClassName,
   nodeWrapperProps,
 }) => {
-  const Tag = normalizeTag(props.tag) as React.ElementType
+  const tag = normalizeTag(props.tag)
+  if (tag === 'none') {
+    return React.createElement(
+      'span',
+      {
+        ...nodeWrapperProps,
+        className: mcClassName,
+      },
+      props.text || 'Text',
+    )
+  }
+
+  const Tag = tag as React.ElementType
   return React.createElement(
     Tag,
     {

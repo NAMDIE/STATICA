@@ -13,7 +13,7 @@
  *   HTML_TO_MODULE_RULES — declarative element → module mapping table.
  *
  * Types:
- *   ImportFragment  — { nodes, rootIds } flat NodeTree fragment.
+ *   ImportFragment  — { nodes, rootIds, body? } flat NodeTree fragment plus optional body attributes.
  *   ImportResult    — ImportFragment + stripped (StripReport) + styleCss (raw <style> CSS).
  *   StripReport     — counts of dropped constructs (scripts, inline handlers).
  *   ImportRule      — shape of a single rule in HTML_TO_MODULE_RULES.
@@ -22,7 +22,7 @@
  * Internal files import each other via relative paths.
  */
 
-export type { ImportFragment, ImportResult } from './walkAndMap'
+export type { ImportBodyAttributes, ImportFragment, ImportResult } from './walkAndMap'
 export type { StripReport } from './stripUnsafe'
 export type { ImportRule } from './rules'
 

@@ -32,7 +32,7 @@ src/core/publisher/
 ├── renderLoop.ts                   — iterate a loop source, round-robin child variants
 ├── escapeProps.ts                  — escape string props at the render boundary, dispatched per-prop on the schema control `type`
 ├── classInjection.ts               — inject author classIds into rendered HTML
-├── classCss.ts                     — compile user StyleRule → CSS
+├── classCss.ts                     — compile user StyleRule entries → CSS, including supported raw @keyframes
 ├── cssCollector.ts                 — CssCollector + collectClassCSS + sanitizeModuleCSS
 ├── reset.ts                        — PUBLISHER_RESET_CSS (cross-browser baseline)
 ├── frameworkCss.ts                 — site framework CSS (spacing scale, typography)
@@ -79,7 +79,7 @@ publishPage(page, site, registry, options)  ← src/core/publisher/render.ts
     │       └─→ renderStandardNode for everything else (the bulk of the tree)
     │
     ├─→ collect deduped module CSS via CssCollector
-    ├─→ collect author class CSS via collectClassCSS
+    ├─→ collect author StyleRule CSS via collectClassCSS
     ├─→ assemble: reset CSS + framework CSS + module CSS + class CSS + user stylesheets
     └─→ emit final HTML document
 ```
@@ -201,7 +201,7 @@ class registry, which wins over framework, which wins over reset.
 reset-<hash>.css       = PUBLISHER_RESET_CSS                       ← reset.ts (cross-browser baseline)
 framework-<hash>.css   = buildSiteFrameworkCss(site)               ← frameworkCss.ts (spacing, typography, …)
                        + collectModuleCSS(via CssCollector)        ← deduped per-moduleId CSS
-style-<hash>.css       = collectClassCSS(site)                     ← user-defined StyleRule entries
+style-<hash>.css       = collectClassCSS(site)                     ← user-defined StyleRule entries, incl. raw @keyframes
 userStyles-<hash>.css  = collectUserStylesheetCss(site, page)      ← author stylesheets, scoped to this page
 ```
 

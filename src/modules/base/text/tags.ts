@@ -7,6 +7,7 @@
  * the same `normalizeTag` instead of each carrying a copy.
  */
 export type TextTag =
+  | 'none'
   | 'p'
   | 'h1'
   | 'h2'
@@ -21,6 +22,7 @@ export type TextTag =
   | 'em'
 
 const TEXT_TAGS = new Set<TextTag>([
+  'none',
   'p',
   'h1',
   'h2',

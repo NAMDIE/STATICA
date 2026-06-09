@@ -6,11 +6,11 @@
  *   - When a recursing container is walked, both its ELEMENT children and its
  *     significant TEXT children are mapped, in document order. Element children
  *     route through the rule table; a text child becomes a synthesized
- *     `base.text` (tag `span`) so direct text — e.g. `<div class="num">98%</div>`
- *     or `<li>Buy milk</li>` — is preserved instead of producing an empty
- *     container. Whitespace-only text (indentation between tags) and comments
- *     are ignored. Leaf rules (text/link/button/image) capture `textContent`
- *     directly and never recurse.
+ *     `base.text` node with `tag: 'none'` so direct text — e.g.
+ *     `<div class="num">98%</div>` or `<li>Buy milk</li>` — is preserved
+ *     without adding selector-visible wrapper elements. Whitespace-only text
+ *     (indentation between tags) and comments are ignored. Leaf rules
+ *     (text/link/button/image) capture `textContent` directly and never recurse.
  *   - The first matching rule in HTML_TO_MODULE_RULES is used (guaranteed
  *     to always match because the catch-all '*' rule is last).
  *   - Node creation uses the canonical factory so every produced node is a
@@ -59,6 +59,14 @@ export interface ImportFragment {
   nodes: Record<string, PageNode>
   /** IDs of the document-order top-level nodes (doc.body element children). */
   rootIds: string[]
+  /** Attributes that belonged to the source `<body>` element itself. */
+  body?: ImportBodyAttributes
+}
+
+export interface ImportBodyAttributes {
+  classIds?: string[]
+  inlineStyles?: Record<string, string>
+  props?: Record<string, unknown>
 }
 
 /** The result returned by the convenience entry point importHtml(). */
@@ -133,16 +141,42 @@ function collectDataAttributes(el: Element): Record<string, string> {
   return attrs
 }
 
+function collectElementProps(el: Element): Record<string, unknown> {
+  const props: Record<string, unknown> = {}
+  const htmlId = el.getAttribute('id')?.trim()
+  if (htmlId) props.htmlId = htmlId
+  const dataAttributes = collectDataAttributes(el)
+  if (Object.keys(dataAttributes).length > 0) props.dataAttributes = dataAttributes
+  return props
+}
+
+function collectBodyAttributes(
+  body: HTMLElement,
+  inlineStyles: Map<Element, Record<string, string>>,
+): ImportBodyAttributes | undefined {
+  const bodyAttrs: ImportBodyAttributes = {}
+  const classIds = Array.from(body.classList)
+  if (classIds.length > 0) bodyAttrs.classIds = classIds
+
+  const props = collectElementProps(body)
+  if (Object.keys(props).length > 0) bodyAttrs.props = props
+
+  const inline = inlineStyles.get(body)
+  if (inline && Object.keys(inline).length > 0) bodyAttrs.inlineStyles = inline
+
+  return Object.keys(bodyAttrs).length > 0 ? bodyAttrs : undefined
+}
+
 /**
- * Build a synthesized `base.text` node for a bare text node's content. Direct
- * text inside a recursing container has no element of its own, so it would
- * otherwise be dropped — leaving an empty container. `span` keeps it inline so
- * it flows naturally inside its parent (and within mixed content alongside
- * sibling elements). Returns the new node's id after registering it in `nodes`.
+ * Build a synthesized no-wrapper `base.text` node for a bare text node's
+ * content. Direct text inside a recursing container has no element of its own,
+ * so it would otherwise be dropped — leaving an empty container. It publishes
+ * back to a literal DOM text node so imported selector behavior stays faithful.
+ * Returns the new node's id after registering it in `nodes`.
  */
 function createTextNode(text: string, ctx: WalkContext): string {
   const def = registry.getOrThrow('base.text')
-  const node = createNode('base.text', { ...def.defaults, text, tag: 'span' })
+  const node = createNode('base.text', { ...def.defaults, text, tag: 'none' })
   ctx.nodes[node.id] = node
   return node.id
 }
@@ -151,7 +185,7 @@ function createTextNode(text: string, ctx: WalkContext): string {
  * Map the child nodes of `parent` (an element being recursed into, or
  * `doc.body` at the top level) to PageNode ids in document order:
  *   - ELEMENT children route through the rule table via processElement.
- *   - significant TEXT children become synthesized base.text(span) nodes.
+ *   - significant TEXT children become synthesized no-wrapper base.text nodes.
  *   - whitespace-only text and comments are skipped.
  *
  * Mutually recursive with processElement (function declarations are hoisted,
@@ -200,18 +234,15 @@ function mapChildNodes(parent: Element, ctx: WalkContext): string[] {
     }
   }
 
-  // Trim the block's leading/trailing edge whitespace.
-  const firstIdx = items.findIndex((i) => i.kind === 'text')
-  if (firstIdx !== -1) {
-    const it = items[firstIdx] as { kind: 'text'; text: string }
-    items[firstIdx] = { kind: 'text', text: it.text.replace(/^\s+/, '') }
+  // Trim only the parent element's true leading/trailing text edges. A text
+  // run that follows or precedes an element is mixed-content spacing and must
+  // keep its collapsed boundary space (`<span>A</span> B`).
+  if (items[0]?.kind === 'text') {
+    items[0] = { kind: 'text', text: items[0].text.replace(/^\s+/, '') }
   }
-  for (let i = items.length - 1; i >= 0; i--) {
-    if (items[i].kind === 'text') {
-      const it = items[i] as { kind: 'text'; text: string }
-      items[i] = { kind: 'text', text: it.text.replace(/\s+$/, '') }
-      break
-    }
+  const last = items[items.length - 1]
+  if (last?.kind === 'text') {
+    items[items.length - 1] = { kind: 'text', text: last.text.replace(/\s+$/, '') }
   }
 
   const childIds: string[] = []
@@ -236,11 +267,8 @@ function processElement(el: Element, ctx: WalkContext): string {
   const rule = matchRule(el)
   const { moduleId, props: ruleProps } = rule.map(el)
   const props = { ...ruleProps }
-  const htmlId = el.getAttribute('id')?.trim()
-  if (htmlId && HTML_ID_MODULES.has(moduleId)) props.htmlId = htmlId
-  if (DATA_ATTRIBUTE_MODULES.has(moduleId)) {
-    const dataAttributes = collectDataAttributes(el)
-    if (Object.keys(dataAttributes).length > 0) props.dataAttributes = dataAttributes
+  if (HTML_ID_MODULES.has(moduleId) || DATA_ATTRIBUTE_MODULES.has(moduleId)) {
+    Object.assign(props, collectElementProps(el))
   }
 
   // Merge module defaults with rule-specific props so every node starts
@@ -301,8 +329,9 @@ export function walkAndMap(
   if (!doc.body) return { nodes: ctx.nodes, rootIds: [] }
 
   const rootIds = mapChildNodes(doc.body, ctx)
+  const body = collectBodyAttributes(doc.body, inlineStyles)
 
-  return { nodes: ctx.nodes, rootIds }
+  return { nodes: ctx.nodes, rootIds, ...(body ? { body } : {}) }
 }
 
 /**

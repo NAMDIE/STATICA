@@ -58,6 +58,26 @@ export function depthInTree(tree: NodeTree<PageNode>, nodeId: string): number {
   return depth
 }
 
+function applyImportedBodyAttributes(
+  rootNode: PageNode,
+  fragment: ImportFragment,
+  site: SiteDocument,
+  byName: Map<string, string>,
+): void {
+  const body = fragment.body
+  if (!body) return
+
+  if (body.props && Object.keys(body.props).length > 0) {
+    rootNode.props = { ...rootNode.props, ...body.props }
+  }
+  if (body.classIds?.length) {
+    rootNode.classIds = linkImportedClassNames(body.classIds, site.styleRules, byName)
+  }
+  if (body.inlineStyles && Object.keys(body.inlineStyles).length > 0) {
+    rootNode.inlineStyles = body.inlineStyles
+  }
+}
+
 /**
  * Build the closure-shared helpers passed to every per-domain action factory.
  *
@@ -323,6 +343,7 @@ export function buildSiteHelpers(
           // Honour a caller-supplied id so the importer can pre-mint page ids
           // and rewrite internal links to `cms:page:<id>` before committing.
           if (pageId) page.id = pageId
+          applyImportedBodyAttributes(page.nodes[page.rootNodeId]!, nodeFragment, site, byName)
           for (const [id, node] of Object.entries(nodeFragment.nodes)) {
             // `node.inlineStyles` rides along on the spread — first-class field.
             page.nodes[id] = {
@@ -367,6 +388,7 @@ export function buildSiteHelpers(
           // Mint a fresh body root; wire fragment roots as its children.
           const rootNode = createNode('base.body')
           rootNode.children = [...nodeFragment.rootIds]
+          applyImportedBodyAttributes(rootNode, nodeFragment, site, byName)
 
           const newNodes: Record<string, PageNode> = { [rootNode.id]: rootNode }
           for (const [id, node] of Object.entries(nodeFragment.nodes)) {

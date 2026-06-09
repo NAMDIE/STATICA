@@ -14,6 +14,10 @@
  *     node `class=` attributes. Used by the CSS importer and "Add ambient
  *     selector" affordance.
  *
+ * Imported at-rules that cannot be represented as selector declarations, such
+ * as `@keyframes`, store a sanitised `rawCss` block on an ambient rule. The
+ * publisher only emits supported raw blocks after its own safety gate.
+ *
  * §4.1 persistence note: `styles` and `contextStyles` are stored as
  * `Record<string, unknown>` matching `validate.ts` which stores the raw object
  * without narrowing to CSSPropertyBag. Narrowing happens at the publisher
@@ -99,6 +103,8 @@ export const StyleRuleSchema = Type.Object({
     Type.Record(Type.String(), Type.Record(Type.String(), Type.Unknown())),
     {} as Record<string, Record<string, unknown>>,
   ),
+  /** Sanitised raw CSS for supported stylesheet-level rules such as @keyframes. */
+  rawCss: Type.Optional(Type.String()),
   /** Optional search/filter tags. Invalid items silently dropped — handled in parseStyleRule. */
   tags: Type.Optional(Type.Array(Type.String())),
   /** Metadata for framework-generated classes. Undefined if invalid — handled in parseStyleRule. */
@@ -193,6 +199,7 @@ export function parseStyleRule(raw: unknown): StyleRule | null {
     ...(scope !== undefined ? { scope } : {}),
     styles: parseStylesBag(r.styles),
     contextStyles,
+    ...(typeof r.rawCss === 'string' && r.rawCss.trim() ? { rawCss: r.rawCss } : {}),
     ...(tags !== undefined ? { tags } : {}),
     ...(generated !== undefined ? { generated } : {}),
     createdAt: parseTimestamp(r.createdAt),

@@ -269,6 +269,97 @@ describe('buildImportPlan — structure', () => {
     ])
   })
 
+  it('keeps script-created CSS classes publishable as ambient rules when no imported node uses them', () => {
+    const html = `<!doctype html><html><head><link rel="stylesheet" href="style.css"></head><body>
+      <div class="used-class">Visible content</div>
+    </body></html>`
+    const css = `
+      .used-class { color: red; }
+      .runtime-created { position: fixed; width: 10px; height: 10px; }
+    `
+    const p = buildImportPlan({
+      fileMap: makeSinglePageFileMap(html, css),
+      currentSite,
+    })
+
+    expect(p.styleRules.find((rule) => rule.selector === '.used-class')?.kind).toBe('class')
+    expect(p.styleRules.find((rule) => rule.selector === '.runtime-created')?.kind).toBe('ambient')
+    expect(p.conflicts.rules.some((conflict) => conflict.desiredName === 'runtime-created')).toBe(false)
+  })
+
+  it('preserves Bootstrap utility fragments as ambient rules even when nodes use them', () => {
+    const html = `<!doctype html><html><head>
+      <link rel="stylesheet" href="css/bootstrap.css">
+      <link rel="stylesheet" href="css/main.css">
+    </head><body>
+      <section class="row align-items-stretch custom-row">
+        <div class="col-xl-3">Left</div>
+      </section>
+    </body></html>`
+    const bootstrapCss = `
+      .row { display: flex; flex-wrap: wrap; }
+      .row > * { flex-shrink: 0; width: 100%; max-width: 100%; }
+      .col-xl-3 { flex: 0 0 auto; width: 25%; }
+    `
+    const mainCss = `
+      .row { --bs-gutter-x: 30px; }
+      .align-items-stretch { align-items: stretch; }
+      .custom-row { gap: 24px; }
+    `
+    const encoder = new TextEncoder()
+    const p = buildImportPlan({
+      fileMap: {
+        files: {
+          'index.html': { bytes: encoder.encode(html), mimeType: 'text/html' },
+          'css/bootstrap.css': { bytes: encoder.encode(bootstrapCss), mimeType: 'text/css' },
+          'css/main.css': { bytes: encoder.encode(mainCss), mimeType: 'text/css' },
+        },
+      },
+      currentSite,
+    })
+
+    const rowRules = p.styleRules.filter((rule) => rule.selector === '.row')
+    expect(rowRules).toHaveLength(2)
+    expect(rowRules.every((rule) => rule.kind === 'ambient')).toBe(true)
+    expect(p.styleRules.find((rule) => rule.selector === '.row > *')?.kind).toBe('ambient')
+    expect(p.styleRules.find((rule) => rule.selector === '.col-xl-3')?.kind).toBe('ambient')
+    expect(p.styleRules.find((rule) => rule.selector === '.align-items-stretch')?.kind).toBe('ambient')
+    expect(p.styleRules.find((rule) => rule.selector === '.custom-row')?.kind).toBe('class')
+
+    const rowNode = Object.values(p.pages[0].nodeFragment.nodes).find((node) =>
+      node.classIds?.includes('row'),
+    )
+    expect(rowNode?.classIds).toEqual(['row', 'align-items-stretch', 'custom-row'])
+    expect(rowNode?.classIds).not.toContain('row-2')
+  })
+
+  it('preserves source body metadata and treats body classes as used class rules', () => {
+    const html = `<!doctype html><html><head><link rel="stylesheet" href="style.css"></head>
+      <body id="page-root" class="body-bg" data-theme="dark" style="background-image: url('./images/bg.png')">
+        <main class="content">Visible content</main>
+      </body>
+    </html>`
+    const css = `.body-bg { background-color: #151518; } .content { color: white; }`
+    const encoder = new TextEncoder()
+    const p = buildImportPlan({
+      fileMap: {
+        files: {
+          'index.html': { bytes: encoder.encode(html), mimeType: 'text/html' },
+          'style.css': { bytes: encoder.encode(css), mimeType: 'text/css' },
+          'images/bg.png': { bytes: new Uint8Array([137, 80, 78, 71]), mimeType: 'image/png' },
+        },
+      },
+      currentSite,
+    })
+
+    const body = p.pages[0].nodeFragment.body
+    expect(body?.classIds).toEqual(['body-bg'])
+    expect(body?.props?.htmlId).toBe('page-root')
+    expect(body?.props?.dataAttributes).toEqual({ 'data-theme': 'dark' })
+    expect(body?.inlineStyles?.backgroundImage).toBe("url('images/bg.png')")
+    expect(p.styleRules.find((rule) => rule.selector === '.body-bg')?.kind).toBe('class')
+  })
+
   it('has empty conflicts on a fresh site', () => {
     expect(plan.conflicts.pages).toHaveLength(0)
     expect(plan.conflicts.rules).toHaveLength(0)
@@ -426,17 +517,17 @@ describe('buildImportPlan — conflict detection', () => {
 
   it('detects class rule name collision', () => {
     const site = makeMockSiteDocument() // has 'existing-class' rule
-    // Temporarily add a 'hero-title' rule (present in our sample CSS)
+    // Temporarily add a 'page-title' rule (present as an assigned class in our sample CSS)
     const now = Date.now()
-    const siteWithHero = {
+    const siteWithPageTitle = {
       ...site,
       styleRules: {
         ...site.styleRules,
-        'hero-rule': {
-          id: 'hero-rule',
-          name: 'hero-title',
+        'page-title-rule': {
+          id: 'page-title-rule',
+          name: 'page-title',
           kind: 'class' as const,
-          selector: '.hero-title',
+          selector: '.page-title',
           order: 2,
           styles: {},
           contextStyles: {},
@@ -445,9 +536,9 @@ describe('buildImportPlan — conflict detection', () => {
         },
       },
     }
-    const plan = buildImportPlan({ fileMap: makeSampleFileMap(), currentSite: siteWithHero })
-    const heroConflict = plan.conflicts.rules.find((c) => c.desiredName === 'hero-title')
-    expect(heroConflict).toBeDefined()
+    const plan = buildImportPlan({ fileMap: makeSampleFileMap(), currentSite: siteWithPageTitle })
+    const pageTitleConflict = plan.conflicts.rules.find((c) => c.desiredName === 'page-title')
+    expect(pageTitleConflict).toBeDefined()
   })
 })
 

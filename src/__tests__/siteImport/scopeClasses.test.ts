@@ -161,4 +161,37 @@ describe('scopeCollidingClasses', () => {
     // `box-2` is taken, so the divergent `box` becomes `box-3`.
     expect(tokensOf(result.pagePlans[0])).toEqual(['box-3'])
   })
+
+  it('does not scope Bootstrap-like shared utility classes', () => {
+    const files = [
+      file('bootstrap.css', [
+        classRule('row', { display: 'flex', flexWrap: 'wrap' }),
+        ambientRule('.row > *', { width: '100%' }),
+        classRule('col-xl-3', { width: '25%' }),
+      ]),
+      file('theme.css', [
+        classRule('row', { '--bs-gutter-x': '30px' }),
+        classRule('align-items-stretch', { alignItems: 'stretch' }),
+      ]),
+    ]
+    const pages = [
+      page('index.html', ['bootstrap.css', 'theme.css'], [
+        'row',
+        'col-xl-3',
+        'align-items-stretch',
+      ]),
+    ]
+
+    const result = scopeCollidingClasses(pages, files)
+
+    expect(result.renames).toEqual([])
+    expect(tokensOf(result.pagePlans[0])).toEqual(['row', 'col-xl-3', 'align-items-stretch'])
+    expect(result.cssFileResults.flatMap((f) => f.rules.map((r) => r.selector))).toEqual([
+      '.row',
+      '.row > *',
+      '.col-xl-3',
+      '.row',
+      '.align-items-stretch',
+    ])
+  })
 })

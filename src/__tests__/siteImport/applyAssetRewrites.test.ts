@@ -204,6 +204,38 @@ describe('applyAssetRewrites — CSS styles', () => {
     expect(bg).not.toContain('images/hero.png')
     expect(bg).toContain('/media/abc123.png')
   })
+
+  it('rewrites url() in raw keyframes CSS', () => {
+    const basePlan: ImportPlan = {
+      pages: [],
+      styleRules: [
+        {
+          name: '@keyframes mask',
+          kind: 'ambient',
+          selector: '@keyframes mask',
+          order: 0,
+          styles: {},
+          contextStyles: {},
+          rawCss: "@keyframes mask {\n  100% {\n    mask-image: url('images/hero.png');\n  }\n}",
+        },
+      ],
+      styleRuleSources: ['styles.css'],
+      fonts: [],
+      googleFonts: [],
+      conditions: [],
+      assets: [],
+      conflicts: { pages: [], rules: [], tokens: [] },
+      warnings: [],
+      colors: [],
+      fontTokens: [],
+      scripts: [],
+      droppedAtRules: [],
+      unusedCss: [],
+    }
+    const result = applyAssetRewrites(basePlan, REWRITE_MAP)
+    expect(result.styleRules[0].rawCss).toContain("url('/media/abc123.png')")
+    expect(result.styleRules[0].rawCss).not.toContain('images/hero.png')
+  })
 })
 
 // ---------------------------------------------------------------------------
