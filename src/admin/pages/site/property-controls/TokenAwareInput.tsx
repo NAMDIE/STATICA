@@ -53,6 +53,7 @@ export interface TokenAwareInputHandle {
 }
 
 interface TokenAwareInputProps {
+  id?: string
   /** Current resolved CSS value (e.g. `var(--space-md)`, `12px`, `auto`). */
   value: string | undefined
   /** Placeholder shown when no value is set. Token-display is applied. */
@@ -68,6 +69,9 @@ interface TokenAwareInputProps {
    */
   onPreview?: (resolved: string | undefined) => void
   onClearPreview?: () => void
+  /** Optional raw draft channel for controls that need sibling fields to mirror active typing. */
+  onDraftChange?: (draft: string) => void
+  onDraftClear?: () => void
   /** Side-effect fired when the input gains focus (e.g. tracking last-focused field). */
   onFocus?: () => void
   fieldSize?: 'xs' | 'sm' | 'md'
@@ -107,12 +111,15 @@ interface TokenAwareInputProps {
 // ---------------------------------------------------------------------------
 
 export function TokenAwareInput({
+  id,
   value,
   placeholder,
   tokens,
   onCommit,
   onPreview,
   onClearPreview,
+  onDraftChange,
+  onDraftClear,
   onFocus,
   fieldSize = 'sm',
   'aria-label': ariaLabel,
@@ -184,6 +191,7 @@ export function TokenAwareInput({
       const resolved = resolveTokenValue(raw, tokens)
       onClearPreview?.()
       onCommit(resolved)
+      onDraftClear?.()
       setIsEditing(false)
     }
 
@@ -235,6 +243,7 @@ export function TokenAwareInput({
     const inputEl = (
       <Input
         ref={inputRef}
+        id={id}
         type="text"
         fieldSize={fieldSize}
         value={draft}
@@ -252,6 +261,7 @@ export function TokenAwareInput({
         onChange={(e) => {
           const next = e.target.value
           setDraft(next)
+          onDraftChange?.(next)
           previewDraft(next)
         }}
         onBlur={(e) => commit(e.target.value)}
@@ -263,6 +273,7 @@ export function TokenAwareInput({
             e.preventDefault()
             setDraft(display)
             setIsEditing(false)
+            onDraftClear?.()
             ;(e.target as HTMLInputElement).blur()
           } else if (e.key === 'Tab') {
             // Allow default tab behaviour but commit the current value.
@@ -354,4 +365,3 @@ export function TokenAwareInput({
       </div>
     )
 }
-

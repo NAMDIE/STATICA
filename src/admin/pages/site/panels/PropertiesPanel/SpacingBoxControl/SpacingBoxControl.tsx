@@ -28,8 +28,9 @@
  *
  * Each side input is token-aware: typing `m` (or any step label) auto-
  * completes to the matching framework spacing variable (`var(--space-m)`).
- * The link button at the top of each box mirrors edits across all four
- * sides.
+ * Each box starts split while empty so the first edit touches only the
+ * focused side. The link button explicitly syncs the focused side across
+ * all four sides and then keeps future edits linked until the user unlinks.
  *
  * Storage model:
  *   - The control owns paddingTop/Right/Bottom/Left and marginTop/Right/
@@ -40,16 +41,13 @@
  *     time (see `bagToCSS` in `core/publisher/classCss.ts`).
  */
 
-import { useRef, useState } from 'react'
+import { useId, useState } from 'react'
 import type { CSSPropertyBag } from '@core/page-tree'
 import { Button } from '@ui/components/Button'
 import { LinkIcon } from 'pixel-art-icons/icons/link'
 import { CloseIcon } from 'pixel-art-icons/icons/close'
 import { cn } from '@ui/cn'
-import {
-  TokenAwareInput,
-  type TokenAwareInputHandle,
-} from '@site/property-controls/TokenAwareInput'
+import { TokenAwareInput } from '@site/property-controls/TokenAwareInput'
 import { useSpacingTokens, type Token } from '@site/property-controls/tokenUtils'
 import styles from './SpacingBoxControl.module.css'
 
@@ -158,23 +156,22 @@ export function SpacingBoxControl({
   const marginFallback = computeBoxState(currentStyles, 'margin')
 
   // ── Linked-mode toggles (UI state) ─────────────────────────────────────
-  // Default to linked when the four effective sides are uniform (or empty).
+  // Empty boxes start split: the first side edit should not fan out.
+  // Uniform non-empty boxes start linked, but user unlinking is respected.
   const [paddingLinked, setPaddingLinked] = useState<boolean>(() =>
-    padding.isUniform || allEmpty(padding.effective),
+    padding.isUniform && !allEmpty(padding.effective),
   )
   const [marginLinked, setMarginLinked] = useState<boolean>(() =>
-    margin.isUniform || allEmpty(margin.effective),
+    margin.isUniform && !allEmpty(margin.effective),
   )
-
-  // Auto-relink when external changes (undo/breakpoint switch, chip-apply
-  // while split) bring the four sides back into uniform shape. Update during
-  // render — React 19 idiom — instead of in an effect.
-  // We don't auto-unlink: the user opted into split-mode deliberately.
-  if (!paddingLinked && padding.isUniform) setPaddingLinked(true)
-  if (!marginLinked && margin.isUniform) setMarginLinked(true)
 
   // ── Last-focused side (for chip-apply target) ──────────────────────────
   const [focused, setFocused] = useState<{ box: Box; side: Side } | null>(null)
+  const [linkedDraft, setLinkedDraft] = useState<{ box: Box; value: string } | null>(null)
+
+  const clearLinkedDraft = (box: Box) => {
+    setLinkedDraft((draft) => (draft?.box === box ? null : draft))
+  }
 
   // ── Apply value to a box ───────────────────────────────────────────────
   const applyValue = (box: Box, side: Side | 'all', resolved: string | undefined) => {
@@ -189,7 +186,34 @@ export function SpacingBoxControl({
 
   // ── Clear a box ────────────────────────────────────────────────────────
   const clearBox = (box: Box) => {
+    clearLinkedDraft(box)
     for (const s of SIDES) onRemove(sideKey(box, s))
+  }
+
+  // ── Link/unlink a box ──────────────────────────────────────────────────
+  const toggleLinked = (box: Box, state: BoxState, fallback: BoxState) => {
+    const isLinked = box === 'padding' ? paddingLinked : marginLinked
+    const setLinked = box === 'padding' ? setPaddingLinked : setMarginLinked
+
+    if (isLinked) {
+      clearLinkedDraft(box)
+      setLinked(false)
+      return
+    }
+
+    clearLinkedDraft(box)
+    const preferredSide = focused?.box === box ? focused.side : null
+    const sourceSide = pickSyncSourceSide(state, preferredSide)
+    const value = state.effective[sourceSide] || fallback.effective[sourceSide] || undefined
+    for (const side of SIDES) onChange(sideKey(box, side), value)
+    setLinked(true)
+  }
+
+  // ── Linked draft mirroring ─────────────────────────────────────────────
+  const updateLinkedDraft = (box: Box, draft: string) => {
+    const isLinked = box === 'padding' ? paddingLinked : marginLinked
+    if (!isLinked) return
+    setLinkedDraft({ box, value: draft })
   }
 
   // ── Preview value (transient, not history-tracked) ─────────────────────
@@ -218,12 +242,15 @@ export function SpacingBoxControl({
         state={margin}
         fallback={marginFallback}
         linked={marginLinked}
-        onToggleLinked={() => setMarginLinked((v) => !v)}
+        onToggleLinked={() => toggleLinked('margin', margin, marginFallback)}
         focused={focused?.box === 'margin' ? focused.side : null}
         setFocused={(side) => setFocused({ box: 'margin', side })}
+        linkedDraft={linkedDraft?.box === 'margin' ? linkedDraft.value : null}
         tokens={tokens}
         onSideValue={(side, resolved) => applyValue('margin', side, resolved)}
         onSidePreview={(side, resolved) => previewValue('margin', side, resolved)}
+        onSideDraft={(draft) => updateLinkedDraft('margin', draft)}
+        onClearDraft={() => clearLinkedDraft('margin')}
         onClearPreview={clearPreview}
         onClear={() => clearBox('margin')}
         nested={
@@ -233,9 +260,10 @@ export function SpacingBoxControl({
             state={padding}
             fallback={paddingFallback}
             linked={paddingLinked}
-            onToggleLinked={() => setPaddingLinked((v) => !v)}
+            onToggleLinked={() => toggleLinked('padding', padding, paddingFallback)}
             focused={focused?.box === 'padding' ? focused.side : null}
             setFocused={(side) => setFocused({ box: 'padding', side })}
+            linkedDraft={linkedDraft?.box === 'padding' ? linkedDraft.value : null}
             tokens={tokens}
             onSideValue={(side, resolved) =>
               applyValue('padding', side, resolved)
@@ -243,6 +271,8 @@ export function SpacingBoxControl({
             onSidePreview={(side, resolved) =>
               previewValue('padding', side, resolved)
             }
+            onSideDraft={(draft) => updateLinkedDraft('padding', draft)}
+            onClearDraft={() => clearLinkedDraft('padding')}
             onClearPreview={clearPreview}
             onClear={() => clearBox('padding')}
           />
@@ -265,9 +295,12 @@ interface SpacingBoxProps {
   onToggleLinked: () => void
   focused: Side | null
   setFocused: (side: Side) => void
+  linkedDraft: string | null
   tokens: ReadonlyArray<Token>
   onSideValue: (side: Side, resolved: string | undefined) => void
   onSidePreview: (side: Side, resolved: string | undefined) => void
+  onSideDraft: (draft: string) => void
+  onClearDraft: () => void
   onClearPreview: () => void
   onClear: () => void
   nested?: React.ReactNode
@@ -282,9 +315,12 @@ function SpacingBox({
   onToggleLinked,
   focused,
   setFocused,
+  linkedDraft,
   tokens,
   onSideValue,
   onSidePreview,
+  onSideDraft,
+  onClearDraft,
   onClearPreview,
   onClear,
   nested,
@@ -339,7 +375,7 @@ function SpacingBox({
             key={side}
             box={box}
             side={side}
-            value={state.effective[side]}
+            value={linked && linkedDraft !== null ? linkedDraft : state.effective[side]}
             placeholder={fallback.effective[side]}
             isSet={state.storedFlags[side]}
             isLinkedTarget={linked && state.isUniform}
@@ -348,6 +384,8 @@ function SpacingBox({
             onCommit={(resolved) => onSideValue(side, resolved)}
             onFocus={() => setFocused(side)}
             onPreview={(resolved) => onSidePreview(side, resolved)}
+            onDraftChange={onSideDraft}
+            onDraftClear={onClearDraft}
             onClearPreview={onClearPreview}
           />
         ))}
@@ -418,6 +456,8 @@ interface SideInputProps {
   onCommit: (resolved: string | undefined) => void
   onFocus: () => void
   onPreview: (resolved: string | undefined) => void
+  onDraftChange: (draft: string) => void
+  onDraftClear: () => void
   onClearPreview: () => void
 }
 
@@ -433,18 +473,19 @@ function SideInput({
   onCommit,
   onFocus,
   onPreview,
+  onDraftChange,
+  onDraftClear,
   onClearPreview,
 }: SideInputProps) {
-  // The segment provides the hit area; the input is an absolutely-positioned
-  // overlay (see `.sideInput` / `.segment--*` in the CSS module). The whole
-  // token-autocomplete behaviour — draft state, suggestion filtering, commit,
-  // hover/typed preview, the Suggested/All dropdown — lives in the shared
-  // TokenAwareInput primitive. The only spacing-specific bits are the xs
-  // size, the overflow tooltip, and the overlay positioning, passed as props.
-  const inputRef = useRef<TokenAwareInputHandle>(null)
+  const inputId = useId()
 
+  // The label segment provides the broad click/focus hit area while the input
+  // itself remains the semantic text control. The whole token-autocomplete
+  // behaviour — draft state, suggestion filtering, commit, hover/typed
+  // preview, the Suggested/All dropdown — lives in TokenAwareInput.
   return (
-    <div
+    <label
+      htmlFor={inputId}
       className={cn(
         styles.segment,
         styles[`segment--${side}`],
@@ -452,10 +493,9 @@ function SideInput({
         isFocusedTarget && styles.segmentFocused,
       )}
       data-state={isSet ? 'set' : 'unset'}
-      onClick={() => inputRef.current?.focus()}
     >
       <TokenAwareInput
-        ref={inputRef}
+        id={inputId}
         value={value}
         placeholder={placeholder || '0'}
         tokens={tokens}
@@ -468,9 +508,11 @@ function SideInput({
         onCommit={onCommit}
         onFocus={onFocus}
         onPreview={onPreview}
+        onDraftChange={onDraftChange}
+        onDraftClear={onDraftClear}
         onClearPreview={onClearPreview}
       />
-    </div>
+    </label>
   )
 }
 
@@ -480,4 +522,9 @@ function SideInput({
 
 function allEmpty(map: Record<Side, string>): boolean {
   return SIDES.every((s) => !map[s])
+}
+
+function pickSyncSourceSide(state: BoxState, preferredSide: Side | null): Side {
+  if (preferredSide) return preferredSide
+  return SIDES.find((side) => state.effective[side] !== '') ?? 'top'
 }

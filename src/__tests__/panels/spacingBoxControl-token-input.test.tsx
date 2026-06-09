@@ -191,4 +191,102 @@ describe('SpacingBoxControl per-side input', () => {
     fireEvent.blur(input)
     expect(changes).toContainEqual(['paddingTop', 'var(--space-md)'])
   })
+
+  it('commits an empty-state side edit only to the focused side', () => {
+    seedSpacingTokens()
+
+    const changes: Array<[string, string | number | undefined]> = []
+
+    render(
+      <SpacingBoxControl
+        storedStyles={{}}
+        currentStyles={{}}
+        onChange={(property, value) => changes.push([property, value])}
+        onRemove={() => {}}
+      />,
+    )
+
+    const input = screen.getByLabelText('margin top')
+    fireEvent.focus(input)
+    fireEvent.change(input, { target: { value: '12px' } })
+    fireEvent.blur(input)
+
+    expect(changes).toEqual([['marginTop', '12px']])
+  })
+
+  it('allows uniform spacing to be unlinked without clearing values first', () => {
+    seedSpacingTokens()
+
+    render(
+      <SpacingBoxControl
+        storedStyles={{
+          marginTop: '12px',
+          marginRight: '12px',
+          marginBottom: '12px',
+          marginLeft: '12px',
+        }}
+        currentStyles={{}}
+        onChange={() => {}}
+        onRemove={() => {}}
+      />,
+    )
+
+    const unlink = screen.getByRole('button', { name: 'Unlink Margin sides' })
+    fireEvent.click(unlink)
+
+    const relink = screen.getByRole('button', { name: 'Link all Margin sides' })
+    expect(relink.getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('syncs the focused side across all sides when linking split spacing', () => {
+    seedSpacingTokens()
+
+    const changes: Array<[string, string | number | undefined]> = []
+
+    render(
+      <SpacingBoxControl
+        storedStyles={{ marginTop: '12px' }}
+        currentStyles={{}}
+        onChange={(property, value) => changes.push([property, value])}
+        onRemove={() => {}}
+      />,
+    )
+
+    fireEvent.focus(screen.getByLabelText('margin top'))
+    fireEvent.click(screen.getByRole('button', { name: 'Link all Margin sides' }))
+
+    expect(changes).toEqual([
+      ['marginTop', '12px'],
+      ['marginRight', '12px'],
+      ['marginBottom', '12px'],
+      ['marginLeft', '12px'],
+    ])
+  })
+
+  it('mirrors linked side drafts across every side while typing', () => {
+    seedSpacingTokens()
+
+    render(
+      <SpacingBoxControl
+        storedStyles={{
+          marginTop: '8px',
+          marginRight: '8px',
+          marginBottom: '8px',
+          marginLeft: '8px',
+        }}
+        currentStyles={{}}
+        onChange={() => {}}
+        onRemove={() => {}}
+      />,
+    )
+
+    const input = screen.getByLabelText('margin top')
+    fireEvent.focus(input)
+    fireEvent.change(input, { target: { value: '12px' } })
+
+    expect((screen.getByLabelText('margin top') as HTMLInputElement).value).toBe('12px')
+    expect((screen.getByLabelText('margin right') as HTMLInputElement).value).toBe('12px')
+    expect((screen.getByLabelText('margin bottom') as HTMLInputElement).value).toBe('12px')
+    expect((screen.getByLabelText('margin left') as HTMLInputElement).value).toBe('12px')
+  })
 })
