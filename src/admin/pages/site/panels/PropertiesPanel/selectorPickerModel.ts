@@ -35,6 +35,7 @@ export function deriveSelectorPickerModel(input: SelectorPickerModelInput): Sele
   const { rules, node, selectedElement, activeRuleId } = input
   const assignedIds = node?.classIds ?? []
   const assignedIdSet = new Set(assignedIds)
+  const selectorSubject = authorSelectorSubject(selectedElement)
   const pills: SelectorPillItem[] = []
   const suggestions: SelectorSuggestionItem[] = []
 
@@ -51,7 +52,7 @@ export function deriveSelectorPickerModel(input: SelectorPickerModelInput): Sele
 
   for (const rule of sortedRules(rules)) {
     if (rule.kind === 'ambient') {
-      const match = matchAmbientRule(rule, selectedElement)
+      const match = matchAmbientRule(rule, selectorSubject)
       if (match) {
         pills.push({
           rule,
@@ -80,6 +81,56 @@ export function deriveSelectorPickerModel(input: SelectorPickerModelInput): Sele
   }
 
   return { pills: sortPillsBySpecificity(pills), suggestions }
+}
+
+const CANVAS_NODE_EDITOR_ATTRS = new Set([
+  'data-node-id',
+  'data-module-id',
+  'data-hovered',
+  'tabindex',
+  'role',
+  'aria-pressed',
+])
+
+/**
+ * Ambient selector chips should describe author-visible markup, not canvas
+ * selection plumbing. Clone the selected element's document body so structural
+ * selectors (`.hero > .image`, `:first-child`, siblings) still evaluate, then
+ * strip editor-only attrs from canvas node roots before calling `matches()`.
+ */
+function authorSelectorSubject(selectedElement: Element | null): Element | null {
+  if (!selectedElement) return null
+  const nodeId = selectedElement.getAttribute('data-node-id')
+  if (!nodeId) return selectedElement
+
+  const body = selectedElement.ownerDocument.body
+  const root = body?.cloneNode(true) as HTMLElement | null
+  if (!root) return selectedElement
+
+  const subject = findCanvasNodeClone(root, nodeId)
+  if (!subject) return selectedElement
+
+  stripCanvasEditorAttributes(root)
+  return subject
+}
+
+function findCanvasNodeClone(root: Element, nodeId: string): Element | null {
+  if (root.getAttribute('data-node-id') === nodeId) return root
+  for (const element of root.querySelectorAll('[data-node-id]')) {
+    if (element.getAttribute('data-node-id') === nodeId) return element
+  }
+  return null
+}
+
+function stripCanvasEditorAttributes(root: Element): void {
+  for (const element of [root, ...Array.from(root.querySelectorAll('*'))]) {
+    const isCanvasNodeRoot = element.hasAttribute('data-node-id')
+    for (const attr of Array.from(element.attributes)) {
+      if (attr.name.startsWith('data-canvas-') || (isCanvasNodeRoot && CANVAS_NODE_EDITOR_ATTRS.has(attr.name))) {
+        element.removeAttribute(attr.name)
+      }
+    }
+  }
 }
 
 function sortedRules(rules: Record<string, StyleRule>): StyleRule[] {

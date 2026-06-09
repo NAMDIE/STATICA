@@ -7,8 +7,9 @@
  * body element is the published document's `<body>`).
  *
  * Editor metadata that used to live on a wrapping `<div>` (data-node-id,
- * click handlers, the user's mcClassName) is now applied to the iframe's
- * actual `<body>` element via `useEffect` — `BodyOwnerProbe` is a tiny
+ * canvas selection attrs, click handlers, the user's mcClassName) is now
+ * applied to the iframe's actual `<body>` element via `useEffect` —
+ * `BodyOwnerProbe` is a tiny
  * `display: contents` component that gives the effect a ref into the
  * iframe document. The probe element contributes no layout or accessible
  * affordance; it disappears from the DOM tree from CSS's perspective.
@@ -65,8 +66,13 @@ function applyEditorAttrsToBody(
     body.setAttribute('data-module-id', nodeWrapperProps['data-module-id'])
   }
   body.setAttribute('tabindex', '0')
-  body.setAttribute('role', 'button')
-  body.setAttribute('aria-pressed', String(Boolean(nodeWrapperProps?.['aria-pressed'])))
+  body.removeAttribute('role')
+  body.removeAttribute('aria-pressed')
+  if (nodeWrapperProps?.['data-canvas-selected']) {
+    body.setAttribute('data-canvas-selected', nodeWrapperProps['data-canvas-selected'])
+  } else {
+    body.removeAttribute('data-canvas-selected')
+  }
   if (nodeWrapperProps?.['data-hovered']) {
     body.setAttribute('data-hovered', nodeWrapperProps['data-hovered'])
   } else {

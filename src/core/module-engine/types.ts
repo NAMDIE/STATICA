@@ -111,8 +111,7 @@ export interface NodeWrapperProps {
   'data-node-id'?: string
   'data-module-id'?: string
   tabIndex?: 0
-  role?: 'button'
-  'aria-pressed'?: boolean
+  'data-canvas-selected'?: 'true'
   'data-hovered'?: 'true'
   /**
    * Read-only region markers, spread onto every element of a non-editable

@@ -3,7 +3,7 @@
  *
  * After the iframe-per-frame refactor, NodeRenderer no longer emits a wrapping
  * `<div>` per node — every module spreads the `nodeWrapperProps` bag
- * (data-node-id, role, aria-pressed, click/hover/keyboard handlers, tabIndex)
+ * (data-node-id, canvas selection attrs, click/hover/keyboard handlers, tabIndex)
  * directly onto its own root element. The canvas DOM therefore matches the
  * published DOM exactly, and CSS combinators (`body > nav`, `:nth-child()`,
  * `+`, `~`) work the same in both surfaces.

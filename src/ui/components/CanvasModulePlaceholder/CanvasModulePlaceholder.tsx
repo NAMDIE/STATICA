@@ -25,11 +25,11 @@
  *   - Editor-only chrome — never imported from a module's `index.ts`
  *     render path; this primitive only renders inside `*Editor.tsx`.
  */
-import type { ReactNode } from 'react'
+import type { HTMLAttributes, ReactNode } from 'react'
 import { cn } from '@ui/cn'
 import styles from './CanvasModulePlaceholder.module.css'
 
-export interface CanvasModulePlaceholderProps {
+export interface CanvasModulePlaceholderProps extends HTMLAttributes<HTMLDivElement> {
   /** Optional pixel-art icon shown above (block) or before (inline) the label. */
   icon?: ReactNode
   /** Primary line — short message identifying what's missing. */
@@ -69,13 +69,14 @@ export function CanvasModulePlaceholder({
   actions,
   className,
   variant = 'block',
+  ...rootProps
 }: CanvasModulePlaceholderProps) {
   return (
     <div
+      {...rootProps}
       className={cn(styles.root, styles[`variant-${variant}`], className)}
       data-canvas-module-placeholder=""
       data-variant={variant}
-      role="presentation"
     >
       {icon ? (
         <span

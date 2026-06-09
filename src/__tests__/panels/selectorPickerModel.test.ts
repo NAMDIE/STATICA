@@ -57,6 +57,65 @@ describe('selectorPickerModel', () => {
     expect(ancestorModel.pills.map((pill) => pill.rule.id)).toEqual([])
   })
 
+  it('ignores editor-only canvas root attributes when matching ambient selectors', () => {
+    document.body.innerHTML = [
+      '<section class="hero">',
+      '<div',
+      ' data-node-id="image"',
+      ' data-module-id="base.image"',
+      ' data-canvas-module-placeholder=""',
+      ' role="button"',
+      ' tabindex="0"',
+      ' aria-pressed="true"',
+      ' class="empty-image"',
+      '></div>',
+      '</section>',
+    ].join('')
+    const selected = document.querySelector<HTMLElement>('[data-node-id="image"]')!
+    const roleButton = rule({
+      id: 'roleButton',
+      name: '[role="button"]',
+      kind: 'ambient',
+      selector: '[role="button"]',
+    })
+    const moduleId = rule({
+      id: 'moduleId',
+      name: '[data-module-id="base.image"]',
+      kind: 'ambient',
+      selector: '[data-module-id="base.image"]',
+    })
+    const canvasPlaceholder = rule({
+      id: 'canvasPlaceholder',
+      name: '[data-canvas-module-placeholder]',
+      kind: 'ambient',
+      selector: '[data-canvas-module-placeholder]',
+    })
+    const authoredClass = rule({
+      id: 'authoredClass',
+      name: '.hero .empty-image',
+      kind: 'ambient',
+      selector: '.hero .empty-image',
+    })
+
+    const model = deriveSelectorPickerModel({
+      rules: {
+        [roleButton.id]: roleButton,
+        [moduleId.id]: moduleId,
+        [canvasPlaceholder.id]: canvasPlaceholder,
+        [authoredClass.id]: authoredClass,
+      },
+      node: { ...node(), id: 'image' },
+      selectedElement: selected,
+      activeRuleId: null,
+    })
+
+    expect(model.pills.map((pill) => pill.rule.id)).toEqual(['authoredClass'])
+    expect(model.suggestions.find((item) => item.rule.id === 'roleButton')).toMatchObject({
+      disabled: true,
+      disabledReason: "Doesn't match this element",
+    })
+  })
+
   it('includes trailing pseudo selectors as inactive matches', () => {
     document.body.innerHTML = '<a data-node-id="link" href="#">Link</a>'
     const selected = document.querySelector<HTMLElement>('[data-node-id="link"]')!

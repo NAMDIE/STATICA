@@ -189,8 +189,7 @@ export const NodeRenderer = memo(function NodeRenderer({ nodeId }: NodeRendererP
     'data-node-id': nodeId,
     'data-module-id': node.moduleId,
     tabIndex: 0,
-    role: 'button',
-    'aria-pressed': isSelected,
+    ...(isSelected ? { 'data-canvas-selected': 'true' as const } : {}),
     ...(inlineStyle ? { style: inlineStyle } : {}),
     ...(isHovered && !isSelected ? { 'data-hovered': 'true' as const } : {}),
     onPointerDownCapture: (e) => {
