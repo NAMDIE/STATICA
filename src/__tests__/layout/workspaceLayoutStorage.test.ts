@@ -7,13 +7,13 @@ import {
   workspaceFromPathname,
   writeStoredPanelPosition,
   writeWorkspaceLayout,
-} from '@site/layout/panelLayoutStorage'
+} from '@admin/state/workspaceLayoutStorage'
 
 beforeEach(() => {
   localStorage.clear()
 })
 
-describe('panelLayoutStorage — floating panel positions', () => {
+describe('workspaceLayoutStorage — floating panel positions', () => {
   it('stores floating panel positions at the top-level (not per-workspace)', () => {
     writeStoredPanelPosition('agent', { x: 640, y: 120 })
 
@@ -37,7 +37,7 @@ describe('panelLayoutStorage — floating panel positions', () => {
   })
 })
 
-describe('panelLayoutStorage — per-workspace layouts', () => {
+describe('workspaceLayoutStorage — per-workspace layouts', () => {
   it('namespaces sidebar state by workspace', () => {
     writeWorkspaceLayout('site', { leftWidth: 400, rightOpen: true, rightWidth: 380 })
     writeWorkspaceLayout('media', { leftWidth: 280, activeLeftPanel: 'storage' })
@@ -82,7 +82,7 @@ describe('panelLayoutStorage — per-workspace layouts', () => {
   })
 })
 
-describe('panelLayoutStorage — workspaceFromPathname', () => {
+describe('workspaceLayoutStorage — workspaceFromPathname', () => {
   it('maps admin canvas routes onto workspace ids', () => {
     expect(workspaceFromPathname('/admin/site')).toBe('site')
     expect(workspaceFromPathname('/admin/site/pages/abc')).toBe('site')

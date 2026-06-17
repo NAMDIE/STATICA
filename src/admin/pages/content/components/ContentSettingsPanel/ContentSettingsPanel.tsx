@@ -5,7 +5,7 @@ import { cn } from '@ui/cn'
 import { Settings2SolidIcon } from 'pixel-art-icons/icons/settings-2-solid'
 import type { CmsMediaAsset } from '@core/persistence'
 import { MediaPickerField } from '@admin/pages/media/components/MediaPickerField'
-import { useEditorStore } from '@site/store/store'
+import { useWorkspaceLayout } from '@admin/state/workspaceLayout'
 import { dataTableHasField } from '@core/data/fields'
 import {
   POST_TYPE_FIELD_FEATURED_MEDIA,
@@ -104,7 +104,7 @@ export function ContentSettingsPanel({
   onClearFeaturedMedia,
   onEditFeaturedMedia,
 }: ContentSettingsPanelProps) {
-  const setPropertiesPanel = useEditorStore((s) => s.setPropertiesPanel)
+  const setRightPanel = useWorkspaceLayout((s) => s.setRightPanel)
   const seoEnabled = selectedCollection ? dataTableHasField(selectedCollection, POST_TYPE_FIELD_SEO_TITLE) : false
   const featuredMediaEnabled = selectedCollection ? dataTableHasField(selectedCollection, POST_TYPE_FIELD_FEATURED_MEDIA) : false
   const authorRoleLabel = selectedEntry ? contentAuthorRoleLabel(selectedEntry) : null
@@ -138,7 +138,7 @@ export function ContentSettingsPanel({
             <span className={propertiesStyles.headerNodeLabel}>Settings</span>
           </span>
         )}
-        onClose={() => setPropertiesPanel({ collapsed: true })}
+        onClose={() => setRightPanel({ collapsed: true })}
       />
 
       <div className={styles.settingsBody}>

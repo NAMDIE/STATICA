@@ -14,13 +14,13 @@ import { AdminSectionNavigation } from '@admin/shared/AdminSectionNavigation'
 import { ConfirmDeleteProvider } from '@admin/shared/dialogs/ConfirmDeleteDialog'
 import { SidebarResizeHandle } from '@admin/shared/SidebarResizeHandle'
 import { useEditorSelectPreference } from '@site/preferences/editorPreferences'
-import { useEditorLayoutPersistence } from '@site/hooks/useEditorLayoutPersistence'
-import { useEditorStore } from '@site/store/store'
 import { useInstalledEditorPlugins } from '@admin/pages/plugins/hooks/useInstalledEditorPlugins'
 import { usePluginEventBridge } from '@admin/pages/plugins/hooks/usePluginEventBridge'
 import { useCurrentAdminUser } from '@admin/sessionContext'
 import { useAdminUi } from '@admin/state/adminUi'
 import { useSiteSummary } from '@admin/state/useSiteSummary'
+import { useWorkspaceLayout } from '@admin/state/workspaceLayout'
+import { useWorkspaceLayoutPersistence } from '@admin/state/useWorkspaceLayoutPersistence'
 import { Button } from '@ui/components/Button'
 import { cn } from '@ui/cn'
 import { Settings2SolidIcon } from 'pixel-art-icons/icons/settings-2-solid'
@@ -51,7 +51,7 @@ export function AdminWorkspaceCanvasLayout({
   toolbarRightSlot,
 }: AdminWorkspaceCanvasLayoutProps) {
   useSiteSummary()
-  useEditorLayoutPersistence(workspace)
+  useWorkspaceLayoutPersistence(workspace)
   useInstalledEditorPlugins()
   usePluginEventBridge()
 
@@ -59,21 +59,17 @@ export function AdminWorkspaceCanvasLayout({
   const density = useEditorSelectPreference('density')
   const adminUiSiteName = useAdminUi((s) => s.siteName)
   const adminUiFaviconUrl = useAdminUi((s) => s.siteFaviconUrl)
-  const editorSiteName = useEditorStore((s) => s.site?.name ?? null)
-  const editorFaviconUrl = useEditorStore((s) => s.site?.settings.faviconUrl ?? null)
-  const siteName = editorSiteName ?? adminUiSiteName
-  const faviconUrl = editorSiteName !== null ? editorFaviconUrl : adminUiFaviconUrl
   const settingsOpen = useAdminUi((s) => s.settingsOpen)
-  const propertiesPanelCollapsed = useEditorStore((s) => s.propertiesPanel.collapsed)
-  const setPropertiesPanel = useEditorStore((s) => s.setPropertiesPanel)
-  const hasRightSidebar = workspace !== 'media' && !propertiesPanelCollapsed
+  const rightPanelCollapsed = useWorkspaceLayout((s) => s.rightPanel.collapsed)
+  const setRightPanel = useWorkspaceLayout((s) => s.setRightPanel)
+  const hasRightSidebar = workspace !== 'media' && !rightPanelCollapsed
   const hasReopenableRightPanel = workspace !== 'media' && Boolean(contentRightPanel) && !hasRightSidebar
 
   return (
     <div className={styles.shell} data-editor-density={density}>
       <Toolbar
-        siteName={siteName}
-        faviconUrl={faviconUrl}
+        siteName={adminUiSiteName}
+        faviconUrl={adminUiFaviconUrl}
         section={workspace}
         adminNavigationSlot={(
           <AdminSectionNavigation
@@ -97,7 +93,7 @@ export function AdminWorkspaceCanvasLayout({
             {hasReopenableRightPanel && (
               <WorkspaceRightPanelNotch
                 workspace={workspace}
-                onOpen={() => setPropertiesPanel({ collapsed: false })}
+                onOpen={() => setRightPanel({ collapsed: false })}
               />
             )}
           </div>
@@ -161,13 +157,13 @@ interface WorkspaceRightSidebarProps {
 
 function WorkspaceRightSidebar({ hidden, contentPanel }: WorkspaceRightSidebarProps) {
   const sidebarRef = useRef<HTMLElement | null>(null)
-  const propertiesPanel = useEditorStore((s) => s.propertiesPanel)
-  const setPropertiesPanel = useEditorStore((s) => s.setPropertiesPanel)
-  const isExpanded = !hidden && !propertiesPanel.collapsed
-  const panelWidth = isExpanded ? propertiesPanel.width : 0
+  const rightPanel = useWorkspaceLayout((s) => s.rightPanel)
+  const setRightPanel = useWorkspaceLayout((s) => s.setRightPanel)
+  const isExpanded = !hidden && !rightPanel.collapsed
+  const panelWidth = isExpanded ? rightPanel.width : 0
   const style = {
     '--right-sidebar-panel-width': `${panelWidth}px`,
-    '--right-sidebar-panel-layout-width': `${propertiesPanel.width}px`,
+    '--right-sidebar-panel-layout-width': `${rightPanel.width}px`,
   } as CSSProperties
 
   return (
@@ -182,12 +178,12 @@ function WorkspaceRightSidebar({ hidden, contentPanel }: WorkspaceRightSidebarPr
       {isExpanded && (
         <SidebarResizeHandle
           side="right"
-          width={propertiesPanel.width}
+          width={rightPanel.width}
           targetRef={sidebarRef}
           cssVariable="--right-sidebar-panel-width"
           layoutCssVariable="--right-sidebar-panel-layout-width"
           ariaLabel="Resize right sidebar"
-          onResize={(width) => setPropertiesPanel({ width })}
+          onResize={(width) => setRightPanel({ width })}
         />
       )}
 

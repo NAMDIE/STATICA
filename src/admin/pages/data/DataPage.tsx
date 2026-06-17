@@ -8,11 +8,11 @@ import { useEffect, useState } from 'react'
 import { AdminWorkspaceCanvasLayout } from '@admin/layouts/AdminWorkspaceCanvasLayout'
 import { useAuthenticatedAdminUser } from '@admin/sessionContext'
 import { useNavigate } from '@admin/lib/routing'
-import { useEditorStore } from '@site/store/store'
 import { useConfirmDelete } from '@admin/shared/dialogs/ConfirmDeleteDialog'
 import { StepUpCancelledMessage, useStepUp } from '@admin/shared/StepUp'
 import { CMS_SITE_BUNDLE_IMPORTED_EVENT } from '@admin/state/adminEvents'
 import { useAdminUi } from '@admin/state/adminUi'
+import { useWorkspaceLayout } from '@admin/state/workspaceLayout'
 import {
   canCreateContent,
   canEditAnyContent,
@@ -47,7 +47,7 @@ export function DataPage() {
   const canDelete = canManage
 
   const workspace = useDataWorkspace()
-  const setPropertiesPanel = useEditorStore((s) => s.setPropertiesPanel)
+  const setRightPanel = useWorkspaceLayout((s) => s.setRightPanel)
   const openSiteImport = useAdminUi((s) => s.openSiteImport)
   const openSiteExport = useAdminUi((s) => s.openSiteExport)
   const confirmDelete = useConfirmDelete()
@@ -129,18 +129,18 @@ export function DataPage() {
   function handleSelectRow(rowId: string | null) {
     workspace.selectRow(rowId)
     if (rowId !== null) {
-      setPropertiesPanel({ collapsed: false })
+      setRightPanel({ collapsed: false })
     }
   }
 
   function handleOpenRow(rowId: string) {
     workspace.selectRow(rowId)
-    setPropertiesPanel({ collapsed: false })
+    setRightPanel({ collapsed: false })
   }
 
   function handleOpenTableSettings(tableId: string) {
     workspace.selectTable(tableId)
-    setPropertiesPanel({ collapsed: false })
+    setRightPanel({ collapsed: false })
   }
 
   function handleDeleteTable(tableId: string): void {

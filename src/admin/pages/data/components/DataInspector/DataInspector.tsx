@@ -2,7 +2,7 @@ import type { ReactElement } from 'react'
 import type { DataTable, DataRow, DataRowCells, UpdateDataTableInput } from '@core/data/schemas'
 import { PanelHeader } from '@admin/shared/PanelHeader'
 import { Settings2SolidIcon } from 'pixel-art-icons/icons/settings-2-solid'
-import { useEditorStore } from '@site/store/store'
+import { useWorkspaceLayout } from '@admin/state/workspaceLayout'
 import { cn } from '@ui/cn'
 import propertiesStyles from '@admin/pages/site/panels/PropertiesPanel/PropertiesPanel.module.css'
 import styles from './DataInspector.module.css'
@@ -57,7 +57,7 @@ export function DataInspector({
   canManageSchema,
   canDelete,
 }: DataInspectorProps): ReactElement {
-  const setPropertiesPanel = useEditorStore((s) => s.setPropertiesPanel)
+  const setRightPanel = useWorkspaceLayout((s) => s.setRightPanel)
 
   function resolveRow(rowId: string): DataRow | null {
     return rows.find((r) => r.id === rowId) ?? null
@@ -84,7 +84,7 @@ export function DataInspector({
             <span className={propertiesStyles.headerNodeLabel}>{resolvedTitle}</span>
           </span>
         )}
-        onClose={() => setPropertiesPanel({ collapsed: true })}
+        onClose={() => setRightPanel({ collapsed: true })}
       />
 
       <div className={styles.body}>

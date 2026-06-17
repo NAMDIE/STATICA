@@ -18,7 +18,7 @@ import { assignRailAccents, railTintVar } from '@ui/railAccent'
 import { CloudUploadSolidIcon } from 'pixel-art-icons/icons/cloud-upload-solid'
 import { FolderGlyphIcon } from 'pixel-art-icons/icons/folder-glyph'
 import type { IconComponent } from 'pixel-art-icons/types'
-import { useEditorStore } from '@site/store/store'
+import { useWorkspaceLayout } from '@admin/state/workspaceLayout'
 import { hasCapability } from '@admin/access'
 import { useCurrentAdminUser } from '@admin/sessionContext'
 import { SidebarResizeHandle } from '@admin/shared/SidebarResizeHandle'
@@ -62,8 +62,8 @@ const PANEL_TITLES: Record<MediaSidebarPanelId, string> = {
 
 export function MediaSidebar({ workspace, activePanel, onActivePanelChange }: MediaSidebarProps) {
   const sidebarRef = useRef<HTMLElement | null>(null)
-  const leftSidebarWidth = useEditorStore((s) => s.leftSidebarWidth)
-  const setLeftSidebarWidth = useEditorStore((s) => s.setLeftSidebarWidth)
+  const leftSidebarWidth = useWorkspaceLayout((s) => s.leftSidebarWidth)
+  const setLeftSidebarWidth = useWorkspaceLayout((s) => s.setLeftSidebarWidth)
   const currentUser = useCurrentAdminUser()
   const panelWidth = activePanel ? leftSidebarWidth : 0
   const style = {

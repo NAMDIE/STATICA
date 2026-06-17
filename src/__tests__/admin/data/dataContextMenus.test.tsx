@@ -4,14 +4,15 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { AdminContextMenuGuard } from '@admin/shared/AdminContextMenuGuard'
 import { DataGrid } from '@admin/pages/data/components/DataGrid/DataGrid'
 import { DataSidebar } from '@admin/pages/data/components/DataSidebar/DataSidebar'
-import { useEditorStore } from '@site/store/store'
+import { useWorkspaceLayout } from '@admin/state/workspaceLayout'
 import type { DataRow, DataTable, DataTableListItem } from '@core/data/schemas'
 
 beforeEach(() => {
-  useEditorStore.setState({
+  useWorkspaceLayout.setState({
     dataSidebarCollapsed: false,
     leftSidebarWidth: 320,
-  } as Parameters<typeof useEditorStore.setState>[0])
+    rightPanel: { collapsed: false, width: 360 },
+  })
 })
 
 afterEach(cleanup)
@@ -166,7 +167,7 @@ describe('Data row context menu', () => {
 
 describe('Data table context menu', () => {
   it('uses inert instead of aria-hidden for the collapsed mounted panel slot', () => {
-    useEditorStore.setState({ dataSidebarCollapsed: true } as Parameters<typeof useEditorStore.setState>[0])
+    useWorkspaceLayout.getState().setDataSidebarCollapsed(true)
 
     render(
       <DataSidebar
@@ -191,7 +192,7 @@ describe('Data table context menu', () => {
   })
 
   it('does not mount the resize handle while the data sidebar is collapsed', () => {
-    useEditorStore.setState({ dataSidebarCollapsed: true } as Parameters<typeof useEditorStore.setState>[0])
+    useWorkspaceLayout.getState().setDataSidebarCollapsed(true)
 
     render(
       <DataSidebar

@@ -1,6 +1,7 @@
 import { Type } from '@sinclair/typebox'
-import type { PropertiesPanelMode } from '@site/store/slices/uiSlice'
 import { safeParseJson } from '@core/utils/jsonValidate'
+
+export type PropertiesPanelMode = 'docked' | 'floating'
 
 /**
  * Per-workspace editor layout storage.

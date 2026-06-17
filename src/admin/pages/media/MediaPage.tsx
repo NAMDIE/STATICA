@@ -7,7 +7,7 @@
  * window (per design: no docked right rail on this page).
  *
  * Window visibility lives in local state here; `useDraggablePanel` only owns
- * each window's POSITION via `panelLayoutStorage`. The upload queue
+ * each window's POSITION via `workspaceLayoutStorage`. The upload queue
  * auto-opens when something starts uploading; the bulk-edit window
  * auto-opens once the user has 2+ assets selected; the viewer opens whenever
  * the user has a primary selection.
@@ -17,7 +17,7 @@ import { AdminWorkspaceCanvasLayout } from '@admin/layouts/AdminWorkspaceCanvasL
 import {
   readWorkspaceLayout,
   writeWorkspaceLayout,
-} from '@site/layout/panelLayoutStorage'
+} from '@admin/state/workspaceLayoutStorage'
 import { Button } from '@ui/components/Button'
 import { UploadIcon } from 'pixel-art-icons/icons/upload'
 import { MediaSidebar, type MediaSidebarPanelId } from './components/MediaSidebar/MediaSidebar'

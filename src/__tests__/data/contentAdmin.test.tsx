@@ -9,6 +9,7 @@ import { useLocation } from '@admin/lib/routing'
 import { ContentPage } from '@content/ContentPage'
 import { AdminSessionProvider } from '@admin/session'
 import { StepUpProvider } from '@admin/shared/StepUp'
+import { useAdminUi } from '@admin/state/adminUi'
 import { useEditorStore } from '@site/store/store'
 import { makeSite } from '../fixtures'
 import { Toolbar } from '@site/toolbar/Toolbar'
@@ -170,7 +171,14 @@ function ambientFetchFallback(url: string): Response | undefined {
     return json({ plugins: [], adminPages: [] })
   }
   if (url.endsWith('/admin/api/cms/site')) {
-    return json({ site: null }, 404)
+    return json({ site: makeSite({ name: 'Content Shell Site' }) })
+  }
+  if (
+    url.endsWith('/admin/api/cms/pages') ||
+    url.endsWith('/admin/api/cms/components') ||
+    url.endsWith('/admin/api/cms/layouts')
+  ) {
+    return json({ rows: [] })
   }
   if (url.endsWith('/admin/api/cms/publish/status')) {
     return json({ ok: false }, 404)
@@ -266,6 +274,10 @@ beforeEach(() => {
   // jsdom's location persists across tests in a file, so reset it here to
   // simulate a fresh navigation and stop one test's URL leaking into the next.
   window.history.replaceState({}, '', '/')
+  useAdminUi.getState().setSiteSummary({
+    name: site.name,
+    faviconUrl: site.settings.faviconUrl ?? null,
+  })
   useEditorStore.setState({
     site,
     activePageId: site.pages[0].id,
@@ -369,6 +381,7 @@ beforeEach(() => {
 
 afterEach(() => {
   globalThis.fetch = originalFetch
+  useAdminUi.getState().setSiteSummary({ name: null, faviconUrl: null })
   cleanup()
 })
 
@@ -536,7 +549,7 @@ describe('ContentPage', () => {
     // Settings panel is entry-specific — when no entry is selected, the panel is hidden.
     expect(screen.queryByTestId('content-settings-panel')).toBeNull()
     expect(screen.getByTestId('canvas-notch')).toBeDefined()
-    expect(screen.getByText('Content Shell Site')).toBeDefined()
+    expect(await screen.findByText('Content Shell Site')).toBeDefined()
   })
 
   it('keeps the site module picker out of the content insert notch', async () => {

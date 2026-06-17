@@ -156,7 +156,7 @@ export function AdminCanvasLayout() {
     enabled: true,
     loaded: persistence.saveStatus.state !== 'loading',
   })
-  useEditorLayoutPersistence('site')
+  useEditorLayoutPersistence()
   useInstalledEditorPlugins()
   // Mount the SSE bridge ONCE per admin tab — gives toasts on plugin
   // crashes from any route, drives the red dot on the Plugins nav link,

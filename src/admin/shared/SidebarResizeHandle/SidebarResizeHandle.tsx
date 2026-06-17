@@ -4,7 +4,7 @@ import {
   SIDEBAR_MAX_WIDTH,
   SIDEBAR_MIN_WIDTH,
   clampSidebarWidth,
-} from '@site/store/slices/uiSlice'
+} from '@admin/state/workspaceLayout'
 import styles from './SidebarResizeHandle.module.css'
 
 const KEYBOARD_STEP = 10

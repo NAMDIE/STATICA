@@ -20,8 +20,8 @@ import { createLayoutsSlice } from './slices/layoutsSlice'
 import { createSaveTrackingSlice } from './slices/saveTrackingSlice'
 import { bindPluginRuntimeStoreApi } from '@core/plugins/runtime'
 import { useAdminUi } from '@admin/state/adminUi'
-import { readWorkspaceLayout, workspaceFromPathname } from '@site/layout/panelLayoutStorage'
-import { restoreStoredEditorLayout } from '@site/hooks/useEditorLayoutPersistence'
+import { readWorkspaceLayout, workspaceFromPathname } from '@admin/state/workspaceLayoutStorage'
+import { restoreStoredSiteEditorLayout } from '@site/layout/siteEditorLayoutPersistence'
 
 /**
  * EditorStore — the central Zustand store for the visual editor.
@@ -106,8 +106,9 @@ export const useEditorStore = create<EditorStore>()(
 // non-editor route) and owns the write-side `subscribe`.
 if (typeof window !== 'undefined') {
   const initialWorkspace = workspaceFromPathname(window.location.pathname) ?? 'site'
-  const initialLayout = readWorkspaceLayout(initialWorkspace)
-  restoreStoredEditorLayout(useEditorStore, initialWorkspace, initialLayout)
+  if (initialWorkspace === 'site') {
+    restoreStoredSiteEditorLayout(useEditorStore, readWorkspaceLayout('site'))
+  }
 }
 
 // Wire the live store reference to the agent executor's bridge module so

@@ -26,7 +26,7 @@ import {
   writeStoredPanelPosition,
   type FloatingPanelId,
   type PanelPosition,
-} from '@site/layout/panelLayoutStorage'
+} from '@admin/state/workspaceLayoutStorage'
 
 /**
  * Minimum number of pixels that must remain visible on-screen when a panel

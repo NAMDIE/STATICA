@@ -2,7 +2,7 @@ import { Suspense, lazy, useEffect, useId, useRef, useState } from 'react'
 import {
   readWorkspaceLayout,
   writeWorkspaceLayout,
-} from '@site/layout/panelLayoutStorage'
+} from '@admin/state/workspaceLayoutStorage'
 import { useAdminUi } from '@admin/state/adminUi'
 import { readTitleCell } from '@core/data/cells'
 import type {

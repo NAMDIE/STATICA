@@ -5,7 +5,7 @@
  * its own contents.
  *
  * Position is persisted automatically by `useDraggablePanel` via the
- * `panelLayoutStorage` module (each `FloatingPanelId` gets its own key).
+ * `workspaceLayoutStorage` module (each `FloatingPanelId` gets its own key).
  * Visibility is owned by the caller — pass `open` from your component
  * state. Closing fires `onClose`.
  */
@@ -13,7 +13,7 @@ import { useImperativeHandle, type CSSProperties, type ReactNode, type Ref } fro
 import { createPortal } from 'react-dom'
 import { PanelHeader } from '@admin/shared/PanelHeader'
 import { useDraggablePanel } from '@site/hooks/useDraggablePanel'
-import type { FloatingPanelId, PanelPosition } from '@site/layout/panelLayoutStorage'
+import type { FloatingPanelId, PanelPosition } from '@admin/state/workspaceLayoutStorage'
 import { cn } from '@ui/cn'
 import styles from './FloatingWindow.module.css'
 

@@ -19,7 +19,7 @@ import { DatabaseSolidIcon } from 'pixel-art-icons/icons/database-solid'
 import { PlusIcon } from 'pixel-art-icons/icons/plus'
 import { ArrowDownIcon } from 'pixel-art-icons/icons/arrow-down'
 import { UploadIcon } from 'pixel-art-icons/icons/upload'
-import { useEditorStore } from '@site/store/store'
+import { useWorkspaceLayout } from '@admin/state/workspaceLayout'
 import { Panel } from '@admin/shared/Panel'
 import { SidebarResizeHandle } from '@admin/shared/SidebarResizeHandle'
 import leftSidebarStyles from '@site/sidebars/LeftSidebar/LeftSidebar.module.css'
@@ -78,10 +78,10 @@ export function DataSidebar({
   const sidebarRef = useRef<HTMLElement | null>(null)
   const tableListRef = useRef<HTMLDivElement | null>(null)
   const [contextMenu, setContextMenu] = useState<TableContextMenuState | null>(null)
-  const leftSidebarWidth = useEditorStore((s) => s.leftSidebarWidth)
-  const setLeftSidebarWidth = useEditorStore((s) => s.setLeftSidebarWidth)
-  const dataSidebarCollapsed = useEditorStore((s) => s.dataSidebarCollapsed)
-  const setDataSidebarCollapsed = useEditorStore((s) => s.setDataSidebarCollapsed)
+  const leftSidebarWidth = useWorkspaceLayout((s) => s.leftSidebarWidth)
+  const setLeftSidebarWidth = useWorkspaceLayout((s) => s.setLeftSidebarWidth)
+  const dataSidebarCollapsed = useWorkspaceLayout((s) => s.dataSidebarCollapsed)
+  const setDataSidebarCollapsed = useWorkspaceLayout((s) => s.setDataSidebarCollapsed)
 
   // When collapsed, only the outer allocation collapses. The panel body keeps
   // the saved layout width and is clipped by the sidebar shell, so text does

@@ -6,6 +6,7 @@ import { AdminSessionProvider } from '@admin/session'
 import { StepUpProvider } from '@admin/shared/StepUp'
 import { DataPage } from '@admin/pages/data/DataPage'
 import { useEditorStore } from '@site/store/store'
+import { useWorkspaceLayout } from '@admin/state/workspaceLayout'
 import { makeSite } from '../../fixtures'
 import { CORE_CAPABILITIES } from '@core/capabilities'
 import type { CmsCurrentUser } from '@core/persistence'
@@ -73,8 +74,12 @@ function setupEditorShell(): void {
     activeBreakpointId: 'desktop',
     propertiesPanel: { collapsed: false, x: 0, y: 0, width: 360 },
     leftSidebarWidth: 320,
-    dataSidebarCollapsed: false,
   } as Parameters<typeof useEditorStore.setState>[0])
+  useWorkspaceLayout.setState({
+    leftSidebarWidth: 320,
+    rightPanel: { collapsed: false, width: 360 },
+    dataSidebarCollapsed: false,
+  })
 }
 
 describe('Data table step-up flow', () => {

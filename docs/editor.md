@@ -177,18 +177,20 @@ Every admin page picks one of three root layouts from `src/admin/layouts/`. Impo
 | Layout | Used by | Bundle contract |
 |---|---|---|
 | `AdminCanvasLayout` | Site editor (`SitePage`) | Site shell — toolbar/chrome, persistence, editor store, and a post-paint lazy boundary for the heavy body. |
-| `AdminWorkspaceCanvasLayout` | Content, Data, Media | Canvas chrome (toolbar, sidebar, full-height canvas) WITHOUT site-only modules (no PropertiesPanel, no DnD, no CodeMirror). |
+| `AdminWorkspaceCanvasLayout` | Content, Data, Media | Canvas chrome (toolbar, sidebar, full-height canvas) WITHOUT site-only modules (no editor store, PropertiesPanel, DnD, or CodeMirror). |
 | `AdminPageLayout` | Plugins, Users, Account, plugin admin pages | Lightweight — toolbar + centered scrollable page body. **Must not import the editor store.** Site name and favicon come from `useSiteSummary` + the `adminUi` Zustand store. |
 
 `AdminCanvasLayout` keeps the real editor shell mounted while `usePersistence()` loads the draft site document. In production it renders the toolbar/chrome first and lazy-loads `AdminCanvasEditorBody` after paint. The body owns the permanent rail, sidebars, canvas, DnD context, `ConfirmDeleteProvider`, `CodeEditorPanel`, first-party module registration, and loop-source registration. Rare modal surfaces such as `ImportHtmlModal` stay behind their own open-state lazy boundary inside the body. Loading states use the same local skeleton vocabulary: the editor-body lazy fallback and the canvas no-site fallback both render `CanvasFrameSkeletonFrame`, and sidebars use compact skeleton rows or blocks. Once the document is in the store, every breakpoint frame mounts immediately — the tree is already in memory, so there is nothing to stagger.
 
 The `adminUi` store (`src/admin/state/adminUi.ts`) is the small cross-shell state store: settings-modal open flag, site-import modal open flag, site name/favicon for the toolbar brand position, and `activeLivePath` — the public path the "Open live page" toolbar button opens. The toolbar renders a compact skeleton while the site identity is loading, then renders the configured site favicon when present; otherwise it shows the site name with the same compact bold typography as the admin navigation. The site name is exposed through the shared tooltip after identity loads. It lives outside `@site/` so `AdminPageLayout` can subscribe without pulling in the 165 KB editor graph. The editor's `settingsSlice` mirrors its state into `adminUi` via a registered bridge so both are always in sync.
 
+Canvas chrome state for Content, Data, and Media lives in `src/admin/state/workspaceLayout.ts`, with persistence in `src/admin/state/workspaceLayoutStorage.ts` and `src/admin/state/useWorkspaceLayoutPersistence.ts`. That store owns non-site sidebar widths, right-panel collapsed state, and the Data sidebar toggle. Site editor layout remains site-only: `src/admin/pages/site/hooks/useEditorLayoutPersistence.ts` subscribes to the editor store and delegates the storage mapping to `src/admin/pages/site/layout/siteEditorLayoutPersistence.ts`.
+
 `activeLivePath` is written by the active workspace and cleared on unmount. The Site editor delegates to `useActiveLivePath` (`src/admin/pages/site/hooks/useActiveLivePath.ts`) inside `AdminCanvasEditorBody` — it resolves templates to a routable path rather than their own (non-routable) slug: an everywhere template maps to the previewed page's path; a postTypes template maps to the previewed published row's permalink. Both resolutions follow the same selection as the `TemplateModeControl` preview dropdown so the button always opens what the canvas is showing. The Content workspace writes `activeLivePath` inline inside its own layout; non-editor layouts never write it, so it stays `null` there naturally.
 
 `AdminWorkspaceCanvasLayout` and `AdminPageLayout` both call `useSiteSummary()` — a lightweight hook that fires a single `cmsAdapter.loadSite()` per session and writes the name + favicon into `adminUi`. The Site editor's `usePersistence` writes the same fields when it hydrates the full site, so after navigating to `/admin/site` the toolbar updates without a second fetch.
 
-When a Content or Data workspace has a right-side panel available but the user closes it, `AdminWorkspaceCanvasLayout` renders a compact top-right canvas notch to reopen that panel without changing the selected row or entry.
+When a Content or Data workspace has a right-side panel available but the user closes it, `AdminWorkspaceCanvasLayout` renders a compact top-right canvas notch to reopen that panel without changing the selected row or entry. The notch reads and writes `useWorkspaceLayout`; it does not touch the Site editor store.
 
 ```text
 src/admin/
@@ -332,7 +334,7 @@ The store is composed of **12 slices**, each created by a factory in `store/slic
 | `siteSlice`            | `SiteDocument` (pages, nodes, breakpoints, settings, classes, files). The page tree itself. |
 | `selectionSlice`       | `selectedNodeId`, `hoveredNodeId`                                          |
 | `canvasSlice`          | Zoom, pan, `activeBreakpointId`, `activeConditionId`, `canvasMode` ('select'|'pan'|'insert'), `canvasView` ('design'|'live'), `runScripts` |
-| `uiSlice`              | Panel visibility, unsaved-changes flag, insert picker, `componentizeEditorRequest` |
+| `uiSlice`              | Site editor panel visibility, unsaved-changes flag, insert picker, `componentizeEditorRequest` |
 | `classSlice`           | Style-rule CRUD, node ↔ class assignment, ambient selector creation         |
 | `filesSlice`           | `SiteFile` CRUD                                                            |
 | `visualComponentsSlice`| Visual Component CRUD                                                      |
@@ -710,6 +712,9 @@ See [docs/features/plugin-system.md](features/plugin-system.md) for the plugin S
   - `src/admin/AuthenticatedAdmin.tsx` — post-login shell + prewarmedLazy scheduler
   - `src/admin/lib/prewarmedLazy.ts` — React.lazy alternative with explicit preload + sync fast-path
   - `src/admin/state/adminUi.ts` — cross-shell Zustand store (settings modal, site-import modal, site name/favicon, activeLivePath)
+  - `src/admin/state/workspaceLayout.ts` — Content/Data/Media canvas chrome layout store
+  - `src/admin/state/workspaceLayoutStorage.ts` — per-workspace layout persistence and floating panel positions
+  - `src/admin/state/useWorkspaceLayoutPersistence.ts` — non-site workspace layout persistence hook
   - `src/admin/shared/OpenLivePageButton/OpenLivePageButton.tsx` — toolbar "Open live page" icon button
   - `src/admin/pages/site/hooks/useActiveLivePath.ts` — resolves `activeLivePath` for the Site editor (including template → previewed page/post mapping)
   - `src/admin/modals/Settings/SettingsModal.tsx` — settings modal (4 sections: General, Shortcuts, Publishing, Preferences)
@@ -723,6 +728,7 @@ See [docs/features/plugin-system.md](features/plugin-system.md) for the plugin S
   - `src/admin/pages/site/SitePage.tsx` — Site route mount
   - `src/admin/layouts/AdminCanvasLayout/AdminCanvasEditorBody.tsx` — post-paint editor body
   - `src/admin/pages/site/store/store.ts` — editor store assembly
+  - `src/admin/pages/site/layout/siteEditorLayoutPersistence.ts` — Site editor layout persistence mapping
   - `src/admin/pages/site/store/slices/site/nodeActions.ts` — `mutateActiveTree`
   - `src/admin/pages/site/canvas/CanvasRoot.tsx` — canvas mount
   - `src/admin/spotlight/SpotlightRoot.tsx` — Cmd+K palette

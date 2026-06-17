@@ -5,7 +5,7 @@ import { ImagesSolidIcon } from 'pixel-art-icons/icons/images-solid'
 import { AiSettingsSolidIcon } from 'pixel-art-icons/icons/ai-settings-solid'
 import type { IconComponent } from 'pixel-art-icons/types'
 import { railAccent, railTintVar } from '@ui/railAccent'
-import { useEditorStore } from '@site/store/store'
+import { useWorkspaceLayout } from '@admin/state/workspaceLayout'
 import leftSidebarStyles from '../../../site/sidebars/LeftSidebar/LeftSidebar.module.css'
 import panelRailStyles from '../../../site/sidebars/PanelRail/PanelRail.module.css'
 import { SidebarResizeHandle } from '@admin/shared/SidebarResizeHandle'
@@ -33,8 +33,8 @@ export function ContentSidebar({
   agentPanel,
 }: ContentSidebarProps) {
   const sidebarRef = useRef<HTMLElement | null>(null)
-  const leftSidebarWidth = useEditorStore((s) => s.leftSidebarWidth)
-  const setLeftSidebarWidth = useEditorStore((s) => s.setLeftSidebarWidth)
+  const leftSidebarWidth = useWorkspaceLayout((s) => s.leftSidebarWidth)
+  const setLeftSidebarWidth = useWorkspaceLayout((s) => s.setLeftSidebarWidth)
   const panelWidth = activePanel ? leftSidebarWidth : 0
   const style = {
     '--left-sidebar-panel-width': `${panelWidth}px`,

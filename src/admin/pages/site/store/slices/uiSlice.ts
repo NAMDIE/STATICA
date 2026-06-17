@@ -1,5 +1,9 @@
 import type { EditorStore, EditorStoreSliceCreator } from '@site/store/types'
 import { clearCanvasSelectionDraft } from './selectionSlice'
+import {
+  LEFT_SIDEBAR_DEFAULT_WIDTH,
+  clampSidebarWidth,
+} from '@admin/state/workspaceLayout'
 
 export type FocusedPanel = 'canvas' | 'domTree' | 'properties' | null
 type FormPreviewState = 'default' | 'submitting' | 'success' | 'error'
@@ -15,9 +19,6 @@ export type LeftSidebarPanelId =
   | 'agent'
 export type PropertiesPanelMode = 'docked' | 'floating'
 
-export const SIDEBAR_MIN_WIDTH = 300
-export const SIDEBAR_MAX_WIDTH = 520
-export const LEFT_SIDEBAR_DEFAULT_WIDTH = 320
 const PROPERTIES_PANEL_DEFAULT_WIDTH = 360
 
 /**
@@ -243,14 +244,6 @@ interface UiSlice {
    */
   openPageInCanvas: (pageId: string) => void
 
-  /**
-   * Whether the Data workspace's left sidebar panel is collapsed (hidden).
-   * Mirrors the `propertiesPanel.collapsed` naming convention. When true,
-   * the panel slot shrinks to zero-width but the rail indicator remains.
-   */
-  dataSidebarCollapsed: boolean
-  setDataSidebarCollapsed: (collapsed: boolean) => void
-
   // ─── Import HTML modal ───────────────────────────────────────────────────────
   /** Whether the Import HTML modal is currently open. */
   importHtmlModalOpen: boolean
@@ -280,10 +273,6 @@ const DEFAULT_PROPERTIES_PANEL: PanelState = {
   x: 0, // will be set to window.innerWidth - width on mount
   y: 0,
   width: PROPERTIES_PANEL_DEFAULT_WIDTH,
-}
-
-export function clampSidebarWidth(width: number) {
-  return Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, Math.round(width)))
 }
 
 function getActiveLeftSidebarPanel(state: EditorStore): LeftSidebarPanelId | null {
@@ -338,7 +327,6 @@ export const createUiSlice: EditorStoreSliceCreator<UiSlice> = (set, get) => ({
   selectedSelectorClassId: null,
   highlightedSelectorClassId: null,
   selectedSelectorClassIds: [],
-  dataSidebarCollapsed: false,
   importHtmlModalOpen: false,
   importHtmlModalParentId: null,
   importHtmlModalPrefill: '',
@@ -615,8 +603,6 @@ export const createUiSlice: EditorStoreSliceCreator<UiSlice> = (set, get) => ({
     if (get().selectedSelectorClassIds.length === 0) return
     set({ selectedSelectorClassIds: [] })
   },
-
-  setDataSidebarCollapsed: (collapsed) => set({ dataSidebarCollapsed: collapsed }),
 
   openImportHtmlModal: (opts) =>
     set({
