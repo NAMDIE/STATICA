@@ -25,19 +25,17 @@ import { useRef, useEffect, memo } from 'react'
 import { useAgentStore } from '@admin/ai/useAgentStore'
 import { useAsyncResource } from '@admin/lib/useAsyncResource'
 import { useAdminNavigate } from '@admin/lib/useAdminNavigate'
+import { useAuthenticatedAdminUser } from '@admin/sessionContext'
 import { listCredentials, listModels } from '@admin/ai/api'
 import { renderMarkdownToHtml, type AgentMessage, type AgentToolCall } from '@site/agent'
-import { TrashSolidIcon } from 'pixel-art-icons/icons/trash-solid'
 import { SquareSolidIcon } from 'pixel-art-icons/icons/square-solid'
 import { SendSolidIcon } from 'pixel-art-icons/icons/send-solid'
-import { LoaderIcon } from 'pixel-art-icons/icons/loader'
-import { CheckIcon } from 'pixel-art-icons/icons/check'
-import { CircleAlertSolidIcon } from 'pixel-art-icons/icons/circle-alert-solid'
 import { AiBoxSolidIcon } from 'pixel-art-icons/icons/ai-box-solid'
 import { AiSettingsSolidIcon } from 'pixel-art-icons/icons/ai-settings-solid'
 import { EditSolidIcon } from 'pixel-art-icons/icons/edit-solid'
 import { ArrowRightIcon } from 'pixel-art-icons/icons/arrow-right'
 import { PanelHeader } from '@admin/shared/PanelHeader'
+import { UserAvatar } from '@admin/shared/UserAvatar'
 import { Button } from '@ui/components/Button'
 import { EmptyState } from '@ui/components/EmptyState'
 import { Textarea } from '@ui/components/Input'
@@ -46,6 +44,8 @@ import { cn } from '@ui/cn'
 import { ModelPicker } from './ModelPicker'
 import { ConversationHistory } from './ConversationHistory'
 import { ContextMeter } from './ContextMeter'
+import { ToolCallRow } from './ToolCallRow'
+import { formatRelativeTime } from './relativeTime'
 import styles from './AgentPanel.module.css'
 
 const PANEL_WIDTH = 320
@@ -72,7 +72,6 @@ export function AgentPanel({ variant = 'floating' }: { variant?: PanelVariant })
   const closeAgent = useAgentStore((s) => s.closeAgent)
   const sendAgentMessage = useAgentStore((s) => s.sendAgentMessage)
   const abortAgent = useAgentStore((s) => s.abortAgent)
-  const clearAgentMessages = useAgentStore((s) => s.clearAgentMessages)
   const startNewAgentConversation = useAgentStore((s) => s.startNewAgentConversation)
   const loadScopeDefault = useAgentStore((s) => s.loadScopeDefault)
   const activeCredentialId = useAgentStore((s) => s.agentActiveCredentialId)
@@ -235,19 +234,6 @@ export function AgentPanel({ variant = 'floating' }: { variant?: PanelVariant })
         >
           <EditSolidIcon size={14} />
         </Button>
-        {/* "Clear conversation" — shown when there are messages */}
-        {messages.length > 0 && (
-          <Button
-            variant="ghost"
-            size="xs"
-            iconOnly
-            onClick={clearAgentMessages}
-            tooltip="Clear conversation"
-            aria-label="Clear conversation"
-          >
-            <TrashSolidIcon size={14} />
-          </Button>
-        )}
         {isStreaming && (
           <span className={styles.streamingBadge}>
             <span className={styles.streamingDot} aria-hidden="true" />
@@ -278,7 +264,9 @@ export function AgentPanel({ variant = 'floating' }: { variant?: PanelVariant })
         ) : (
           <>
             {lockReason && <AgentCredentialAlert mode={lockReason} />}
-            {messages.map((msg) => <MessageBubble key={msg.id} msg={msg} />)}
+            {groupConsecutiveMessages(messages).map((group) => (
+              <MessageBubble key={group.id} group={group} />
+            ))}
           </>
         )}
 
@@ -369,20 +357,32 @@ export function AgentPanel({ variant = 'floating' }: { variant?: PanelVariant })
 // MessageBubble
 // ---------------------------------------------------------------------------
 
-interface MessageBubbleProps {
-  msg: AgentMessage
+interface ConversationGroup {
+  id: string
+  role: AgentMessage['role']
+  messages: AgentMessage[]
 }
 
-// Exception #2: React.memo re-render bailout on a hot, list-rendered component
-// (one per message in messages.map).
-const MessageBubble = memo(function MessageBubble({ msg }: MessageBubbleProps) {
-  const isUser = msg.role === 'user'
+function MessageBubble({ group }: { group: ConversationGroup }) {
+  const isUser = group.role === 'user'
+  const user = useAuthenticatedAdminUser()
+  const startedAt = group.messages[0]?.timestamp
+  const relativeTime = startedAt ? formatRelativeTime(startedAt) : ''
 
   return (
-    <div className={cn(styles.messageBubble, isUser ? styles.messageBubbleUser : styles.messageBubbleAssistant)}>
-      {/* Role label */}
+    <div className={styles.messageTurn}>
+      {/* Role marker — avatar + name + relative time, once per turn. The user
+          reuses their Gravatar; the agent gets the robot glyph. */}
       <div className={styles.roleLabel}>
-        {isUser ? 'You' : 'Assistant'}
+        {isUser ? (
+          <UserAvatar user={user} size={16} alt={null} />
+        ) : (
+          <span className={styles.roleAvatarAi} aria-hidden="true">
+            <AiBoxSolidIcon size={11} />
+          </span>
+        )}
+        <span className={styles.roleName}>{isUser ? 'You' : 'Assistant'}</span>
+        {relativeTime && <span className={styles.roleTime}>· {relativeTime}</span>}
       </div>
 
       {/* Chronological blocks — text and tool calls render in the order
@@ -390,24 +390,68 @@ const MessageBubble = memo(function MessageBubble({ msg }: MessageBubbleProps) {
           shows two separate text bubbles around the tool badges. Text is
           rendered as markdown (bold, lists, inline code, links, …) via a
           DOMPurify-sanitised HTML pipeline. */}
-      {msg.blocks.map((block, index) =>
-        block.kind === 'text' ? (
-          <MarkdownTextBubble
-            // Stable key per text block: text deltas append in place, so each
-            // run of text gets its position-based key.
-            key={`text-${index}`}
-            text={block.text}
-            isUser={isUser}
-          />
+      {groupRenderItems(group.messages).map((item) =>
+        item.kind === 'text' ? (
+          <MarkdownTextBubble key={item.key} text={item.text} isUser={isUser} />
         ) : (
-          <div key={block.toolCall.id} className={styles.toolCallsContainer}>
-            <ToolCallBadge toolCall={block.toolCall} />
+          // A run of consecutive tool calls shares one container so the rows
+          // stack tightly; text blocks around them stay separate bubbles.
+          <div key={item.key} className={styles.toolCallsContainer}>
+            {item.toolCalls.map((toolCall) => (
+              <ToolCallRow key={toolCall.id} toolCall={toolCall} />
+            ))}
           </div>
         ),
       )}
     </div>
   )
-})
+}
+
+// Collapse the flat message list into conversational turns: consecutive
+// messages of the same role become one group (one bubble, one role label).
+// The agent emits each tool call as its own message, so without this a burst
+// of tool activity would render as a stack of repeated "Assistant" labels.
+function groupConsecutiveMessages(messages: AgentMessage[]): ConversationGroup[] {
+  const groups: ConversationGroup[] = []
+  for (const message of messages) {
+    const last = groups.at(-1)
+    if (last && last.role === message.role) {
+      last.messages.push(message)
+      continue
+    }
+    groups.push({ id: message.id, role: message.role, messages: [message] })
+  }
+  return groups
+}
+
+// Flatten a turn's blocks (across its messages) in emission order, coalescing
+// each run of consecutive tool-call blocks into one item so they render inside
+// a single tight container; text blocks stay separate bubbles.
+type MessageBlock = AgentMessage['blocks'][number]
+
+type MessageRenderItem =
+  | { kind: 'text'; key: string; text: string }
+  | { kind: 'tools'; key: string; toolCalls: AgentToolCall[] }
+
+function groupRenderItems(messages: AgentMessage[]): MessageRenderItem[] {
+  const items: MessageRenderItem[] = []
+  for (const message of messages) {
+    message.blocks.forEach((block: MessageBlock, index) => {
+      if (block.kind === 'text') {
+        // Position-based key, stable as streaming deltas append in place.
+        items.push({ kind: 'text', key: `text-${message.id}-${index}`, text: block.text })
+        return
+      }
+      const last = items.at(-1)
+      if (last && last.kind === 'tools') {
+        last.toolCalls.push(block.toolCall)
+        return
+      }
+      items.push({ kind: 'tools', key: `tools-${block.toolCall.id}`, toolCalls: [block.toolCall] })
+    })
+  }
+  return items
+}
 
 // ---------------------------------------------------------------------------
 // MarkdownTextBubble — parses + sanitises the block text and injects it via
@@ -433,111 +477,15 @@ const MarkdownTextBubble = memo(function MarkdownTextBubble({
   return (
     <div
       className={cn(
-        styles.contentBubble,
-        isUser ? styles.contentBubbleUser : styles.contentBubbleAssistant,
-        styles.markdownBubble,
+        styles.messageText,
+        isUser ? styles.messageTextUser : styles.messageTextAssistant,
+        styles.markdownText,
       )}
       // Safe: sanitised by DOMPurify (via sanitizeRichtext) before reaching here.
       dangerouslySetInnerHTML={{ __html: html }}
     />
   )
 })
-
-// ---------------------------------------------------------------------------
-// ToolCallBadge
-// ---------------------------------------------------------------------------
-
-function ToolCallBadge({ toolCall }: { toolCall: AgentToolCall }) {
-  const isPending = toolCall.status === 'pending'
-  const isSuccess = toolCall.status === 'success'
-  const isError = toolCall.status === 'error'
-
-  const iconClass = isPending
-    ? styles.toolCallIconPending
-    : isSuccess
-    ? styles.toolCallIconSuccess
-    : styles.toolCallIconFailed
-  const displayType = formatToolCallType(toolCall.actionType)
-  const label = formatActionLabel(toolCall.actionType, toolCall.params)
-  const statusLabel = isPending
-    ? `Running ${displayType}${label ? ` — ${label}` : ''}`
-    : isSuccess
-    ? `Completed ${displayType}${label ? ` — ${label}` : ''}`
-    : `Failed ${displayType}${label ? ` — ${label}` : ''}`
-
-  // Surface the tool's error message directly in the badge stream so the
-  // user sees WHY a tool failed without having to dig through devtools. The
-  // toolResult handler in agentSlice.ts already populates `result.error`.
-  const errorMessage = isError ? toolCall.result?.error ?? 'Tool call failed.' : null
-
-  return (
-    <>
-      <div
-        role="status"
-        aria-label={statusLabel}
-        className={styles.toolCallBadge}
-      >
-        <span className={iconClass} aria-hidden="true">
-          {isPending ? (
-            <LoaderIcon size={10} />
-          ) : isSuccess ? (
-            <CheckIcon size={10} />
-          ) : (
-            <CircleAlertSolidIcon size={10} />
-          )}
-        </span>
-        <span className={styles.toolCallType} aria-hidden="true">
-          {displayType}
-        </span>
-        <span aria-hidden="true">{label}</span>
-      </div>
-      {errorMessage && (
-        <p
-          role="alert"
-          // Tone-aligned with `.errorBanner` (red text on muted background)
-          // but inline + compact so a string of failed tool calls stays
-          // readable.
-          className={styles.toolCallError}
-        >
-          {errorMessage}
-        </p>
-      )}
-    </>
-  )
-}
-
-function formatToolCallType(actionType: string): string {
-  return actionType.replace(/^mcp__instatic__/, '')
-}
-
-/** Compact one-line summary of an applyCss payload: the selectors it touches. */
-function summarizeCss(css: string): string {
-  const selectors = css
-    .match(/[^{}]+(?=\{)/g)
-    ?.map((s) => s.trim().replace(/\s+/g, ' '))
-    .filter(Boolean) ?? []
-  if (selectors.length === 0) return 'css'
-  const head = selectors.slice(0, 2).join(', ')
-  return selectors.length > 2 ? `${head} +${selectors.length - 2}` : head
-}
-
-function formatActionLabel(actionType: string, params: unknown): string {
-  const p = params as Record<string, unknown>
-  switch (actionType) {
-    case 'site_insert_html': return `→ ${String(p.parentId ?? '').slice(0, 8)}`
-    case 'site_get_node_html': return `node ${String(p.nodeId ?? '').slice(0, 6)}…`
-    case 'site_replace_node_html': return `node ${String(p.nodeId ?? '').slice(0, 6)}…`
-    case 'site_delete_node': return `node ${String(p.nodeId ?? '').slice(0, 6)}…`
-    case 'site_update_node_props': return `node ${String(p.nodeId ?? '').slice(0, 6)}…`
-    case 'site_move_node': return `→ ${String(p.newParentId ?? '').slice(0, 6)}…`
-    case 'site_rename_node': return `"${String(p.label ?? '')}"`
-    case 'site_apply_css': return summarizeCss(String(p.css ?? ''))
-    case 'site_assign_class': return `${String(p.classId ?? '').slice(0, 6)}… → node`
-    case 'site_remove_class': return `${String(p.classId ?? '').slice(0, 6)}… from node`
-    case 'site_add_page': return `"${String(p.title ?? '')}"`
-    default: return ''
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Empty state
